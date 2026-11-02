@@ -55,8 +55,18 @@ interface Caption {
 /** Pause before the host reacts, so bursts of events land in one turn. */
 const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 0, join: 900, leave: 1500, screen: 300 };
 
-/** How long after the final text the host's reply may take before an acknowledgement plays. */
-const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 350;
+/**
+ * How long after the final text the host's reply may take before an acknowledgement plays.
+ * Long enough that quick replies skip it: fillers help with medium and long waits, and heard
+ * on every turn they sound mechanical (arXiv 2507.22352, 2508.11781).
+ */
+const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
+
+/** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
+const ACKNOWLEDGE_CHANCE: number = 0.6;
+
+/** How many of the latest acknowledgements are not reused. */
+const ACKNOWLEDGE_NO_REPEAT: number = 4;
 
 /** Short, varied acknowledgements, rendered once per room and played sparingly. */
 const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
@@ -101,7 +111,10 @@ export class Room implements HostStage {
     private hostSpeaking: boolean = false;
     private hostTurnText: string = "";
     private readonly acknowledgements: Uint8Array[] = [];
-    private lastAcknowledgement: number = -1;
+    /** Indexes of the latest acknowledgements played, newest last. */
+    private readonly recentAcknowledgements: number[] = [];
+    /** True when the previous addressed turn got an acknowledgement; two in a row never play. */
+    private acknowledgedLastTurn: boolean = false;
     private acknowledgeTimer: NodeJS.Timeout | null = null;
 
     /**
@@ -478,9 +491,10 @@ export class Room implements HostStage {
     }
 
     /**
-     * Plays a short acknowledgement if the host was clearly addressed and has not started
-     * replying shortly after the final text. Addressed means the host's name was said, or there is
-     * only one player, so side chat between players never gets an acknowledgement.
+     * Sometimes plays a short acknowledgement if the host was clearly addressed and has not
+     * started replying shortly after the final text. Addressed means the host's name was said,
+     * or there is only one player, so side chat between players never gets an acknowledgement.
+     * Never on two addressed turns in a row, and never one of the last few played.
      * @param said what the player said so far.
      */
     private scheduleAcknowledgement(said: string): void {
@@ -489,20 +503,29 @@ export class Room implements HostStage {
             return;
         }
         this.cancelAcknowledgement();
+        if (this.acknowledgedLastTurn === true || Math.random() >= ACKNOWLEDGE_CHANCE) {
+            this.acknowledgedLastTurn = false;
+            return;
+        }
+        this.acknowledgedLastTurn = false;
         this.acknowledgeTimer = setTimeout(() => {
             this.acknowledgeTimer = null;
             if (this.hostThinking === false || this.voice.isBusy() === true) {
                 return;
             }
-            let index: number = Math.floor(Math.random() * this.acknowledgements.length);
-            if (index === this.lastAcknowledgement) {
-                index = (index + 1) % this.acknowledgements.length;
+            const fresh: number[] = this.acknowledgements.map((_pcm: Uint8Array, index: number) => index).filter((index: number) => this.recentAcknowledgements.includes(index) === false);
+            const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
+            const pcm: Uint8Array | undefined = index === undefined ? undefined : this.acknowledgements[index];
+            if (index === undefined || pcm === undefined) {
+                return;
             }
-            this.lastAcknowledgement = index;
-            const pcm: Uint8Array | undefined = this.acknowledgements[index];
-            if (pcm !== undefined) {
-                this.voice.sayRecorded(pcm);
+            this.recentAcknowledgements.push(index);
+            if (this.recentAcknowledgements.length > ACKNOWLEDGE_NO_REPEAT) {
+                this.recentAcknowledgements.shift();
             }
+            this.acknowledgedLastTurn = true;
+            log(this.scope(), `acknowledged with "${ACKNOWLEDGEMENTS[index] ?? ""}"`);
+            this.voice.sayRecorded(pcm);
         }, ACKNOWLEDGE_AFTER_MILLISECONDS);
     }
 
