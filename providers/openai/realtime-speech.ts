@@ -176,7 +176,7 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
      * @returns resolves when the session is configured.
      */
     private connect(): Promise<void> {
-        if (this.ready !== null && this.socket?.readyState === WebSocket.OPEN) {
+        if (this.ready !== null && (this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING)) {
             return this.ready;
         }
         const key: string | undefined = process.env[OPENAI_KEY_VARIABLE];

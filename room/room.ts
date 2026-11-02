@@ -95,6 +95,9 @@ const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
 /** Room for hidden reasoning plus a list of questions or a secret. */
 const CONTENT_TOKEN_LIMIT: number = 2000;
 
+/** How long content may take. After that the game uses its own, so it can't sit waiting. */
+const CONTENT_TIME_LIMIT_MILLISECONDS: number = 15000;
+
 /** Most pictures one room draws. Each costs about a cent and sits in memory until it closes. */
 const MAX_DRAWINGS: number = 24;
 
@@ -184,7 +187,6 @@ export class Room implements HostStage {
     private woken: boolean = false;
     private game: RunningGame | null = null;
     private readonly drawings: Map<string, Drawing> = new Map();
-    private drawingsAsked: number = 0;
     /** Who spoke last, so a ruling can be credited to them. */
     private lastSpeakerId: string | null = null;
     private nextPlayerNumber: number = 1;
@@ -229,11 +231,11 @@ export class Room implements HostStage {
 
     /**
      * Finds a picture this room has drawn.
-     * @param number the number in its address.
+     * @param key the random key in its address.
      * @returns the picture, or undefined.
      */
-    public drawing(number: string): Drawing | undefined {
-        return this.drawings.get(number);
+    public drawing(key: string): Drawing | undefined {
+        return this.drawings.get(key);
     }
 
     /** Readies the voice on first real use, so a page load alone spends nothing. */
@@ -566,7 +568,7 @@ export class Room implements HostStage {
         const collect = async (): Promise<string> => {
             let text: string = "";
             const system: string = "You write content for a party game. Reply with exactly what is asked and nothing else.";
-            for await (const delta of streamSpark([{ role: "system", content: system }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT })) {
+            for await (const delta of streamSpark([{ role: "system", content: system }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT, signal: AbortSignal.timeout(CONTENT_TIME_LIMIT_MILLISECONDS) })) {
                 text += delta;
             }
             return text;
@@ -593,14 +595,13 @@ export class Room implements HostStage {
             return;
         }
         const game: RunningGame | null = this.game;
-        const number: number = this.drawingsAsked;
-        this.drawingsAsked += 1;
+        const key: string = randomBytes(16).toString("hex");
         const startedAt: number = Date.now();
         drawImage(prompt).then((drawing: Drawing) => {
-            this.drawings.set(String(number), drawing);
+            this.drawings.set(key, drawing);
             log(this.scope(), `drew ${id} in ${Date.now() - startedAt} ms`);
             if (this.game === game) {
-                game?.event({ type: "drawingReady", at: Date.now(), id, src: `/drawings/${this.code}/${number}` });
+                game?.event({ type: "drawingReady", at: Date.now(), id, src: `/drawings/${this.code}/${key}` });
             }
         }).catch((error: unknown) => { log(this.scope(), `couldn't draw ${id}: ${error instanceof Error ? error.message : String(error)}`); });
     }

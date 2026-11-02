@@ -58,7 +58,7 @@ function turnAway(socket: WebSocket, reason: RejectedReason): void {
  */
 async function serveStatic(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url: URL = new URL(request.url ?? "/", "http://room");
-    const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/(\d+)$/.exec(url.pathname);
+    const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/([0-9a-f]+)$/.exec(url.pathname);
     if (drawing !== null) {
         const found: Drawing | undefined = directory.find(drawing[1] ?? "")?.drawing(drawing[2] ?? "");
         if (found === undefined) {
