@@ -71,6 +71,26 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
 }
 
 /**
+ * A timer that counts down on its own from when it first appears, so the room needn't send
+ * a new scene every second.
+ * @param props the starting seconds, whether it runs, and an optional label.
+ * @returns the element.
+ */
+function Countdown(props: { seconds: number; running: boolean; label?: string }): ReactElement {
+    const [left, setLeft] = useState<number>(props.seconds);
+    useEffect(() => {
+        setLeft(props.seconds);
+        if (props.running === false) {
+            return;
+        }
+        const startedAt: number = Date.now();
+        const timer: number = window.setInterval(() => { setLeft(Math.max(0, props.seconds - Math.floor((Date.now() - startedAt) / 1000))); }, 250);
+        return (): void => { window.clearInterval(timer); };
+    }, [props.seconds, props.running]);
+    return <div className="timer"><span>{Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</span>{props.label !== undefined ? <small>{props.label}</small> : null}</div>;
+}
+
+/**
  * Renders one scene block.
  * @param block the block.
  * @param index its position, used as the key.
@@ -90,7 +110,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={player.speaking === true ? "speaking" : ""}>{player.name}{player.badge !== undefined ? <span className="badge">{player.badge}</span> : null}</li>)}</ul>;
     }
     if (block.type === "timer") {
-        return <div key={index} className="timer"><span>{block.seconds}</span>{block.label !== undefined ? <small>{block.label}</small> : null}</div>;
+        return <Countdown key={index} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
     }
     if (block.type === "tally") {
         return <table key={index} className="tally"><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;

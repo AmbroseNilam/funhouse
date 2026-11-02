@@ -48,6 +48,18 @@ export const WEREWOLF_GROUP: string = "werewolves";
 /** Seconds of discussion when the day timer variant is on. */
 export const DISCUSSION_SECONDS: number = 180;
 
+/** Seconds players get to read their roles before night falls. */
+export const ROLES_SECONDS: number = 15;
+
+/** Seconds the night waits for choices before going on with what it has. */
+export const NIGHT_SECONDS: number = 45;
+
+/** Seconds for the dawn announcement before discussion opens. */
+export const DAWN_SECONDS: number = 12;
+
+/** Seconds the vote stays open before counting what's in. */
+export const VOTE_SECONDS: number = 45;
+
 /**
  * Deterministic shuffle so tests can replay a seating.
  * @param items the list to shuffle.
@@ -90,7 +102,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     const seatOf = (state: WerewolfState, playerId: string): Seat | undefined => state.seats.find((seat) => seat.playerId === playerId);
     const alive = (state: WerewolfState): Seat[] => state.seats.filter((seat) => seat.alive === true);
     const aliveWerewolves = (state: WerewolfState): Seat[] => alive(state).filter((seat) => seat.role === "werewolf");
-    const publicFact = (kind: string, text: string): ScopedFact => ({ scope: { kind: "public" }, kind, text });
+    const publicFact = (kind: string, text: string, quiet: boolean = false): ScopedFact => ({ scope: { kind: "public" }, kind, text, quiet });
 
     /**
      * Checks for a winner and moves to the end phase when there is one.
@@ -147,7 +159,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         if (over !== null) {
             return over;
         }
-        return { state: dawn, facts, nextPhaseId: "dawn" };
+        return { state: dawn, facts, nextPhaseId: "dawn", timers: { dawn: DAWN_SECONDS } };
     };
 
     /**
@@ -177,12 +189,16 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         if (tied === true) {
             facts.push(publicFact("vote-result", "The vote is tied. Nobody is out tonight."));
         }
+        if (top === undefined) {
+            facts.push(publicFact("vote-result", "Nobody voted. Nobody is out tonight."));
+        }
+        facts.push(publicFact("night", "Night falls on the village."));
         const next: WerewolfState = { ...state, seats, phase: "night", round: state.round + 1, dayVotes: {}, lastLynched: lynchedName };
         const over: Step<WerewolfState> | null = finishIfOver(next, facts);
         if (over !== null) {
             return over;
         }
-        return { state: next, facts, nextPhaseId: "night" };
+        return { state: next, facts, nextPhaseId: "night", timers: { night: NIGHT_SECONDS } };
     };
 
     return {
@@ -208,7 +224,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             facts.push({ scope: { kind: "group", groupId: WEREWOLF_GROUP }, kind: "pack", text: `The werewolves are ${seats.filter((seat) => seat.role === "werewolf").map((seat) => seat.name).join(" and ")}.` });
             facts.push(publicFact("setup", `${players.length} players. ${werewolfCount(players.length)} werewolf${werewolfCount(players.length) > 1 ? "s" : ""} among them.`));
             const state: WerewolfState = { phase: "roles", round: 1, seats, variants, nightChoices: {}, seerTarget: null, dayVotes: {}, lastVictim: null, lastLynched: null, winner: null };
-            return { state, facts, nextPhaseId: "roles" };
+            return { state, facts, nextPhaseId: "roles", timers: { roles: ROLES_SECONDS } };
         },
 
         phaseOf(state: WerewolfState): string {
@@ -268,8 +284,8 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             const voted: WerewolfState = { ...state, dayVotes: { ...state.dayVotes, [playerId]: targetId } };
             const voterName: string = seatOf(state, playerId)?.name ?? playerId;
             const targetName: string = seatOf(state, targetId)?.name ?? targetId;
-            const fact: ScopedFact = publicFact("vote-cast", `${voterName} votes for ${targetName}.`);
-            if (Object.keys(voted.dayVotes).length === alive(voted).length) {
+            const fact: ScopedFact = publicFact("vote-cast", `${voterName} votes for ${targetName}.`, true);
+            if (voteComplete(voted) === true) {
                 const resolved: Step<WerewolfState> = resolveVote(voted);
                 return { ...resolved, facts: [fact, ...resolved.facts] };
             }
@@ -280,8 +296,20 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (event.type === "phaseChanged" && event.phaseId === "advance") {
                 return advance(state);
             }
-            if (event.type === "timerFired" && event.timerId === "discussion" && state.phase === "discussion") {
+            if (event.type === "hostRuled" && event.ruling === "vote" && state.phase === "discussion") {
                 return advance(state);
+            }
+            if (event.type === "timerFired" && event.timerId === state.phase && ["roles", "dawn", "discussion"].includes(state.phase) === true) {
+                return advance(state);
+            }
+            if (event.type === "timerFired" && event.timerId === "night" && state.phase === "night") {
+                return resolveNight(state);
+            }
+            if (event.type === "timerFired" && event.timerId === "vote" && state.phase === "vote") {
+                return resolveVote(state);
+            }
+            if (event.type === "playerLeft") {
+                return onPlayerLeft(state, event.playerId);
             }
             return { state, facts: [] };
         },
@@ -322,10 +350,16 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             }
             if (actions.length > 0 && state.phase === "night") {
                 const prompt: string = seat.role === "werewolf" ? "Choose tonight's victim." : "Who do you want to investigate?";
-                return [{ type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false }];
+                const picked: string | undefined = state.nightChoices[playerId];
+                const pickedName: string | undefined = picked === undefined ? undefined : seatOf(state, picked)?.name;
+                const options: Control = { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false };
+                return pickedName === undefined ? [options] : [{ type: "notice", text: `You chose ${pickedName}. You can still change it.`, tone: "secret" }, options];
             }
             if (actions.length > 0 && state.phase === "vote") {
-                return [{ type: "choice", prompt: "Who is the werewolf?", options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false }];
+                const voted: string | undefined = state.dayVotes[playerId];
+                const votedName: string | undefined = voted === undefined ? undefined : seatOf(state, voted)?.name;
+                const options: Control = { type: "choice", prompt: "Who is the werewolf?", options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false };
+                return votedName === undefined ? [options] : [{ type: "notice", text: `You voted for ${votedName}. You can still change it.`, tone: "info" }, options];
             }
             if (state.phase === "night") {
                 return [{ type: "waiting", text: "Eyes closed. Keep your phone dark." }];
@@ -334,10 +368,10 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         hostFacts(state: WerewolfState, scope: Scope): ScopedFact[] {
-            if (scope.kind !== "public") {
+            if (scope.kind !== "public" && scope.kind !== "host") {
                 return [];
             }
-            const lines: ScopedFact[] = [];
+            const lines: ScopedFact[] = [publicFact("recap", `Day ${state.round}. Still in: ${alive(state).map((seat) => seat.name).join(", ")}.`)];
             if (state.lastVictim !== null) {
                 lines.push(publicFact("recap", `${state.lastVictim} was lost at dawn.`));
             }
@@ -369,20 +403,56 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     }
 
     /**
+     * Whether everyone still alive has voted.
+     * @param state the vote state.
+     * @returns true when the vote can resolve.
+     */
+    function voteComplete(state: WerewolfState): boolean {
+        return alive(state).every((seat) => state.dayVotes[seat.playerId] !== undefined);
+    }
+
+    /**
+     * Takes a departed player out of the game, so nobody waits on them, and checks for a winner.
+     * @param state the current state.
+     * @param playerId who left.
+     * @returns the step.
+     */
+    function onPlayerLeft(state: WerewolfState, playerId: string): Step<WerewolfState> {
+        const leaver: Seat | undefined = seatOf(state, playerId);
+        if (leaver === undefined || leaver.alive === false || state.phase === "end") {
+            return { state, facts: [] };
+        }
+        const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false } : seat));
+        const next: WerewolfState = { ...state, seats };
+        const facts: ScopedFact[] = [publicFact("left", `${leaver.name} left the game.`)];
+        const over: Step<WerewolfState> | null = finishIfOver(next, facts);
+        if (over !== null) {
+            return over;
+        }
+        if (state.phase === "night" && nightComplete(next) === true) {
+            return resolveNight(next);
+        }
+        if (state.phase === "vote" && voteComplete(next) === true) {
+            return resolveVote(next);
+        }
+        return { state: next, facts };
+    }
+
+    /**
      * Moves to the next phase on a host request or timer, where the rules allow it.
      * @param state the current state.
      * @returns the step.
      */
     function advance(state: WerewolfState): Step<WerewolfState> {
         if (state.phase === "roles") {
-            return { state: { ...state, phase: "night" }, facts: [publicFact("night", "Night falls on the village.")], nextPhaseId: "night" };
+            return { state: { ...state, phase: "night" }, facts: [publicFact("night", "Night falls on the village.")], nextPhaseId: "night", timers: { night: NIGHT_SECONDS } };
         }
         if (state.phase === "dawn") {
             const timers: Record<string, number> | undefined = state.variants.dayTimer === true ? { discussion: DISCUSSION_SECONDS } : undefined;
             return { state: { ...state, phase: "discussion" }, facts: [publicFact("discussion", "The village may now discuss.")], nextPhaseId: "discussion", ...(timers !== undefined ? { timers } : {}) };
         }
         if (state.phase === "discussion") {
-            return { state: { ...state, phase: "vote" }, facts: [publicFact("vote", "Time to vote.")], nextPhaseId: "vote" };
+            return { state: { ...state, phase: "vote" }, facts: [publicFact("vote", "Time to vote on your phones.")], nextPhaseId: "vote", timers: { vote: VOTE_SECONDS } };
         }
         return { state, facts: [] };
     }
