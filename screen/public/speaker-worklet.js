@@ -3,7 +3,7 @@
 // cushion (or the end of a line) before starting, and fades in over a few milliseconds; a
 // cancel fades out instead of cutting mid-wave. Each underrun grows the cushion a little.
 
-const CAPACITY = 24000 * 30;
+const CAPACITY = 24000 * 180;
 const FADE_IN_SAMPLES = 120;
 const FADE_OUT_SAMPLES = 600;
 const START_CUSHION = 2880;

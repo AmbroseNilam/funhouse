@@ -36,6 +36,12 @@ interface ResponseListener {
     failed(message: string): void;
 }
 
+/** Longest wait to connect to the voice. */
+const CONNECT_TIME_LIMIT_MILLISECONDS: number = 8000;
+
+/** Longest one line may take, so a stalled response can't silence every line after it. */
+const LINE_TIME_LIMIT_MILLISECONDS: number = 30000;
+
 /** Longest wait for a cancelled response to finish before the next line starts anyway. */
 const CANCEL_DRAIN_MILLISECONDS: number = 1500;
 
@@ -121,6 +127,7 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
             let cancelled: boolean = false;
             let drainTimer: NodeJS.Timeout | null = null;
             const settle = (): void => {
+                clearTimeout(deadline);
                 if (drainTimer !== null) {
                     clearTimeout(drainTimer);
                 }
@@ -136,6 +143,11 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
                 socket.send(JSON.stringify({ type: "response.cancel" }));
                 drainTimer = setTimeout(settle, CANCEL_DRAIN_MILLISECONDS);
             };
+            const deadline: NodeJS.Timeout = setTimeout(() => {
+                line.close(new Error(`Realtime voice gave no finish in ${LINE_TIME_LIMIT_MILLISECONDS / 1000} s.`));
+                settle();
+                this.close();
+            }, LINE_TIME_LIMIT_MILLISECONDS);
             const onClose = (): void => {
                 line.close(new Error("Realtime voice connection closed mid-line."));
                 settle();
@@ -183,7 +195,7 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
         if (key === undefined || key.trim() === "") {
             return Promise.reject(new Error(`${OPENAI_KEY_VARIABLE} is not set.`));
         }
-        const socket: WebSocket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${REALTIME_VOICE_MODEL}`, { headers: { authorization: `Bearer ${key.trim()}` } });
+        const socket: WebSocket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${REALTIME_VOICE_MODEL}`, { headers: { authorization: `Bearer ${key.trim()}` }, handshakeTimeout: CONNECT_TIME_LIMIT_MILLISECONDS });
         this.socket = socket;
         this.sessionVoice = "";
         this.ready = new Promise<void>((resolve, reject) => {
