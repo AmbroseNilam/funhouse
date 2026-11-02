@@ -1,7 +1,7 @@
 // The public stage: connects to the room, keeps the latest scene, and renders it block by
 // block. The screen is deliberately dumb; it draws what it is told and plays what it is sent.
 
-import { useEffect, useReducer, useRef, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
@@ -29,6 +29,12 @@ type ScreenAction =
 
 /** Longest wait between reconnect attempts. */
 const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
+
+/** Widest short side a device can have and still count as a phone; tablets make fine screens. */
+const PHONE_SHORT_SIDE_PIXELS: number = 600;
+
+/** True on a touch device with a phone-sized display, in either orientation. */
+const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
 const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
 
@@ -91,6 +97,7 @@ export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
     const socketRef = useRef<WebSocket | null>(null);
     const speakerRef = useRef<HostSpeaker | null>(null);
+    const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
         let stopped: boolean = false;
@@ -168,6 +175,17 @@ export function App(): ReactElement {
         }).catch((error: unknown) => { console.error("QR render failed:", error); });
         return (): void => { cancelled = true; };
     }, [state.joinUrl]);
+
+    if (phoneGate === true) {
+        return (
+            <main className="phone-gate">
+                <h1>This is the big-screen view.</h1>
+                <p>Join as a player instead?</p>
+                <a className="phone-gate-join" href={state.joinUrl === "" ? "/" : state.joinUrl}>Join as a player</a>
+                <button className="phone-gate-continue" onClick={() => { setPhoneGate(false); }}>Continue anyway</button>
+            </main>
+        );
+    }
 
     const mood: string = state.scene?.mood ?? "neutral";
     return (
