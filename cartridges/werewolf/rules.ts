@@ -361,7 +361,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return votedName === undefined ? [options] : [{ type: "notice", text: `You voted for ${votedName}. You can still change it.`, tone: "info" }, options];
             }
             if (state.phase === "night") {
-                return [{ type: "waiting", text: "Eyes closed. Keep your phone dark." }];
+                return [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }];
             }
             return [{ type: "waiting", text: "Listen to the host." }];
         },

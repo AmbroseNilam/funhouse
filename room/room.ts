@@ -128,6 +128,9 @@ const NOT_HEARD_HINT: string = "Didn't catch that. Try again?";
 /** How long a dropped phone keeps its seat before the room says they left. */
 const REJOIN_GRACE_MILLISECONDS: number = 30000;
 
+/** The same during a game: a locked phone mustn't lose its seat, and every phase has a timer. */
+const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
+
 /** Bytes between the samples measured for loudness; every fourth sample is plenty. */
 const LEVEL_SAMPLE_STRIDE_BYTES: number = 8;
 
@@ -452,6 +455,10 @@ export class Room implements HostStage {
         const previous: WebSocket = player.socket;
         player.socket = socket;
         player.connected = true;
+        if (player.holdingToTalk === true) {
+            player.holdingToTalk = false;
+            this.finishPress(player);
+        }
         if (previous !== socket) {
             previous.close(4000, "resumed elsewhere");
         }
@@ -484,7 +491,9 @@ export class Room implements HostStage {
             return;
         }
         if (value === BACK_TO_LOBBY) {
-            this.endGame();
+            if (this.game?.outcome() !== null) {
+                this.endGame();
+            }
             return;
         }
         this.game?.input(player.playerId, value);
@@ -616,9 +625,10 @@ export class Room implements HostStage {
         player.standby?.abort();
         player.standby = null;
         this.clearStandbyTimer(player);
-        log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${REJOIN_GRACE_MILLISECONDS / 1000} s`);
+        const grace: number = this.game !== null && this.game.outcome() === null ? GAME_REJOIN_GRACE_MILLISECONDS : REJOIN_GRACE_MILLISECONDS;
+        log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${grace / 1000} s`);
         this.broadcastScene();
-        player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, REJOIN_GRACE_MILLISECONDS);
+        player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, grace);
     }
 
     /**
@@ -647,13 +657,18 @@ export class Room implements HostStage {
     }
 
     /**
-     * Changes a player's name and tells the room. A blank or unchanged name does nothing.
+     * Changes a player's name and tells the room. A blank or unchanged name does nothing, and
+     * a game in progress keeps the names it started with.
      * @param player the player.
      * @param rawName the name the player typed.
      */
     private rename(player: Player, rawName: string): void {
         const name: string = rawName.trim().slice(0, 24);
         if (name === "" || name === player.name) {
+            return;
+        }
+        if (this.game !== null) {
+            this.setHint(player, "You can change your name after the game.");
             return;
         }
         const previous: string = player.name;
