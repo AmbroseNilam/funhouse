@@ -683,7 +683,7 @@ export class Room implements HostStage {
      */
     private phoneView(player: Player): PhoneView {
         const hostName: string = this.host.persona.name;
-        let status: string = `Hold the button to talk to ${hostName}.`;
+        let status: string = `Hold or tap the button to talk to ${hostName}.`;
         if (this.hostThinking === true) {
             status = `${hostName} is thinking…`;
         }

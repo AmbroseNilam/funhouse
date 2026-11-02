@@ -1,6 +1,6 @@
 // The private stage: a name screen, then whatever the room tells this phone to show, plus the
-// hold-to-talk button that streams microphone frames while held. The phone never decides
-// game logic; it renders controls and reports input. It remembers its seat so a refresh, a
+// talk button. Holding it streams microphone frames until release; a quick tap keeps the
+// microphone open until a second tap or a pause in speech. The phone never decides game logic; it renders controls and reports input. It remembers its seat so a refresh, a
 // locked screen or a network blip reconnects into the same seat without asking again.
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement } from "react";
@@ -65,6 +65,21 @@ function clearSeat(): void {
 
 /** How often the talk button follows the microphone's loudness. */
 const LEVEL_INTERVAL_MILLISECONDS: number = 50;
+
+/** A press shorter than this is a tap, which locks the microphone open. */
+const TAP_MILLISECONDS: number = 250;
+
+/** Loudness that counts as someone speaking while locked. */
+const SPEECH_LEVEL: number = 0.1;
+
+/** How long a pause in speech ends a locked turn. */
+const LOCK_SILENCE_MILLISECONDS: number = 1500;
+
+/** How long a locked microphone waits for the first word before giving up. */
+const LOCK_NO_SPEECH_MILLISECONDS: number = 6000;
+
+/** The longest a locked turn may run, in case the room is too loud to ever fall silent. */
+const LOCK_LIMIT_MILLISECONDS: number = 30000;
 
 /** How long the tick shows after letting go. */
 const SENT_TICK_MILLISECONDS: number = 900;
@@ -158,6 +173,9 @@ export function App(): ReactElement {
     const captureRef = useRef<MicrophoneCapture | null>(null);
     const holdingRef = useRef<boolean>(false);
     const talkRef = useRef<HTMLButtonElement | null>(null);
+    const pressedAtRef = useRef<number>(0);
+    const swallowReleaseRef = useRef<boolean>(false);
+    const [locked, setLocked] = useState<boolean>(false);
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
 
@@ -233,14 +251,37 @@ export function App(): ReactElement {
         if (state.holding === false) {
             return;
         }
+        const startedAt: number = Date.now();
+        let lastSpeechAt: number = 0;
         const timer: number = window.setInterval(() => {
-            talkRef.current?.style.setProperty("--level", (captureRef.current?.level() ?? 0).toFixed(3));
+            const level: number = captureRef.current?.level() ?? 0;
+            talkRef.current?.style.setProperty("--level", level.toFixed(3));
+            if (locked === false) {
+                return;
+            }
+            const now: number = Date.now();
+            if (level >= SPEECH_LEVEL) {
+                lastSpeechAt = now;
+            }
+            const paused: boolean = lastSpeechAt !== 0 && now - lastSpeechAt >= LOCK_SILENCE_MILLISECONDS;
+            const neverSpoke: boolean = lastSpeechAt === 0 && now - startedAt >= LOCK_NO_SPEECH_MILLISECONDS;
+            if (paused === true || neverSpoke === true || now - startedAt >= LOCK_LIMIT_MILLISECONDS) {
+                stopTalking();
+            }
         }, LEVEL_INTERVAL_MILLISECONDS);
+        /** Stops a turn when the phone is put away, since hidden pages lose the microphone. */
+        const onHidden = (): void => {
+            if (document.visibilityState === "hidden") {
+                stopTalking();
+            }
+        };
+        document.addEventListener("visibilitychange", onHidden);
         return (): void => {
             window.clearInterval(timer);
+            document.removeEventListener("visibilitychange", onHidden);
             talkRef.current?.style.setProperty("--level", "0");
         };
-    }, [state.holding]);
+    }, [state.holding, locked]);
 
     useEffect(() => {
         if (sent === false) {
@@ -287,6 +328,37 @@ export function App(): ReactElement {
         holdingRef.current = holding;
         dispatch({ type: "holding", holding });
         send({ type: "holdToTalk", down: holding });
+    };
+
+    const stopTalking = (): void => {
+        setLocked(false);
+        setHolding(false);
+    };
+
+    const onTalkDown = (): void => {
+        void ensureMicrophone();
+        if (locked === true) {
+            swallowReleaseRef.current = true;
+            stopTalking();
+            return;
+        }
+        pressedAtRef.current = Date.now();
+        setHolding(true);
+    };
+
+    const onTalkUp = (): void => {
+        if (swallowReleaseRef.current === true) {
+            swallowReleaseRef.current = false;
+            return;
+        }
+        if (holdingRef.current === false) {
+            return;
+        }
+        if (Date.now() - pressedAtRef.current < TAP_MILLISECONDS) {
+            setLocked(true);
+            return;
+        }
+        stopTalking();
     };
 
     if (state.stage === "name") {
@@ -338,14 +410,14 @@ export function App(): ReactElement {
                 ref={talkRef}
                 className={`talk ${state.holding === true ? "holding" : ""} ${sent === true ? "sent" : ""}`}
                 disabled={canTalk === false}
-                onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); void ensureMicrophone(); setHolding(true); }}
-                onPointerUp={() => { setHolding(false); }}
-                onPointerCancel={() => { setHolding(false); }}
+                onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); onTalkDown(); }}
+                onPointerUp={onTalkUp}
+                onPointerCancel={() => { swallowReleaseRef.current = false; stopTalking(); }}
                 onContextMenu={(event) => { event.preventDefault(); }}
             >
                 {state.holding === true ? "Listening" : sent === true ? "✓" : "Hold to talk"}
             </button>
-            <p className="status" role="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : state.holding === true ? "Let go when you're done." : view?.status ?? ""}</p>
+            <p className="status" role="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : locked === true ? "Tap to stop, or just stop talking." : state.holding === true ? "Let go when you're done." : view?.status ?? ""}</p>
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Menu">
