@@ -125,6 +125,7 @@
     .game-text strong { font-family: var(--font-display); font-size: 22px; font-weight: 600; }
     .game-text p { color: var(--muted); font-size: 15px; }
     .game-text small { color: var(--muted); font-size: 13px; }
+    .credit { margin-top: 14px; color: var(--muted); font-size: 13px; }
 
     /* It hears you */
     .hears { display: grid; grid-template-columns: 40fr 60fr; gap: 48px; align-items: center; }

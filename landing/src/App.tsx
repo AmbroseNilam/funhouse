@@ -120,6 +120,7 @@ export function App(): ReactElement {
                         </li>
                     ))}
                 </ul>
+                <p className="credit">Art made with Muse Image.</p>
             </section>
 
             <section className="hears" aria-labelledby="hears">
@@ -159,7 +160,7 @@ export function App(): ReactElement {
 
             <footer className="foot">
                 <a className="start" href="/screen/"><strong>Start a room</strong><span>It takes a second</span></a>
-                <p className="fine">Your mic is only on while you hold the button, and the TV shows who's talking. Built with Meta's Muse models.</p>
+                <p className="fine">Your mic is only on while you hold the button, and the TV shows who's talking. Built with Meta's Muse models; art made with Muse Image.</p>
             </footer>
         </main>
     );
