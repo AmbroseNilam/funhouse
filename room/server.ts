@@ -101,7 +101,11 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     // An oversized or malformed frame raises an error on the socket, and ws closes it; without
     // a listener that error would end the process and every room with it.
     socket.on("error", (error: Error) => { console.warn(`socket error: ${error.message}`); });
-    const url: URL = new URL(request.url ?? "/", "http://room");
+    const url: URL | null = URL.canParse(request.url ?? "/", "http://room") === true ? new URL(request.url ?? "/", "http://room") : null;
+    if (url === null) {
+        socket.close(1008, "bad address");
+        return;
+    }
     const existing: Room | undefined = directory.find(url.searchParams.get("room") ?? "");
     if (url.pathname === "/ws/screen") {
         const room: Room | null = existing ?? directory.create();
@@ -122,6 +126,10 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     }
     socket.close(1008, "use /ws/screen or /ws/phone");
 });
+
+// One room's bug must not end every other room's game.
+process.on("uncaughtException", (error: Error) => { console.error("uncaught:", error.stack ?? error.message); });
+process.on("unhandledRejection", (reason: unknown) => { console.error("unhandled:", reason instanceof Error ? reason.stack ?? reason.message : String(reason)); });
 
 server.listen(PORT, () => {
     console.warn(`listening on http://localhost:${PORT}  public: ${PUBLIC_URL}`);

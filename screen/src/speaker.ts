@@ -29,7 +29,7 @@ export class HostSpeaker {
         if (this.context.sampleRate !== SAMPLE_RATE) {
             console.warn(`audio runs at ${this.context.sampleRate} Hz, not ${SAMPLE_RATE}; the host voice will play at the wrong pitch`);
         }
-        await this.context.audioWorklet.addModule(new URL("speaker-worklet.js", document.baseURI).href);
+        await this.context.audioWorklet.addModule("/screen/speaker-worklet.js");
         const node: AudioWorkletNode = new AudioWorkletNode(this.context, "host-speaker", { numberOfInputs: 0, outputChannelCount: [1] });
         this.analyser.fftSize = LEVEL_WINDOW_SAMPLES;
         node.connect(this.analyser);

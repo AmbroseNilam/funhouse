@@ -5,8 +5,8 @@
 import { log } from "./log.ts";
 import { makeRoomCode, Room } from "./room.ts";
 
-/** Most rooms open at once on this server. */
-const MAX_ROOMS: number = 8;
+/** Most rooms open at once on this server. A room spends nothing until it's used, so open tabs mustn't lock anyone out. */
+const MAX_ROOMS: number = 32;
 
 /** How long a room may sit with nobody in it before it closes. */
 const EMPTY_ROOM_MILLISECONDS: number = 300000;
