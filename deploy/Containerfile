@@ -1,0 +1,25 @@
+# Builds the Game Room image for linux/arm64 hosts. Multi-stage: build the two stages with
+# Vite, then run the room server on a slim Node 24 image as a non-root user. The server
+# runs TypeScript directly; there is no server build step.
+
+FROM docker.io/library/node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund --no-audit
+COPY . .
+RUN npm run build
+
+FROM docker.io/library/node:24-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-fund --no-audit && npm cache clean --force
+COPY --from=build /app/room ./room
+COPY --from=build /app/shared ./shared
+COPY --from=build /app/providers ./providers
+COPY --from=build /app/cartridges ./cartridges
+COPY --from=build /app/screen/dist ./screen/dist
+COPY --from=build /app/phone/dist ./phone/dist
+USER node
+EXPOSE 8740
+CMD ["node", "room/server.ts"]

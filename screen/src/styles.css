@@ -1,0 +1,56 @@
+/* Public stage styles. Tokens first, then base, components, and moods in cascade layers so
+   the host's named moods can restyle the whole screen without touching components. */
+
+@layer tokens, base, components, moods;
+
+@layer tokens {
+    :root {
+        --bg: #0b0b10;
+        --fg: #f4f1ea;
+        --muted: #9a97a6;
+        --accent: #f2c14e;
+        --panel: #15151d;
+        --font-body: "Inter", system-ui, sans-serif;
+        --font-display: "Inter Tight", "Inter", system-ui, sans-serif;
+    }
+}
+
+@layer base {
+    html, body, #root { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: clamp(18px, 2vw, 28px); }
+    h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(40px, 7vw, 112px); margin: 0; letter-spacing: -0.02em; }
+    img { max-width: 100%; display: block; }
+}
+
+@layer components {
+    .stage { display: grid; grid-template-columns: 1fr minmax(240px, 22vw); gap: 4vw; padding: 4vw; height: 100%; box-sizing: border-box; transition: background 800ms ease; }
+    .blocks { display: flex; flex-direction: column; gap: 2vw; justify-content: center; min-width: 0; }
+    .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7em; margin: 0 0 0.5em; }
+    .text.large { font-size: 1.6em; }
+    .text.whisper { color: var(--muted); font-style: italic; }
+    .roster { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.6em; }
+    .roster li { background: var(--panel); border-radius: 999px; padding: 0.4em 1em; border: 2px solid transparent; transition: border-color 150ms ease; }
+    .roster li.speaking { border-color: var(--accent); }
+    .roster .badge { margin-left: 0.5em; color: var(--muted); font-size: 0.8em; }
+    .timer { font-family: var(--font-display); font-size: 4em; line-height: 1; }
+    .timer small { display: block; font-size: 0.25em; color: var(--muted); }
+    .tally { border-collapse: collapse; font-size: 1.2em; }
+    .tally td { padding: 0.3em 1em 0.3em 0; }
+    .tally .highlight { color: var(--accent); }
+    .caption { color: var(--muted); border-left: 3px solid var(--accent); padding-left: 0.8em; }
+    .join { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1em; background: var(--panel); border-radius: 24px; padding: 2vw; }
+    .join img { width: 100%; border-radius: 12px; background: white; padding: 4%; box-sizing: border-box; }
+    .code { font-family: var(--font-display); font-size: 2.4em; letter-spacing: 0.3em; margin: 0; }
+    .host { color: var(--muted); margin: 0; }
+    .host.listening { color: var(--accent); }
+    .host.speaking { color: var(--fg); }
+    .stage[data-connected="false"] .join::after { content: "Reconnecting…"; color: var(--muted); font-size: 0.8em; }
+}
+
+@layer moods {
+    .mood-night { --bg: #05060d; --fg: #c9cde6; --accent: #7f8cff; }
+    .mood-dawn { --bg: #2a1a12; --accent: #ff9f5a; }
+    .mood-tense { --bg: #1a0b0d; --accent: #ff5a5a; }
+    .mood-victory { --bg: #0f1f14; --accent: #6fe29a; }
+    .mood-defeat { --bg: #1f0f14; --accent: #e26f8f; }
+}

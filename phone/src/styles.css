@@ -1,0 +1,34 @@
+/* Private stage styles: one hand, thumb reach, dark by default so a lit phone at night is a
+   deliberate signal rather than an accident. */
+
+@layer tokens, base, components;
+
+@layer tokens {
+    :root { --bg: #0b0b10; --fg: #f4f1ea; --muted: #9a97a6; --accent: #f2c14e; --panel: #15151d; --danger: #ff5a5a; --font-body: "Inter", system-ui, sans-serif; }
+}
+
+@layer base {
+    html, body, #root { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 18px; -webkit-tap-highlight-color: transparent; }
+    button, input { font: inherit; }
+    button { border: 0; border-radius: 16px; padding: 0.9em 1.2em; background: var(--panel); color: var(--fg); }
+    button:disabled { opacity: 0.4; }
+    input { width: 100%; box-sizing: border-box; padding: 0.9em 1em; border-radius: 16px; border: 1px solid var(--panel); background: var(--panel); color: var(--fg); }
+}
+
+@layer components {
+    .phone { min-height: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
+    .phone.name { justify-content: center; text-align: center; }
+    .phone.name form { display: flex; flex-direction: column; gap: 12px; }
+    .phone header { display: flex; justify-content: space-between; color: var(--muted); }
+    .controls { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+    .card { background: var(--panel); border-radius: 20px; padding: 20px; }
+    .card.secret { border: 1px solid var(--accent); }
+    .buttons { display: flex; flex-direction: column; gap: 10px; }
+    .notice.warning { color: var(--danger); }
+    .notice.secret { color: var(--accent); }
+    .waiting, .status { color: var(--muted); text-align: center; margin: 0; }
+    .talk { height: 96px; font-size: 1.2em; font-weight: 600; background: var(--accent); color: #111; user-select: none; touch-action: none; }
+    .talk.holding { background: #fff; box-shadow: 0 0 0 6px rgba(242, 193, 78, 0.4); }
+    .listening-muted .talk { background: var(--panel); color: var(--muted); }
+}

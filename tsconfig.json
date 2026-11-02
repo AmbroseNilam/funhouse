@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "target": "es2023",
+        "lib": ["es2023", "dom", "dom.iterable"],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "jsx": "react-jsx",
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
+        "noEmit": true,
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "erasableSyntaxOnly": true,
+        "skipLibCheck": true,
+        "types": ["node"]
+    },
+    "include": ["types", "room", "shared", "providers", "cartridges", "tools", "screen/src", "phone/src", "screen/vite.config.ts", "phone/vite.config.ts", "eslint.config.js"]
+}

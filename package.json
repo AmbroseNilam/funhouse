@@ -1,0 +1,45 @@
+{
+    "name": "game-room",
+    "version": "0.1.0",
+    "private": true,
+    "description": "An AI-hosted virtual game room. Phones join by QR code; the host listens, talks, draws, and keeps secrets.",
+    "type": "module",
+    "engines": {
+        "node": ">=24 <25",
+        "npm": ">=11"
+    },
+    "scripts": {
+        "room": "node --env-file-if-exists=.env room/server.ts",
+        "screen:dev": "vite --config screen/vite.config.ts",
+        "phone:dev": "vite --config phone/vite.config.ts",
+        "build": "vite build --config screen/vite.config.ts && vite build --config phone/vite.config.ts",
+        "probe:asr": "node --env-file-if-exists=.env tools/probe-asr.ts",
+        "probe:spark": "node --env-file-if-exists=.env tools/probe-spark.ts",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint .",
+        "verify": "python3 tools/verify.py",
+        "test": "node --test --experimental-strip-types 'cartridges/**/*.test.ts' 'shared/**/*.test.ts' 'room/**/*.test.ts'",
+        "check": "npm run verify && npm run typecheck && npm run lint && npm test"
+    },
+    "dependencies": {
+        "@fontsource/inter": "^5.3.0",
+        "@fontsource/inter-tight": "^5.3.0",
+        "qrcode": "^1.5.4",
+        "react": "^19.3.1",
+        "react-dom": "^19.3.1",
+        "ws": "^8.22.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.0",
+        "@types/node": "^24.0.0",
+        "@types/qrcode": "^1.5.6",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "@types/ws": "^8.18.2",
+        "@vitejs/plugin-react": "^6.1.2",
+        "eslint": "^10.0.0",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.48.0",
+        "vite": "^8.3.5"
+    }
+}

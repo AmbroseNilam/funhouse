@@ -1,0 +1,20 @@
+# Secrets. Never commit.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.turbo/
+.cache/
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# Probe output (synthesized audio)
+tools/out/
