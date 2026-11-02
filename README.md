@@ -3,7 +3,7 @@
 An AI-hosted virtual game room. Friends scan a QR code with their phones and join a shared
 room. An AI host runs the night: it listens to every player on their own stream, talks back,
 draws on the big screen, keeps secrets, and can play too. Game Room is the console; games
-are cartridges. Werewolf is the first cartridge.
+are cartridges: Twenty Doors, Quizmaster and Werewolf so far.
 
 Built during the Meta Global AI Developer Hackathon, Oct 26 to Nov 4, 2026. Everything in
 this repository was written in that window.
@@ -13,11 +13,11 @@ this repository was written in that window.
 | Need | Model | How |
 | --- | --- | --- |
 | Hear every player | Muse Voice Transcribe | One realtime WebSocket session per phone, so the room always knows who said what without diarization. `providers/meta/transcribe.ts` |
-| Think and host | Muse Spark 1.3 | Streamed completions with tool calls and structured output for scenes and phone controls. `providers/meta/spark.ts` |
-| Draw | Muse Image | Scenes, role cards, victory murals on the big screen. |
+| Think and host | Muse Spark 1.3 | Streamed replies that are spoken as they are written, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as secrets and quiz questions. `providers/meta/spark.ts` |
+| Draw | Muse Image | Paintings drawn ahead of need: Werewolf's village through each phase, and the Twenty Doors secret for its reveal. `providers/meta/image.ts` |
 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
-provider behind a small interface in `providers/openai/speech.ts`.
+provider, OpenAI's Realtime API used only as a reader, behind a small interface in `providers/openai/speech.ts`.
 
 ## Layout
 
@@ -44,6 +44,15 @@ npm run room             # http://localhost:8740
 ```
 
 ## Verify
+
+To play a whole game from a script, with no microphones or voice:
+
+```sh
+GAME_ROOM_TEXT_ONLY=1 npm run room
+node tools/scenarios/twenty-doors.ts
+```
+
+To check the code:
 
 ```sh
 npm run check            # verify.py, typecheck, lint, tests
