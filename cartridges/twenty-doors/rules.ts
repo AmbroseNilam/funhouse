@@ -158,6 +158,9 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
             if (event.type !== "hostRuled" || state.phase !== "asking") {
                 return { state, facts: [] };
             }
+            if (state.heard === null && event.ruling !== "giveup") {
+                return { state, facts: [] };
+            }
             const answer: string | undefined = DOOR_RULINGS[event.ruling];
             if (answer !== undefined) {
                 return openDoor(state, answer);
