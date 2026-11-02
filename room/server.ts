@@ -1,6 +1,6 @@
-// Process entry point. Serves the two built stages as static files and routes WebSocket
-// connections to the room: /ws/screen for the public stage and /ws/phone for phones. One
-// room per process for now; a room directory comes when more than one is needed.
+// Process entry point. Serves the built stages and the landing page as static files and
+// routes WebSocket connections to the room: /ws/screen for the public stage and /ws/phone for
+// phones. One room per process for now; a room directory comes when more than one is needed.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -18,6 +18,7 @@ const PUBLIC_URL: string = process.env.PUBLIC_URL ?? `http://localhost:${PORT}`;
 const STAGE_ROOTS: Record<string, string> = {
     screen: join(import.meta.dirname, "..", "screen", "dist"),
     phone: join(import.meta.dirname, "..", "phone", "dist"),
+    landing: join(import.meta.dirname, "..", "landing", "dist"),
 };
 
 /** Media types for the static files the stages ship. */
@@ -41,11 +42,7 @@ const room: Room = new Room(makeRoomCode(), PUBLIC_URL);
  */
 async function serveStatic(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url: URL = new URL(request.url ?? "/", "http://room");
-    if (url.pathname === "/") {
-        response.writeHead(302, { location: "/screen/" }).end();
-        return;
-    }
-    const [, stage, ...rest] = url.pathname.split("/");
+    const [, stage, ...rest] = (url.pathname === "/" ? "/landing/" : url.pathname).split("/");
     const root: string | undefined = STAGE_ROOTS[stage ?? ""];
     if (root === undefined) {
         response.writeHead(404).end("Not found.");

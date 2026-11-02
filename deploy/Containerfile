@@ -20,6 +20,7 @@ COPY --from=build /app/providers ./providers
 COPY --from=build /app/cartridges ./cartridges
 COPY --from=build /app/screen/dist ./screen/dist
 COPY --from=build /app/phone/dist ./phone/dist
+COPY --from=build /app/landing/dist ./landing/dist
 USER node
 EXPOSE 8740
 CMD ["node", "room/server.ts"]

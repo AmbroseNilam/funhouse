@@ -1,0 +1,42 @@
+/* Landing page styles. Two doors side by side on a big screen. On a phone, joining fills the
+   screen and hosting becomes one quiet link, since a phone can't be the big screen. */
+
+@layer tokens, base, components;
+
+@layer tokens {
+    :root { --bg: #0b0b10; --fg: #f4f1ea; --muted: #9a97a6; --accent: #f2c14e; --panel: #15151d; --line: #2a2a35; --danger: #ff7a7a; --font-body: "Inter", system-ui, sans-serif; --font-display: "Inter Tight", "Inter", system-ui, sans-serif; }
+}
+
+@layer base {
+    html, body, #root { height: 100%; margin: 0; }
+    body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 18px; -webkit-tap-highlight-color: transparent; }
+    h1, h2, p { margin: 0; }
+    input, button { font: inherit; }
+}
+
+@layer components {
+    .landing { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 48px; max-width: 960px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); }
+    .intro { display: flex; flex-direction: column; gap: 12px; }
+    h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(48px, 9vw, 96px); letter-spacing: -0.02em; line-height: 1; }
+    .intro p { color: var(--muted); font-size: 1.2em; max-width: 32em; }
+    .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .door { display: flex; flex-direction: column; gap: 16px; background: var(--panel); border-radius: 24px; padding: 28px; }
+    .door h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.5em; }
+    .door p { color: var(--muted); }
+    .door .warning { color: var(--danger); }
+    .join label { color: var(--muted); font-size: 0.85em; margin-bottom: -8px; }
+    .join input { box-sizing: border-box; width: 100%; padding: 0.5em 0.6em; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--fg); font-family: var(--font-display); font-size: 1.8em; letter-spacing: 0.3em; text-align: center; }
+    .join input::placeholder { color: var(--line); }
+    .join input:focus-visible, .join button:focus-visible, .host-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    .join button, .host-link { box-sizing: border-box; display: block; border: 0; border-radius: 14px; padding: 0.9em 1.2em; background: var(--accent); color: #111; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; }
+    .join button:disabled { background: var(--line); color: var(--muted); cursor: default; }
+    .host { justify-content: space-between; }
+
+    @media (max-width: 700px) {
+        .landing { justify-content: flex-start; gap: 32px; padding-top: max(48px, env(safe-area-inset-top)); }
+        .doors { grid-template-columns: 1fr; }
+        .door.host { background: none; padding: 8px 0; align-items: center; }
+        .door.host h2, .door.host p { display: none; }
+        .host-link { background: none; color: var(--muted); font-weight: 400; font-size: 0.9em; text-decoration: underline; padding: 0.8em; }
+    }
+}

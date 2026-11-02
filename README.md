@@ -26,6 +26,7 @@ provider behind a small interface in `providers/openai/speech.ts`.
 | `room/` | The runtime: HTTP and WebSocket server, the event timeline, visibility scopes, the host loop. |
 | `shared/` | The vocabulary both sides agree on: scenes, phone controls, timeline events, the cartridge contract. |
 | `screen/` | The public stage, a web page for a laptop or TV. |
+| `landing/` | The front door at `/`: host on a big screen, or join with a room code. |
 | `phone/` | The private stage, a web page opened from the QR code. Microphone capture lives here. |
 | `cartridges/` | Games. Each has a manifest, a rules core, and simulated-player tests. |
 | `providers/` | Meta and OpenAI clients. Provider details never leak past this folder. |

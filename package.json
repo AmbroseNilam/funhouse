@@ -12,7 +12,7 @@
         "room": "node --env-file-if-exists=.env room/server.ts",
         "screen:dev": "vite --config screen/vite.config.ts",
         "phone:dev": "vite --config phone/vite.config.ts",
-        "build": "vite build --config screen/vite.config.ts && vite build --config phone/vite.config.ts",
+        "build": "vite build --config landing/vite.config.ts && vite build --config screen/vite.config.ts && vite build --config phone/vite.config.ts",
         "probe:asr": "node --env-file-if-exists=.env tools/probe-asr.ts",
         "probe:spark": "node --env-file-if-exists=.env tools/probe-spark.ts",
         "typecheck": "tsc --noEmit",
