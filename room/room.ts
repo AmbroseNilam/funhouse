@@ -35,6 +35,8 @@ interface Player {
     transcribe: TranscribeSession | null;
     /** A session opened ahead of the next press, so pressing never waits for a handshake. */
     standby: TranscribeSession | null;
+    /** Replaces the standby before the provider closes it for sitting idle. */
+    standbyTimer: NodeJS.Timeout | null;
     holdingToTalk: boolean;
     /** True from pressing talk until that utterance's final text is handled once. */
     awaitingFinal: boolean;
@@ -58,6 +60,13 @@ const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 350;
 
 /** Short, varied acknowledgements, rendered once per room and played sparingly. */
 const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
+
+/**
+ * How long a standby session may wait before it is replaced. Measured: the provider closes a
+ * session with "Ingress audio slower than real-time" once it falls about 15 s behind real
+ * time, and an idle session falls behind from the moment it opens.
+ */
+const STANDBY_REFRESH_MILLISECONDS: number = 10000;
 
 /** How long a dropped phone keeps its seat before the room says they left. */
 const REJOIN_GRACE_MILLISECONDS: number = 30000;
@@ -224,7 +233,7 @@ export class Room implements HostStage {
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, holdingToTalk: false, awaitingFinal: false, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: false, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${name} joined as ${playerId}`);
@@ -285,6 +294,7 @@ export class Room implements HostStage {
         player.transcribe?.abort();
         player.standby?.abort();
         player.standby = null;
+        this.clearStandbyTimer(player);
         log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${REJOIN_GRACE_MILLISECONDS / 1000} s`);
         this.broadcastScene();
         player.leaveTimer = setTimeout(() => {
@@ -316,6 +326,7 @@ export class Room implements HostStage {
         if (down === true && player.transcribe === null) {
             player.transcribe = player.standby ?? this.openTranscribe(player, "PUSH_TO_TALK");
             player.standby = null;
+            this.clearStandbyTimer(player);
             return;
         }
         if (down === false && player.transcribe !== null) {
@@ -332,7 +343,30 @@ export class Room implements HostStage {
         if (player.connected === false || player.standby !== null) {
             return;
         }
-        player.standby = this.openTranscribe(player, "PUSH_TO_TALK");
+        const session: TranscribeSession = this.openTranscribe(player, "PUSH_TO_TALK");
+        player.standby = session;
+        this.clearStandbyTimer(player);
+        player.standbyTimer = setTimeout(() => {
+            player.standbyTimer = null;
+            if (player.standby !== session) {
+                return;
+            }
+            player.standby = null;
+            session.abort();
+            this.prepareStandby(player);
+        }, STANDBY_REFRESH_MILLISECONDS);
+    }
+
+    /**
+     * Stops the timer that would replace the player's standby session.
+     * @param player the player.
+     */
+    private clearStandbyTimer(player: Player): void {
+        if (player.standbyTimer === null) {
+            return;
+        }
+        clearTimeout(player.standbyTimer);
+        player.standbyTimer = null;
     }
 
     /**
@@ -416,7 +450,7 @@ export class Room implements HostStage {
         player.awaitingFinal = false;
         const said: string = text.trim();
         const sinceRelease: string = player.releasedAt === 0 ? "" : ` (${Date.now() - player.releasedAt} ms after release)`;
-        log(this.scope(), `heard ${player.name}: "${said}"${sinceRelease}`);
+        log(this.scope(), said === "" ? `heard nothing from ${player.name}${sinceRelease}` : `heard ${player.name}: "${said}"${sinceRelease}`);
         this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
         if (said === "") {
             this.broadcastScene();
