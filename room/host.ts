@@ -1,10 +1,13 @@
 // The AI host: a persona that wakes on room events, decides what to say, and acts on the
 // room only through the stage the room gives it. Its reply is plain text and that text is
-// speech; each sentence goes to the voice the moment it is complete. Plain text on purpose:
+// speech, sent to the voice as one line once complete: Spark delivers a short reply within
+// tens of milliseconds, and splitting it would queue a second voice request behind the
+// first, costing about a second. Plain text on purpose:
 // offered tools, Muse Spark narrates its own actions in the text, and structured output can
 // spend the whole budget on hidden reasoning. The screen is the cartridge's job. The host
-// has no rule authority. One turn runs at a time; events that arrive mid-turn wait for the
-// next one. Holding to talk on any phone interrupts.
+// has no rule authority. One turn composes at a time; events that arrive mid-turn wait for
+// the next one, which may compose while the previous reply is still playing (the voice keeps
+// lines in order). Holding to talk on any phone interrupts.
 
 import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
@@ -24,15 +27,30 @@ export interface HostPersona {
 export const PLACEHOLDER_PERSONA: HostPersona = {
     name: "Marlowe",
     voice: "ash",
-    style: "Relaxed and natural, like a friend talking across the coffee table at game night. Conversational pace, light warmth, no announcer voice, no exaggerated enthusiasm.",
+    style: "Relaxed friend at a kitchen table: unhurried, a slight smile in the voice, no announcer energy.",
     character: [
-        "You are Marlowe, the host of Game Room: a party game night played on one big screen, with everyone's phone as their controller and microphone.",
-        "Talk like a relaxed, quick-witted friend who happens to be running game night. Casual words, contractions, plain sentences.",
-        "Most replies are one short sentence. Two at most. Never a speech.",
-        "Almost never say people's names. Use a name only when you need to point at one person in a group. Never open a reply with a name.",
-        "Greet each person once. Don't re-welcome anyone, don't repeat back what someone said, don't narrate what you're doing.",
-        "A little dry humour is good. Forced puns and catchphrases are not.",
-    ].join(" "),
+        "You are Marlowe, hosting game night in someone's living room. One big screen, and everyone's phone is their mic.",
+        "",
+        "How you talk: like a quick, warm friend who has run a hundred game nights, not a presenter. Plain words, contractions, short sentences. One sentence is the norm, two is the max, and a single word is often best. Dry, light humour; never puns, never catchphrases, never \"welcome to the show\".",
+        "",
+        "Table rules:",
+        "- Don't use names unless you're picking one person out of the group. Never start with a name.",
+        "- Don't repeat what someone said back to them. Don't narrate what you're doing or about to do.",
+        "- Vary your openers; never use the same phrase twice in a row.",
+        "- What you get is speech-to-text. If it's garbled, half a sentence, or clearly not aimed at you, reply exactly (quiet) rather than guessing.",
+        "- Several people join close together: one hello covers them all.",
+        "- If a question wants a yes or no, give it first, then one beat of colour.",
+        "",
+        "Examples:",
+        "Sam: can we start?",
+        "You: Nearly. Two more people and we're on.",
+        "Priya: what's werewolf",
+        "You: A village, a couple of secret werewolves, and a lot of pointing fingers. You argue, you vote, someone gets it wrong.",
+        "Jo: hey marlowe",
+        "You: Yeah?",
+        "Jo: Dana, did you park out front?",
+        "You: (quiet)",
+    ].join("\n"),
 };
 
 /** What the host can do in the room. The room implements it. */
@@ -43,8 +61,6 @@ export interface HostStage {
     setThinking(thinking: boolean): void;
     /** Queues one sentence to speak; its audio starts fetching at once. */
     say(text: string, style: string): void;
-    /** Resolves when everything queued has finished playing, or the signal aborts. */
-    finishSpeaking(signal: AbortSignal): Promise<void>;
     /** Drops everything queued and stops the voice mid-word. */
     stopSpeaking(): void;
 }
@@ -55,10 +71,10 @@ const HISTORY_LIMIT: number = 40;
 /** Most lines that may wait for the next turn; the oldest drop first. */
 const PENDING_LIMIT: number = 20;
 
-/** Sentence end: terminal punctuation, optional closing quote, then whitespace. */
-const SENTENCE_END: RegExp = /[.!?…]["'”’)]?\s/;
+/** What the host replies to say nothing. Checked before speaking, not left to cleanup. */
+const QUIET_MARKER: string = "(quiet)";
 
-/** Room for Spark's hidden reasoning plus a short spoken reply. */
+/** Room for Spark's hidden reasoning plus a short spoken reply. Measured: 96 to 192 reasoning tokens at minimal effort. */
 const REPLY_TOKEN_LIMIT: number = 600;
 
 /** The host loop. One instance per room. */
@@ -81,10 +97,9 @@ export class Host {
         this.stage = stage;
         this.persona = persona;
         this.lobbyBrief = [
-            "Right now everyone is in the lobby. When people join, give them a quick hello; if several join close together, one hello covers them all.",
-            "When the group talks about what to play, these games are installed:",
+            "Right now: the lobby. Installed games:",
             ...gameSummaries.map((summary: string) => `- ${summary}`),
-            "Starting a game is not wired up yet. If they ask to start, say you're setting it up and it's nearly ready.",
+            "Starting a game isn't wired up yet; if asked, say it's nearly ready.",
         ].join("\n");
     }
 
@@ -108,14 +123,16 @@ export class Host {
         }, delayMilliseconds);
     }
 
-    /** Stops whatever the host is doing, mid-word if need be. */
-    public interrupt(): void {
-        if (this.turn === null) {
-            return;
-        }
-        this.turn.abort();
+    /**
+     * Stops whatever the host is doing, mid-word if need be.
+     * @param wasSpeaking true when the host was audible, so the cut-in is worth remembering.
+     */
+    public interrupt(wasSpeaking: boolean): void {
+        this.turn?.abort();
         this.stage.stopSpeaking();
-        this.remember("(someone cut in)");
+        if (wasSpeaking === true) {
+            this.remember("(someone cut in)");
+        }
     }
 
     /** Runs turns until nothing new is pending. */
@@ -139,8 +156,8 @@ export class Host {
     }
 
     /**
-     * Streams one reply from Spark. Each finished sentence is queued to the voice at once. Waits for the voice to finish so the next
-     * turn never talks over this one.
+     * Streams one reply from Spark and queues it to the voice as one line. A reply that opens
+     * with the quiet marker says nothing at all.
      * @param earlier the conversation before this turn.
      * @param lines what happened since the last turn.
      * @param signal cancels the turn on interruption.
@@ -148,21 +165,7 @@ export class Host {
     private async act(earlier: string[], lines: string[], signal: AbortSignal): Promise<void> {
         const startedAt: number = Date.now();
         let firstTextAt: number = 0;
-        let firstLineAt: number = 0;
-        let pendingText: string = "";
-        const spoken: string[] = [];
-        const speak = (sentence: string): void => {
-            const clean: string = cleanSpeech(sentence);
-            if (clean === "" || signal.aborted === true) {
-                return;
-            }
-            if (firstLineAt === 0) {
-                firstLineAt = Date.now();
-                this.stage.setThinking(false);
-            }
-            spoken.push(clean);
-            this.stage.say(clean, this.persona.style);
-        };
+        let reply: string = "";
 
         this.stage.setThinking(true);
         const messages: SparkMessage[] = [
@@ -173,22 +176,19 @@ export class Host {
             if (firstTextAt === 0) {
                 firstTextAt = Date.now();
             }
-            pendingText += delta;
-            let end: RegExpExecArray | null = SENTENCE_END.exec(pendingText);
-            while (end !== null) {
-                speak(pendingText.slice(0, end.index + end[0].length));
-                pendingText = pendingText.slice(end.index + end[0].length);
-                end = SENTENCE_END.exec(pendingText);
-            }
+            reply += delta;
         }
-        speak(pendingText);
 
-        const timing: string = `first text ${firstTextAt === 0 ? "-" : firstTextAt - startedAt} ms, first line queued ${firstLineAt === 0 ? "-" : firstLineAt - startedAt} ms`;
-        log("host", spoken.length === 0 ? `stayed quiet (${timing})` : `said "${spoken.join(" ")}" (${timing})`);
-        if (spoken.length > 0) {
-            this.remember(`${this.persona.name}: ${spoken.join(" ")}`);
+        const timing: string = `first text ${firstTextAt === 0 ? "-" : firstTextAt - startedAt} ms, complete ${Date.now() - startedAt} ms`;
+        const spoken: string = reply.trimStart().startsWith(QUIET_MARKER) === true ? "" : cleanSpeech(reply);
+        if (spoken === "" || signal.aborted === true) {
+            log("host", `stayed quiet (${timing})`);
+            return;
         }
-        await this.stage.finishSpeaking(signal);
+        log("host", `said "${spoken}" (${timing})`);
+        this.stage.setThinking(false);
+        this.stage.say(spoken, this.persona.style);
+        this.remember(`${this.persona.name}: ${spoken}`);
     }
 
     /**
@@ -209,8 +209,7 @@ export class Host {
     private systemPrompt(): string {
         return [
             this.persona.character,
-            "Whatever text you write is spoken aloud to the whole room, word for word, by a voice. So write only the words you'd say: no stage directions, no descriptions of what you're doing, no emoji, no markdown, no lists.",
-            "If nothing needs saying, for example people are talking to each other rather than to you, reply with exactly: (quiet)",
+            "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet).",
             this.lobbyBrief,
         ].join("\n\n");
     }

@@ -1,6 +1,7 @@
 // The host's voice in one room: an ordered queue of sentences. Each sentence starts fetching
 // its audio the moment it is queued, so the next one is ready while the current one plays;
-// audio goes out strictly in order. Stopping drops everything queued and in flight.
+// audio goes out strictly in order. Pre-recorded lines (acknowledgements, scripted narration)
+// join the same queue with no fetch at all. Stopping drops everything queued and in flight.
 // Owned by the room; single-threaded like the rest of the room.
 
 import type { SpeechVoice, TextToSpeech } from "../providers/openai/speech.ts";
@@ -24,7 +25,7 @@ export interface VoiceOutput {
 const BYTES_PER_SECOND: number = 48000;
 
 /** Audio the screen holds before it starts playing; see screen/src/speaker.ts. */
-const SCREEN_CUSHION_MILLISECONDS: number = 250;
+const SCREEN_CUSHION_MILLISECONDS: number = 120;
 
 /** One sentence's audio as it downloads, readable while still arriving. */
 class FetchedLine {
@@ -72,6 +73,8 @@ export class HostVoice {
     private generation: number = 0;
     private playbackEndsAt: number = 0;
     private speaking: boolean = false;
+    private pendingLines: number = 0;
+    private idleTimer: NodeJS.Timeout | null = null;
 
     /**
      * Creates a voice that speaks through the given provider.
@@ -90,28 +93,47 @@ export class HostVoice {
      * @param style delivery direction.
      */
     public say(text: string, voice: SpeechVoice, style: string): void {
-        const line: FetchedLine = this.download(text, voice, style);
-        const generation: number = this.generation;
-        this.queue = this.queue.then(async () => {
-            if (generation !== this.generation) {
-                return;
-            }
-            await this.send(line, generation);
-        });
+        this.enqueue(this.download(text, voice, style));
     }
 
     /**
-     * Resolves once everything queued has been sent and should have finished playing.
-     * @param signal ends the wait early when the host is interrupted.
+     * Queues audio that is already rendered, such as an acknowledgement.
+     * @param pcm the whole line as 24 kHz 16-bit mono PCM.
      */
-    public async finish(signal: AbortSignal): Promise<void> {
-        const generation: number = this.generation;
-        await this.queue;
-        await waitUnlessAborted(this.playbackEndsAt - Date.now(), signal);
-        if (generation !== this.generation || signal.aborted === true) {
-            return;
+    public sayRecorded(pcm: Uint8Array): void {
+        const line: FetchedLine = new FetchedLine();
+        line.push(pcm);
+        line.close();
+        this.enqueue(line);
+    }
+
+    /**
+     * Renders a line to memory without playing it, for the pre-recorded bank.
+     * @param text the words.
+     * @param voice which voice.
+     * @param style delivery direction.
+     * @returns the whole line as PCM.
+     */
+    public async render(text: string, voice: SpeechVoice, style: string): Promise<Uint8Array> {
+        const parts: Uint8Array[] = [];
+        for await (const chunk of this.speech.speak({ text, voice, style })) {
+            parts.push(chunk);
         }
-        this.setSpeaking(false);
+        const whole: Uint8Array = new Uint8Array(parts.reduce((total: number, part: Uint8Array) => total + part.length, 0));
+        let offset: number = 0;
+        for (const part of parts) {
+            whole.set(part, offset);
+            offset += part.length;
+        }
+        return whole.subarray(0, whole.length - (whole.length % 2));
+    }
+
+    /**
+     * True while anything is queued or audible.
+     * @returns whether the voice is busy.
+     */
+    public isBusy(): boolean {
+        return this.pendingLines > 0 || this.speaking === true;
     }
 
     /** Drops everything queued and in flight, and tells listeners to go quiet now. */
@@ -120,9 +142,60 @@ export class HostVoice {
         this.downloads.abort();
         this.downloads = new AbortController();
         this.queue = Promise.resolve();
+        this.pendingLines = 0;
         this.playbackEndsAt = 0;
+        this.clearIdleTimer();
         this.output.cancelled();
         this.setSpeaking(false);
+    }
+
+    /**
+     * Adds a line to the ordered queue.
+     * @param line the line, downloading or complete.
+     */
+    private enqueue(line: FetchedLine): void {
+        const generation: number = this.generation;
+        this.pendingLines += 1;
+        this.clearIdleTimer();
+        this.queue = this.queue.then(async () => {
+            if (generation !== this.generation) {
+                return;
+            }
+            await this.send(line, generation);
+            if (generation !== this.generation) {
+                return;
+            }
+            this.pendingLines -= 1;
+            this.scheduleIdle(generation);
+        });
+    }
+
+    /**
+     * Marks the voice silent once the last sent audio should have finished playing, unless
+     * more lines were queued in the meantime.
+     * @param generation the queue generation that sent the audio.
+     */
+    private scheduleIdle(generation: number): void {
+        if (this.pendingLines > 0) {
+            return;
+        }
+        this.clearIdleTimer();
+        this.idleTimer = setTimeout(() => {
+            this.idleTimer = null;
+            if (generation !== this.generation || this.pendingLines > 0) {
+                return;
+            }
+            this.setSpeaking(false);
+        }, Math.max(0, this.playbackEndsAt - Date.now()));
+    }
+
+    /** Cancels a pending idle check. */
+    private clearIdleTimer(): void {
+        if (this.idleTimer === null) {
+            return;
+        }
+        clearTimeout(this.idleTimer);
+        this.idleTimer = null;
     }
 
     /**
@@ -175,7 +248,8 @@ export class HostVoice {
                 continue;
             }
             const now: number = Date.now();
-            this.playbackEndsAt = Math.max(this.playbackEndsAt, now + SCREEN_CUSHION_MILLISECONDS) + (even / BYTES_PER_SECOND) * 1000;
+            const startsAt: number = this.playbackEndsAt > now ? this.playbackEndsAt : now + SCREEN_CUSHION_MILLISECONDS;
+            this.playbackEndsAt = startsAt + (even / BYTES_PER_SECOND) * 1000;
             this.setSpeaking(true);
             this.output.chunk(joined.subarray(0, even));
         }
@@ -193,26 +267,4 @@ export class HostVoice {
         this.speaking = speaking;
         this.output.speakingChanged(speaking);
     }
-}
-
-/**
- * Waits the given time, returning early if the signal aborts.
- * @param milliseconds how long to wait; zero or less returns at once.
- * @param signal ends the wait early.
- */
-function waitUnlessAborted(milliseconds: number, signal: AbortSignal): Promise<void> {
-    if (milliseconds <= 0 || signal.aborted === true) {
-        return Promise.resolve();
-    }
-    return new Promise((resolve: () => void) => {
-        const stop = (): void => {
-            clearTimeout(timer);
-            resolve();
-        };
-        const timer: NodeJS.Timeout = setTimeout(() => {
-            signal.removeEventListener("abort", stop);
-            resolve();
-        }, milliseconds);
-        signal.addEventListener("abort", stop, { once: true });
-    });
 }

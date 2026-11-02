@@ -3,6 +3,10 @@
 // from its state, and it is the only thing that talks to the providers. The host acts on the
 // room only through the HostStage methods; the host's voice reaches screens through
 // VoiceOutput. A phone that drops keeps its seat for a grace period and can resume it.
+// Latency moves, measured and explained in the planning notes: partial transcripts show live
+// on the screen, each phone keeps a transcription session open ahead of its next press, and a
+// short pre-recorded acknowledgement plays when the host was addressed and its reply is not
+// audible soon after the final text arrives.
 
 import { randomBytes } from "node:crypto";
 import type WebSocket from "ws";
@@ -11,9 +15,9 @@ import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
-import { OpenAiSpeech } from "../providers/openai/speech.ts";
+import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { WEREWOLF_MANIFEST } from "../cartridges/werewolf/manifest.ts";
-import { Host, PLACEHOLDER_PERSONA, type HostStage } from "./host.ts";
+import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
 
@@ -29,20 +33,31 @@ interface Player {
     listening: ListeningMode;
     speaking: boolean;
     transcribe: TranscribeSession | null;
+    /** A session opened ahead of the next press, so pressing never waits for a handshake. */
+    standby: TranscribeSession | null;
     holdingToTalk: boolean;
     /** True from pressing talk until that utterance's final text is handled once. */
     awaitingFinal: boolean;
     releasedAt: number;
+    /** Latest partial transcript of the current utterance. */
+    partial: string;
 }
 
-/** The last line spoken in the room, shown as a caption. */
+/** The last line spoken in the room, shown as a caption; not final while still being said. */
 interface Caption {
     speaker: string;
     text: string;
+    final: boolean;
 }
 
 /** Pause before the host reacts, so bursts of events land in one turn. */
-const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 100, join: 1200, leave: 1500, screen: 300 };
+const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 0, join: 900, leave: 1500, screen: 300 };
+
+/** How long after the final text the host's reply may take before an acknowledgement plays. */
+const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 350;
+
+/** Short, varied acknowledgements, rendered once per room and played sparingly. */
+const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
 
 /** How long a dropped phone keeps its seat before the room says they left. */
 const REJOIN_GRACE_MILLISECONDS: number = 30000;
@@ -76,6 +91,9 @@ export class Room implements HostStage {
     private hostThinking: boolean = false;
     private hostSpeaking: boolean = false;
     private hostTurnText: string = "";
+    private readonly acknowledgements: Uint8Array[] = [];
+    private lastAcknowledgement: number = -1;
+    private acknowledgeTimer: NodeJS.Timeout | null = null;
 
     /**
      * Creates an empty room.
@@ -87,7 +105,10 @@ export class Room implements HostStage {
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         const games: string[] = [WEREWOLF_MANIFEST].map((manifest) => `${manifest.name}, ${manifest.minPlayers} to ${manifest.maxPlayers} players`);
         this.host = new Host(this, PLACEHOLDER_PERSONA, games);
-        this.voice = new HostVoice(new OpenAiSpeech(), this.voiceOutput());
+        const speech: OpenAiRealtimeSpeech = new OpenAiRealtimeSpeech();
+        speech.warm();
+        this.voice = new HostVoice(speech, this.voiceOutput());
+        this.renderAcknowledgements().catch((error: unknown) => { log(this.scope(), `acknowledgements unavailable: ${error instanceof Error ? error.message : String(error)}`); });
     }
 
     /**
@@ -183,17 +204,9 @@ export class Room implements HostStage {
     public say(text: string, style: string): void {
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
         this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
-        this.caption = { speaker: this.host.persona.name, text: this.hostTurnText };
+        this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
         this.broadcastScene();
         this.voice.say(text, this.host.persona.voice, style);
-    }
-
-    /**
-     * Resolves when the host's queued speech has finished playing.
-     * @param signal ends the wait early on interruption.
-     */
-    public finishSpeaking(signal: AbortSignal): Promise<void> {
-        return this.voice.finish(signal);
     }
 
     /** Silences the host at once. */
@@ -211,12 +224,13 @@ export class Room implements HostStage {
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, holdingToTalk: false, awaitingFinal: false, releasedAt: 0 };
+        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, holdingToTalk: false, awaitingFinal: false, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${name} joined as ${playerId}`);
         this.welcome(player);
         this.broadcastScene();
+        this.prepareStandby(player);
         this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
         return player;
     }
@@ -246,6 +260,7 @@ export class Room implements HostStage {
         log(this.scope(), `${player.name} rejoined ${player.playerId}`);
         this.welcome(player);
         this.broadcastScene();
+        this.prepareStandby(player);
         return player;
     }
 
@@ -268,6 +283,8 @@ export class Room implements HostStage {
         player.holdingToTalk = false;
         player.speaking = false;
         player.transcribe?.abort();
+        player.standby?.abort();
+        player.standby = null;
         log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${REJOIN_GRACE_MILLISECONDS / 1000} s`);
         this.broadcastScene();
         player.leaveTimer = setTimeout(() => {
@@ -289,13 +306,16 @@ export class Room implements HostStage {
         player.holdingToTalk = down;
         if (down === true) {
             player.awaitingFinal = true;
+            player.partial = "";
+            this.cancelAcknowledgement();
             if (this.hostSpeaking === true || this.hostThinking === true) {
                 log(this.scope(), `${player.name} cut in`);
             }
-            this.host.interrupt();
+            this.host.interrupt(this.hostSpeaking);
         }
         if (down === true && player.transcribe === null) {
-            this.openTranscribe(player, "PUSH_TO_TALK");
+            player.transcribe = player.standby ?? this.openTranscribe(player, "PUSH_TO_TALK");
+            player.standby = null;
             return;
         }
         if (down === false && player.transcribe !== null) {
@@ -305,11 +325,24 @@ export class Room implements HostStage {
     }
 
     /**
-     * Starts a transcription session for a player and wires its events onto the timeline.
+     * Opens the player's next transcription session ahead of time, unless one is waiting.
+     * @param player the player.
+     */
+    private prepareStandby(player: Player): void {
+        if (player.connected === false || player.standby !== null) {
+            return;
+        }
+        player.standby = this.openTranscribe(player, "PUSH_TO_TALK");
+    }
+
+    /**
+     * Opens a transcription session for a player and wires its events onto the timeline. When
+     * it closes, the next standby session is prepared.
      * @param player the player.
      * @param mode push-to-talk for held speech, endpointing for an open floor.
+     * @returns the session, opening in the background.
      */
-    private openTranscribe(player: Player, mode: "PUSH_TO_TALK" | "ENDPOINTING"): void {
+    private openTranscribe(player: Player, mode: "PUSH_TO_TALK" | "ENDPOINTING"): TranscribeSession {
         const session: TranscribeSession = new TranscribeSession({ mode, keywords: this.keywords() }, {
             onSpeechStart: (): void => {
                 player.speaking = true;
@@ -319,25 +352,37 @@ export class Room implements HostStage {
             onTranscript: (text: string, isFinal: boolean): void => {
                 if (isFinal === true && mode === "PUSH_TO_TALK") {
                     this.onSpeechEnded(player, text);
+                    return;
+                }
+                if (isFinal === false && player.awaitingFinal === true) {
+                    this.onPartial(player, text);
                 }
             },
             onSpeechComplete: (_turnId: string, text: string): void => { this.onSpeechEnded(player, text); },
             onError: (message: string): void => { log(this.scope(), `transcribe error for ${player.name}: ${message}`); },
             onClose: (): void => {
-                if (player.transcribe === session) {
-                    player.transcribe = null;
+                if (player.standby === session) {
+                    player.standby = null;
                 }
+                if (player.transcribe !== session) {
+                    return;
+                }
+                player.transcribe = null;
                 player.speaking = false;
                 this.broadcastScene();
+                this.prepareStandby(player);
             },
         });
-        player.transcribe = session;
         session.open().catch((error: unknown) => {
             log(this.scope(), `transcribe open failed for ${player.name}: ${error instanceof Error ? error.message : String(error)}`);
             if (player.transcribe === session) {
                 player.transcribe = null;
             }
+            if (player.standby === session) {
+                player.standby = null;
+            }
         });
+        return session;
     }
 
     /**
@@ -377,9 +422,72 @@ export class Room implements HostStage {
             this.broadcastScene();
             return;
         }
-        this.caption = { speaker: player.name, text: said };
+        this.caption = { speaker: player.name, text: said, final: true };
         this.broadcastScene();
         this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
+        this.scheduleAcknowledgement(said);
+    }
+
+    /**
+     * Shows a partial transcript live on the screen while the player is still talking.
+     * @param player who is talking.
+     * @param text the cumulative partial text.
+     */
+    private onPartial(player: Player, text: string): void {
+        const partial: string = text.trim();
+        if (partial === "" || partial === player.partial) {
+            return;
+        }
+        player.partial = partial;
+        this.caption = { speaker: player.name, text: partial, final: false };
+        this.broadcastScene();
+    }
+
+    /**
+     * Plays a short acknowledgement if the host was clearly addressed and has not started
+     * replying shortly after the final text. Addressed means the host's name was said, or there is
+     * only one player, so side chat between players never gets an acknowledgement.
+     * @param said what the player said so far.
+     */
+    private scheduleAcknowledgement(said: string): void {
+        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1;
+        if (addressed === false || this.acknowledgements.length === 0) {
+            return;
+        }
+        this.cancelAcknowledgement();
+        this.acknowledgeTimer = setTimeout(() => {
+            this.acknowledgeTimer = null;
+            if (this.hostThinking === false || this.voice.isBusy() === true) {
+                return;
+            }
+            let index: number = Math.floor(Math.random() * this.acknowledgements.length);
+            if (index === this.lastAcknowledgement) {
+                index = (index + 1) % this.acknowledgements.length;
+            }
+            this.lastAcknowledgement = index;
+            const pcm: Uint8Array | undefined = this.acknowledgements[index];
+            if (pcm !== undefined) {
+                this.voice.sayRecorded(pcm);
+            }
+        }, ACKNOWLEDGE_AFTER_MILLISECONDS);
+    }
+
+    /** Cancels a pending acknowledgement. */
+    private cancelAcknowledgement(): void {
+        if (this.acknowledgeTimer === null) {
+            return;
+        }
+        clearTimeout(this.acknowledgeTimer);
+        this.acknowledgeTimer = null;
+    }
+
+    /** Renders the acknowledgement bank once, in the host's voice. */
+    private async renderAcknowledgements(): Promise<void> {
+        const persona: HostPersona = this.host.persona;
+        for (const text of ACKNOWLEDGEMENTS) {
+            this.acknowledgements.push(await this.voice.render(text, persona.voice, `${persona.style} A quick, quiet acknowledgement, as if thinking.`));
+        }
+        log(this.scope(), `rendered ${this.acknowledgements.length} acknowledgements`);
     }
 
     /**
@@ -437,7 +545,7 @@ export class Room implements HostStage {
     private currentScene(): Scene {
         const scene: Scene = lobbyScene(this.joinUrl, this.code, this.roster());
         if (this.caption !== null) {
-            scene.blocks.push({ type: "caption", speaker: this.caption.speaker, text: this.caption.text, final: true });
+            scene.blocks.push({ type: "caption", speaker: this.caption.speaker, text: this.caption.text, final: this.caption.final });
         }
         return scene;
     }
@@ -535,3 +643,4 @@ export class Room implements HostStage {
         return `room ${this.code}`;
     }
 }
+

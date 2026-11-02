@@ -1,8 +1,14 @@
 // Owns the phone's microphone: asks for permission, runs the PCM worklet, and hands 80 ms
 // frames to a callback. The page decides when frames are sent; this file only captures.
+// iOS ends the track or suspends the audio context after a lock or a phone call, so the page
+// asks whether a capture is still live before relying on it.
 
 /** A running capture that can be stopped. */
 export interface MicrophoneCapture {
+    /** True while the track is live and the audio context is running. */
+    isLive(): boolean;
+    /** Tries to wake a suspended audio context; call from a user gesture. */
+    resume(): Promise<void>;
     stop(): void;
 }
 
@@ -22,6 +28,12 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => { onFrame(event.data); };
     source.connect(worklet);
     return {
+        isLive(): boolean {
+            return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live") === true && context.state === "running";
+        },
+        async resume(): Promise<void> {
+            await context.resume();
+        },
         stop(): void {
             worklet.disconnect();
             source.disconnect();

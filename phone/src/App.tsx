@@ -209,9 +209,15 @@ export function App(): ReactElement {
     };
 
     const ensureMicrophone = async (): Promise<void> => {
-        if (captureRef.current !== null) {
+        const existing: MicrophoneCapture | null = captureRef.current;
+        if (existing !== null && existing.isLive() === false) {
+            await existing.resume().catch(() => undefined);
+        }
+        if (existing !== null && existing.isLive() === true) {
             return;
         }
+        existing?.stop();
+        captureRef.current = null;
         try {
             captureRef.current = await startMicrophone((frame: ArrayBuffer) => {
                 if (holdingRef.current === true && socketRef.current?.readyState === WebSocket.OPEN) {
@@ -264,6 +270,7 @@ export function App(): ReactElement {
                 onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); void ensureMicrophone(); setHolding(true); }}
                 onPointerUp={() => { setHolding(false); }}
                 onPointerCancel={() => { setHolding(false); }}
+                onContextMenu={(event) => { event.preventDefault(); }}
             >
                 {state.holding === true ? "Listening…" : "Hold to talk"}
             </button>

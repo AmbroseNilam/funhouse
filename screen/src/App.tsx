@@ -27,6 +27,9 @@ type ScreenAction =
     | { type: "connection"; connected: boolean }
     | { type: "started" };
 
+/** Longest wait between reconnect attempts. */
+const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
+
 const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
 
 /**
@@ -90,33 +93,54 @@ export function App(): ReactElement {
     const speakerRef = useRef<HostSpeaker | null>(null);
 
     useEffect(() => {
-        const protocol: string = location.protocol === "https:" ? "wss" : "ws";
-        const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/screen`);
-        socket.binaryType = "arraybuffer";
-        socketRef.current = socket;
-        socket.onopen = (): void => { dispatch({ type: "connection", connected: true }); };
-        socket.onclose = (): void => { dispatch({ type: "connection", connected: false }); };
-        socket.onmessage = (event: MessageEvent<string | ArrayBuffer>): void => {
-            if (event.data instanceof ArrayBuffer) {
-                speakerRef.current?.play(event.data);
-                return;
-            }
-            const message: RoomToScreenMessage | null = parseMessage<RoomToScreenMessage>(event.data);
-            if (message === null) {
-                return;
-            }
-            if (message.type === "audioCancel") {
-                speakerRef.current?.cancel();
-                return;
-            }
-            if (message.type === "audioEnd") {
-                speakerRef.current?.lineEnded();
-                return;
-            }
-            dispatch({ type: "message", message });
+        let stopped: boolean = false;
+        let retryTimer: number = 0;
+        let retryDelay: number = 500;
+
+        /** Opens the socket; on close, retries with backoff so a network blip heals itself. */
+        const connect = (): void => {
+            const protocol: string = location.protocol === "https:" ? "wss" : "ws";
+            const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/screen`);
+            socket.binaryType = "arraybuffer";
+            socketRef.current = socket;
+            socket.onopen = (): void => {
+                retryDelay = 500;
+                dispatch({ type: "connection", connected: true });
+            };
+            socket.onclose = (): void => {
+                dispatch({ type: "connection", connected: false });
+                if (stopped === true || socketRef.current !== socket) {
+                    return;
+                }
+                retryTimer = window.setTimeout(connect, retryDelay);
+                retryDelay = Math.min(retryDelay * 2, MAX_RECONNECT_DELAY_MILLISECONDS);
+            };
+            socket.onmessage = (event: MessageEvent<string | ArrayBuffer>): void => {
+                if (event.data instanceof ArrayBuffer) {
+                    speakerRef.current?.play(event.data);
+                    return;
+                }
+                const message: RoomToScreenMessage | null = parseMessage<RoomToScreenMessage>(event.data);
+                if (message === null) {
+                    return;
+                }
+                if (message.type === "audioCancel") {
+                    speakerRef.current?.cancel();
+                    return;
+                }
+                if (message.type === "audioEnd") {
+                    speakerRef.current?.lineEnded();
+                    return;
+                }
+                dispatch({ type: "message", message });
+            };
         };
+
+        connect();
         return (): void => {
-            socket.close();
+            stopped = true;
+            window.clearTimeout(retryTimer);
+            socketRef.current?.close();
             socketRef.current = null;
         };
     }, []);
@@ -124,11 +148,12 @@ export function App(): ReactElement {
     /** Unlocks audio with the click browsers require, then tells the room the screen is live. */
     const start = (): void => {
         const speaker: HostSpeaker = new HostSpeaker();
-        speakerRef.current = speaker;
-        speaker.unlock().catch((error: unknown) => { console.error("audio unlock failed:", error); });
-        const ready: ScreenMessage = { type: "ready" };
-        socketRef.current?.send(JSON.stringify(ready));
         dispatch({ type: "started" });
+        speaker.start().then(() => {
+            speakerRef.current = speaker;
+            const ready: ScreenMessage = { type: "ready" };
+            socketRef.current?.send(JSON.stringify(ready));
+        }).catch((error: unknown) => { console.error("audio start failed:", error); });
     };
 
     useEffect(() => {
@@ -153,7 +178,12 @@ export function App(): ReactElement {
                 <p className="code">{state.roomCode}</p>
                 <p className={`host ${state.hostThinking === true ? "thinking" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>{state.hostName}{state.hostThinking === true ? <span className="dots" aria-label="thinking" /> : null}</p>
             </aside>
-            {state.started === false ? <button className="start" disabled={state.connected === false} onClick={start}>Open the room</button> : null}
+            {state.started === false ? (
+                <button className="sound-gate" disabled={state.connected === false} onClick={start}>
+                    <span className="sound-gate-title">Tap anywhere to turn on sound</span>
+                    <span className="sound-gate-detail">{state.connected === true ? `${state.hostName} hosts out loud, so the room needs sound.` : "Connecting…"}</span>
+                </button>
+            ) : null}
         </main>
     );
 }
