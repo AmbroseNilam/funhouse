@@ -13,7 +13,7 @@ interface ScreenState {
     joinUrl: string;
     roomCode: string;
     qrDataUrl: string;
-    hostListening: boolean;
+    hostThinking: boolean;
     hostSpeaking: boolean;
     hostName: string;
     connected: boolean;
@@ -27,7 +27,7 @@ type ScreenAction =
     | { type: "connection"; connected: boolean }
     | { type: "started" };
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostListening: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -50,7 +50,7 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
         return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode };
     }
     if (message.type === "hostState") {
-        return { ...state, hostListening: message.listening, hostSpeaking: message.speaking, hostName: message.hostName };
+        return { ...state, hostThinking: message.thinking, hostSpeaking: message.speaking, hostName: message.hostName };
     }
     return state;
 }
@@ -109,6 +109,10 @@ export function App(): ReactElement {
                 speakerRef.current?.cancel();
                 return;
             }
+            if (message.type === "audioEnd") {
+                speakerRef.current?.lineEnded();
+                return;
+            }
             dispatch({ type: "message", message });
         };
         return (): void => {
@@ -147,7 +151,7 @@ export function App(): ReactElement {
             <aside className="join">
                 {state.qrDataUrl !== "" ? <img src={state.qrDataUrl} alt={`QR code to join room ${state.roomCode}`} /> : null}
                 <p className="code">{state.roomCode}</p>
-                <p className={`host ${state.hostListening === true ? "listening" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>{state.hostName}</p>
+                <p className={`host ${state.hostThinking === true ? "thinking" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>{state.hostName}{state.hostThinking === true ? <span className="dots" aria-label="thinking" /> : null}</p>
             </aside>
             {state.started === false ? <button className="start" disabled={state.connected === false} onClick={start}>Open the room</button> : null}
         </main>

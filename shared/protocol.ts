@@ -7,13 +7,13 @@ import type { Scene } from "./scene.ts";
 
 /** Phone to room. */
 export type PhoneMessage =
-    | { type: "hello"; name: string; playerId?: string }
+    | { type: "hello"; name: string; playerId?: string; resumeToken?: string }
     | { type: "input"; input: ControlInput }
     | { type: "holdToTalk"; down: boolean };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
-    | { type: "welcome"; playerId: string; roomCode: string }
+    | { type: "welcome"; playerId: string; roomCode: string; name: string; resumeToken: string }
     | { type: "view"; view: PhoneView }
     | { type: "rejected"; reason: string };
 
@@ -31,7 +31,7 @@ export type RoomToScreenMessage =
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
-    | { type: "hostState"; listening: boolean; speaking: boolean; hostName: string };
+    | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string };
 
 /**
  * Parses a text frame into a message, or returns null when it is not valid JSON with a type.

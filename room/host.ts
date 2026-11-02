@@ -1,19 +1,22 @@
-// The AI host: a persona that wakes on room events, decides what to say and show, and acts
-// through tools. It has no rule authority; it only sees what the room hands it and only acts
-// through the stage the room gives it. One turn runs at a time; events that arrive mid-turn
-// wait for the next one. Holding to talk on any phone interrupts the current turn.
+// The AI host: a persona that wakes on room events, decides what to say, and acts on the
+// room only through the stage the room gives it. Its reply is plain text and that text is
+// speech; each sentence goes to the voice the moment it is complete. Plain text on purpose:
+// offered tools, Muse Spark narrates its own actions in the text, and structured output can
+// spend the whole budget on hidden reasoning. The screen is the cartridge's job. The host
+// has no rule authority. One turn runs at a time; events that arrive mid-turn wait for the
+// next one. Holding to talk on any phone interrupts.
 
-import { streamSparkToolCalls, type SparkMessage, type SparkTool, type SparkToolCall } from "../providers/meta/spark.ts";
+import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
-import type { Mood } from "../shared/scene.ts";
+import { log } from "./log.ts";
 
 /** Who the host is. A placeholder until the persona is chosen. */
 export interface HostPersona {
     name: string;
     voice: SpeechVoice;
-    /** Default delivery when a line names no style. */
+    /** Delivery direction for the voice. */
     style: string;
-    /** One paragraph of character, written in the second person. */
+    /** Character and manner, written in the second person. */
     character: string;
 }
 
@@ -21,25 +24,29 @@ export interface HostPersona {
 export const PLACEHOLDER_PERSONA: HostPersona = {
     name: "Marlowe",
     voice: "ash",
-    style: "Warm, quick and playful, like a late-night game show host. Never shouty.",
-    character: "You are Marlowe, the host of Game Room, a party game night played on one big screen with everyone's phones as controllers. You are witty, warm and brisk. You remember names and use them. You tease gently and never mock. You keep every line short enough to say in one breath.",
+    style: "Relaxed and natural, like a friend talking across the coffee table at game night. Conversational pace, light warmth, no announcer voice, no exaggerated enthusiasm.",
+    character: [
+        "You are Marlowe, the host of Game Room: a party game night played on one big screen, with everyone's phone as their controller and microphone.",
+        "Talk like a relaxed, quick-witted friend who happens to be running game night. Casual words, contractions, plain sentences.",
+        "Most replies are one short sentence. Two at most. Never a speech.",
+        "Almost never say people's names. Use a name only when you need to point at one person in a group. Never open a reply with a name.",
+        "Greet each person once. Don't re-welcome anyone, don't repeat back what someone said, don't narrate what you're doing.",
+        "A little dry humour is good. Forced puns and catchphrases are not.",
+    ].join(" "),
 };
-
-/** A headline the host puts on the screen. */
-export interface Spotlight {
-    headline: string;
-    detail?: string;
-    mood?: Mood;
-}
 
 /** What the host can do in the room. The room implements it. */
 export interface HostStage {
     /** Names of the players present right now. */
     playerNames(): string[];
-    /** Puts a headline on the screen. */
-    show(spotlight: Spotlight): void;
-    /** Speaks a line aloud and resolves when it has finished playing or was cancelled. */
-    speak(text: string, style: string, signal: AbortSignal): Promise<void>;
+    /** Shows or clears the cue that the host is working out a reply. */
+    setThinking(thinking: boolean): void;
+    /** Queues one sentence to speak; its audio starts fetching at once. */
+    say(text: string, style: string): void;
+    /** Resolves when everything queued has finished playing, or the signal aborts. */
+    finishSpeaking(signal: AbortSignal): Promise<void>;
+    /** Drops everything queued and stops the voice mid-word. */
+    stopSpeaking(): void;
 }
 
 /** Most lines of conversation the host remembers. */
@@ -48,35 +55,11 @@ const HISTORY_LIMIT: number = 40;
 /** Most lines that may wait for the next turn; the oldest drop first. */
 const PENDING_LIMIT: number = 20;
 
-const MOODS: Mood[] = ["neutral", "lobby", "night", "dawn", "tense", "victory", "defeat"];
+/** Sentence end: terminal punctuation, optional closing quote, then whitespace. */
+const SENTENCE_END: RegExp = /[.!?…]["'”’)]?\s/;
 
-const TOOLS: SparkTool[] = [
-    {
-        name: "say",
-        description: "Speak one line aloud to the whole room. Keep it to one or two short sentences.",
-        parameters: {
-            type: "object",
-            properties: {
-                text: { type: "string", description: "Exactly what to say." },
-                style: { type: "string", description: "Optional delivery direction, such as 'hushed' or 'delighted'." },
-            },
-            required: ["text"],
-        },
-    },
-    {
-        name: "show",
-        description: "Put a short headline on the big screen, with an optional line under it and a mood for the whole screen.",
-        parameters: {
-            type: "object",
-            properties: {
-                headline: { type: "string", description: "Two to six words." },
-                detail: { type: "string", description: "Optional single line under the headline." },
-                mood: { type: "string", enum: MOODS },
-            },
-            required: ["headline"],
-        },
-    },
-];
+/** Room for Spark's hidden reasoning plus a short spoken reply. */
+const REPLY_TOKEN_LIMIT: number = 600;
 
 /** The host loop. One instance per room. */
 export class Host {
@@ -98,10 +81,10 @@ export class Host {
         this.stage = stage;
         this.persona = persona;
         this.lobbyBrief = [
-            "Right now everyone is in the lobby. Greet people by name as they join, briefly; if several join at once, greet them together.",
-            "Chat lightly. When the group talks about what to play, these games are installed:",
+            "Right now everyone is in the lobby. When people join, give them a quick hello; if several join close together, one hello covers them all.",
+            "When the group talks about what to play, these games are installed:",
             ...gameSummaries.map((summary: string) => `- ${summary}`),
-            "Starting a game is not wired up yet. If they ask to start, say you are setting the table and it is nearly ready.",
+            "Starting a game is not wired up yet. If they ask to start, say you're setting it up and it's nearly ready.",
         ].join("\n");
     }
 
@@ -121,17 +104,22 @@ export class Host {
         }
         this.wakeTimer = setTimeout(() => {
             this.wakeTimer = null;
-            this.runTurn().catch((error: unknown) => { console.error("host turn failed:", error instanceof Error ? error.message : String(error)); });
+            this.runTurns().catch((error: unknown) => { log("host", `turn loop failed: ${error instanceof Error ? error.message : String(error)}`); });
         }, delayMilliseconds);
     }
 
-    /** Stops whatever the host is doing, mid-sentence if need be. */
+    /** Stops whatever the host is doing, mid-word if need be. */
     public interrupt(): void {
-        this.turn?.abort();
+        if (this.turn === null) {
+            return;
+        }
+        this.turn.abort();
+        this.stage.stopSpeaking();
+        this.remember("(someone cut in)");
     }
 
     /** Runs turns until nothing new is pending. */
-    private async runTurn(): Promise<void> {
+    private async runTurns(): Promise<void> {
         while (this.pending.length > 0) {
             const lines: string[] = this.pending.splice(0, this.pending.length);
             const earlier: string[] = [...this.history];
@@ -142,60 +130,65 @@ export class Host {
                 await this.act(earlier, lines, turn.signal);
             } catch (error: unknown) {
                 if (turn.signal.aborted === false) {
-                    console.error("host turn failed:", error instanceof Error ? error.message : String(error));
+                    log("host", `turn failed: ${error instanceof Error ? error.message : String(error)}`);
                 }
             }
+            this.stage.setThinking(false);
             this.turn = null;
         }
     }
 
     /**
-     * Asks Spark what to do about the new lines and carries out each tool call in order.
-     * Speech plays one line after another while later calls are still streaming in.
+     * Streams one reply from Spark. Each finished sentence is queued to the voice at once. Waits for the voice to finish so the next
+     * turn never talks over this one.
      * @param earlier the conversation before this turn.
      * @param lines what happened since the last turn.
      * @param signal cancels the turn on interruption.
      */
     private async act(earlier: string[], lines: string[], signal: AbortSignal): Promise<void> {
+        const startedAt: number = Date.now();
+        let firstTextAt: number = 0;
+        let firstLineAt: number = 0;
+        let pendingText: string = "";
+        const spoken: string[] = [];
+        const speak = (sentence: string): void => {
+            const clean: string = cleanSpeech(sentence);
+            if (clean === "" || signal.aborted === true) {
+                return;
+            }
+            if (firstLineAt === 0) {
+                firstLineAt = Date.now();
+                this.stage.setThinking(false);
+            }
+            spoken.push(clean);
+            this.stage.say(clean, this.persona.style);
+        };
+
+        this.stage.setThinking(true);
         const messages: SparkMessage[] = [
             { role: "system", content: this.systemPrompt() },
             { role: "user", content: this.turnPrompt(earlier, lines) },
         ];
-        let speech: Promise<void> = Promise.resolve();
-        for await (const call of streamSparkToolCalls(messages, TOOLS, { signal })) {
-            speech = this.carryOut(call, speech, signal);
-        }
-        await speech;
-    }
-
-    /**
-     * Carries out one tool call.
-     * @param call the call.
-     * @param speech the speech queued so far; a new line plays after it.
-     * @param signal cancels speech on interruption.
-     * @returns the speech queue including this call.
-     */
-    private carryOut(call: SparkToolCall, speech: Promise<void>, signal: AbortSignal): Promise<void> {
-        if (call.name === "show") {
-            this.stage.show(readSpotlight(call.arguments));
-            return speech;
-        }
-        if (call.name !== "say") {
-            console.warn(`host called an unknown tool: ${call.name}`);
-            return speech;
-        }
-        const text: string = typeof call.arguments.text === "string" ? call.arguments.text.trim() : "";
-        if (text === "") {
-            return speech;
-        }
-        const style: string = typeof call.arguments.style === "string" ? `${this.persona.style} Right now: ${call.arguments.style}.` : this.persona.style;
-        return speech.then(async () => {
-            if (signal.aborted === true) {
-                return;
+        for await (const delta of streamSpark(messages, { signal, maxTokens: REPLY_TOKEN_LIMIT })) {
+            if (firstTextAt === 0) {
+                firstTextAt = Date.now();
             }
-            this.remember(`${this.persona.name}: ${text}`);
-            await this.stage.speak(text, style, signal);
-        });
+            pendingText += delta;
+            let end: RegExpExecArray | null = SENTENCE_END.exec(pendingText);
+            while (end !== null) {
+                speak(pendingText.slice(0, end.index + end[0].length));
+                pendingText = pendingText.slice(end.index + end[0].length);
+                end = SENTENCE_END.exec(pendingText);
+            }
+        }
+        speak(pendingText);
+
+        const timing: string = `first text ${firstTextAt === 0 ? "-" : firstTextAt - startedAt} ms, first line queued ${firstLineAt === 0 ? "-" : firstLineAt - startedAt} ms`;
+        log("host", spoken.length === 0 ? `stayed quiet (${timing})` : `said "${spoken.join(" ")}" (${timing})`);
+        if (spoken.length > 0) {
+            this.remember(`${this.persona.name}: ${spoken.join(" ")}`);
+        }
+        await this.stage.finishSpeaking(signal);
     }
 
     /**
@@ -216,8 +209,8 @@ export class Host {
     private systemPrompt(): string {
         return [
             this.persona.character,
-            "You act only by calling tools: say to speak aloud, show to change the big screen. Calling no tool means you stay quiet, which is right when people are talking to each other and not to you.",
-            "Everything you say is heard by every player. Never use emoji, stage directions or markdown in what you say.",
+            "Whatever text you write is spoken aloud to the whole room, word for word, by a voice. So write only the words you'd say: no stage directions, no descriptions of what you're doing, no emoji, no markdown, no lists.",
+            "If nothing needs saying, for example people are talking to each other rather than to you, reply with exactly: (quiet)",
             this.lobbyBrief,
         ].join("\n\n");
     }
@@ -239,17 +232,16 @@ export class Host {
 }
 
 /**
- * Reads a show call's arguments into a spotlight, dropping anything malformed.
- * @param args the parsed tool arguments.
- * @returns the spotlight.
+ * Strips what a voice should not read: markdown marks, bracketed or starred asides, emoji.
+ * @param text one sentence from the model.
+ * @returns the speakable words, trimmed; empty when nothing speakable remains.
  */
-function readSpotlight(args: Record<string, unknown>): Spotlight {
-    const spotlight: Spotlight = { headline: typeof args.headline === "string" ? args.headline.slice(0, 80) : "" };
-    if (typeof args.detail === "string") {
-        spotlight.detail = args.detail.slice(0, 160);
-    }
-    if (typeof args.mood === "string" && MOODS.includes(args.mood as Mood) === true) {
-        spotlight.mood = args.mood as Mood;
-    }
-    return spotlight;
+function cleanSpeech(text: string): string {
+    return text
+        .replace(/\*[^*]*\*/g, " ")
+        .replace(/\[[^\]]*\]|\([^)]*\)/g, " ")
+        .replace(/[#_`~>]/g, " ")
+        .replace(/\p{Extended_Pictographic}/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
