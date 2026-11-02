@@ -107,6 +107,9 @@ const MAX_DRAWINGS: number = 24;
  */
 const DRAWING_ON: boolean = TEXT_ONLY === false || process.env.GAME_ROOM_DRAW === "1";
 
+/** Unsent bytes a screen may build up: about 2 minutes of voice. */
+const MAX_SCREEN_BUFFER_BYTES: number = 5760000;
+
 /** Longest text a phone may send through a control. */
 const MAX_INPUT_CHARACTERS: number = 200;
 
@@ -356,8 +359,9 @@ export class Room implements HostStage {
      * can never change the game on its own say-so.
      * @param ruling the ruling's name.
      * @param detail anything written after it.
+     * @param speakerId who the host was answering, from when its turn began.
      */
-    public applyRuling(ruling: string, detail: string): void {
+    public applyRuling(ruling: string, detail: string, speakerId: string | null): void {
         if (this.game === null) {
             if (ruling === "start") {
                 this.startGame(detail);
@@ -372,7 +376,15 @@ export class Room implements HostStage {
             log(this.scope(), `ignored ruling ${ruling}`);
             return;
         }
-        this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: this.lastSpeakerId });
+        this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: speakerId });
+    }
+
+    /**
+     * Who spoke last, so a turn can credit its ruling to the person it's answering.
+     * @returns the player's id, or null.
+     */
+    public currentSpeaker(): string | null {
+        return this.lastSpeakerId;
     }
 
     /**
@@ -1150,7 +1162,7 @@ export class Room implements HostStage {
     private broadcastToScreens(message: RoomToScreenMessage): void {
         const text: string = JSON.stringify(message);
         for (const screen of this.screens) {
-            screen.send(text);
+            this.sendUnlessLagging(screen, text);
         }
     }
 
@@ -1160,8 +1172,23 @@ export class Room implements HostStage {
      */
     private broadcastAudio(chunk: Uint8Array): void {
         for (const screen of this.screens) {
-            screen.send(chunk);
+            this.sendUnlessLagging(screen, chunk);
         }
+    }
+
+    /**
+     * Sends to a screen, or ends its connection if it has fallen too far behind. It reconnects
+     * to the current state rather than playing old audio and filling the server's memory.
+     * @param screen the screen.
+     * @param data what to send.
+     */
+    private sendUnlessLagging(screen: WebSocket, data: string | Uint8Array): void {
+        if (screen.bufferedAmount > MAX_SCREEN_BUFFER_BYTES) {
+            log(this.scope(), "ended a screen that fell too far behind");
+            screen.terminate();
+            return;
+        }
+        screen.send(data);
     }
 
     /**

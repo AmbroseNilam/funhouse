@@ -460,7 +460,9 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return { state, facts: [] };
         }
         const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false } : seat));
-        const kept = (choices: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(choices).filter(([voter, target]) => voter !== playerId && target !== playerId));
+        const kept = (choices: Record<string, string>): Record<string, string> => {
+            return Object.fromEntries(Object.entries(choices).filter(([voter, target]) => voter !== playerId && target !== playerId));
+        };
         const next: WerewolfState = {
             ...state,
             seats,

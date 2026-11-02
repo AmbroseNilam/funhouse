@@ -15,7 +15,7 @@ const NUMBER_WORDS: string[] = ["zero", "one", "two", "three", "four", "five", "
 const QUESTION_COUNT: number = 6;
 
 /** Seconds the rules give a question; the script waits a little longer than this for a timeout. */
-const QUESTION_SECONDS: number = 20;
+const QUESTION_SECONDS: number = 30;
 
 /** Milliseconds to let the host finish speaking before the next player talks. */
 const SETTLE_MILLISECONDS: number = 2500;

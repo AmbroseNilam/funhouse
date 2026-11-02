@@ -64,8 +64,10 @@ export interface HostStage {
     playerNames(): string[];
     /** What is going on right now and what the host may do about it. */
     brief(): string;
-    /** Acts on one ruling the host made; the room ignores any it doesn't allow. */
-    applyRuling(ruling: string, detail: string): void;
+    /** Who spoke last. */
+    currentSpeaker(): string | null;
+    /** Acts on one ruling the host made, for the person it was answering; the room ignores any it doesn't allow. */
+    applyRuling(ruling: string, detail: string, speakerId: string | null): void;
     /** Shows or clears the cue that the host is working out a reply. */
     setThinking(thinking: boolean): void;
     /** Queues one sentence to speak; its audio starts fetching at once. */
@@ -193,6 +195,7 @@ export class Host {
      */
     private async act(earlier: string[], lines: string[], signal: AbortSignal): Promise<boolean> {
         const startedAt: number = Date.now();
+        const speakerId: string | null = this.stage.currentSpeaker();
         let firstTextAt: number = 0;
         let reply: string = "";
 
@@ -217,7 +220,7 @@ export class Host {
             log("host", `sent no text (${timing})`);
             return false;
         }
-        const rest: string = this.applyRulings(reply);
+        const rest: string = this.applyRulings(reply, speakerId);
         const spoken: string = rest.trimStart().startsWith(QUIET_MARKER) === true ? "" : cleanSpeech(rest);
         if (spoken === "") {
             log("host", `stayed quiet (${timing})`);
@@ -233,15 +236,16 @@ export class Host {
     /**
      * Takes the rulings off the front of a reply and hands them to the room.
      * @param reply the whole reply.
+     * @param speakerId who the reply is answering.
      * @returns what is left to say.
      */
-    private applyRulings(reply: string): string {
+    private applyRulings(reply: string, speakerId: string | null): string {
         let rest: string = reply;
         let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
         while (match !== null) {
             const ruling: string = match[1] ?? "";
             log("host", `ruled ${ruling}${match[2] === undefined ? "" : `: ${match[2]}`}`);
-            this.stage.applyRuling(ruling, match[2] ?? "");
+            this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
             rest = rest.slice(match[0].length);
             match = RULING_PATTERN.exec(rest);
         }

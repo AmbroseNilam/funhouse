@@ -12,7 +12,7 @@ import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 export const QUESTION_COUNT: number = 6;
 
 /** Seconds a question stays open before the game moves on. */
-export const QUESTION_SECONDS: number = 20;
+export const QUESTION_SECONDS: number = 30;
 
 /** Points for a right answer. */
 const RIGHT_POINTS: number = 2;
@@ -52,8 +52,8 @@ export interface QuizmasterState {
     index: number;
     /** Players who have already answered the current question. */
     answered: string[];
-    /** The player whose spoken answer is waiting for a ruling; a ruling with nobody waiting is the host talking to itself. */
-    heard: string | null;
+    /** Players whose spoken answers are waiting for a ruling; a ruling with nobody waiting is the host talking to itself. */
+    heard: string[];
     scores: Record<string, number>;
     /** The answer to the question before the current one, shown once it has been revealed. */
     lastAnswer: string;
@@ -140,14 +140,14 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         const reveal: string = `${why} The answer to that question was: ${answer}. Tell them the answer.`;
         const nextIndex: number = state.index + 1;
         if (nextIndex >= state.questions.length || state.players.length === 0) {
-            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: null, lastAnswer: answer };
+            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer };
             const board: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
             const winners: string = leaders(finished).map((player) => player.name).join(" and ");
             const verdict: string = winners === "" ? "Nobody scored." : `Winner: ${winners}.`;
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: null, lastAnswer: answer };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], lastAnswer: answer };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
@@ -164,14 +164,14 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
      */
     const score = (state: QuizmasterState, ruling: string, playerId: string | null): Step<QuizmasterState> => {
         const known: boolean = playerId !== null && state.players.some((player) => player.playerId === playerId);
-        if (playerId === null || known === false || state.answered.includes(playerId) === true || state.heard !== playerId) {
+        if (playerId === null || known === false || state.answered.includes(playerId) === true || state.heard.includes(playerId) === false) {
             return { state, facts: [] };
         }
         const points: number = ruling === "right" ? RIGHT_POINTS : ruling === "close" ? CLOSE_POINTS : 0;
         const next: QuizmasterState = {
             ...state,
             answered: [...state.answered, playerId],
-            heard: null,
+            heard: state.heard.filter((candidate: string) => candidate !== playerId),
             scores: points === 0 ? state.scores : { ...state.scores, [playerId]: scoreOf(state, playerId) + points },
         };
         const name: string = nameOf(state, playerId);
@@ -188,7 +188,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: null, scores: {}, lastAnswer: "" };
+            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], scores: {}, lastAnswer: "" };
             return { state, facts: [publicFact("ask-topic", "Welcome them to the quiz and ask what topic they would like to be quizzed on.")], nextPhaseId: "topic" };
         },
 
@@ -218,7 +218,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         onEvent(state: QuizmasterState, event: RoomEvent): Step<QuizmasterState> {
             if (event.type === "playerLeft") {
                 const players: CartridgePlayer[] = state.players.filter((player) => player.playerId !== event.playerId);
-                const remaining: QuizmasterState = { ...state, players, heard: state.heard === event.playerId ? null : state.heard };
+                const remaining: QuizmasterState = { ...state, players, heard: state.heard.filter((playerId: string) => playerId !== event.playerId) };
                 if (state.phase !== "question") {
                     return { state: remaining, facts: [] };
                 }
@@ -234,11 +234,11 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
             if (event.type === "speechEnded") {
                 const seated: boolean = state.players.some((player) => player.playerId === event.playerId);
                 const eligible: boolean = state.phase === "question" && seated === true && state.answered.includes(event.playerId) === false;
-                return eligible === true ? { state: { ...state, heard: event.playerId }, facts: [] } : { state, facts: [] };
+                return eligible === true ? { state: { ...state, heard: [...state.heard, event.playerId] }, facts: [] } : { state, facts: [] };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
                 const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text));
-                const next: QuizmasterState = { ...state, phase: "question", questions, index: 0, answered: [], heard: null };
+                const next: QuizmasterState = { ...state, phase: "question", questions, index: 0, answered: [], heard: [] };
                 return {
                     state: next,
                     facts: [publicFact("question", `The questions are ready. Say the quiz is starting, answers are out loud, one try each. Then ${readInstruction(next)}`)],
