@@ -19,6 +19,7 @@ interface ScreenState {
     hostName: string;
     connected: boolean;
     started: boolean;
+    turnedAway: boolean;
 }
 
 /** Actions that change screen state. */
@@ -26,7 +27,8 @@ type ScreenAction =
     | { type: "message"; message: RoomToScreenMessage }
     | { type: "qr"; dataUrl: string }
     | { type: "connection"; connected: boolean }
-    | { type: "started" };
+    | { type: "started" }
+    | { type: "turnedAway" };
 
 /** Longest wait between reconnect attempts. */
 const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
@@ -37,7 +39,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -48,6 +50,9 @@ const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrD
 function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     if (action.type === "connection") {
         return { ...state, connected: action.connected };
+    }
+    if (action.type === "turnedAway") {
+        return { ...state, turnedAway: true };
     }
     if (action.type === "started") {
         return { ...state, started: true };
@@ -102,6 +107,9 @@ export function App(): ReactElement {
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
+        if (phoneGate === true) {
+            return;
+        }
         let stopped: boolean = false;
         let retryTimer: number = 0;
         let retryDelay: number = 500;
@@ -109,7 +117,7 @@ export function App(): ReactElement {
         /** Opens the socket; on close, retries with backoff so a network blip heals itself. */
         const connect = (): void => {
             const protocol: string = location.protocol === "https:" ? "wss" : "ws";
-            const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/screen`);
+            const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/screen${location.search}`);
             socket.binaryType = "arraybuffer";
             socketRef.current = socket;
             socket.onopen = (): void => {
@@ -132,6 +140,14 @@ export function App(): ReactElement {
                 const message: RoomToScreenMessage | null = parseMessage<RoomToScreenMessage>(event.data);
                 if (message === null) {
                     return;
+                }
+                if (message.type === "rejected") {
+                    stopped = true;
+                    dispatch({ type: "turnedAway" });
+                    return;
+                }
+                if (message.type === "scene" && new URLSearchParams(location.search).get("room") !== message.roomCode) {
+                    history.replaceState(null, "", `?room=${message.roomCode}`);
                 }
                 if (message.type === "audioCancel") {
                     speakerRef.current?.cancel();
@@ -156,7 +172,7 @@ export function App(): ReactElement {
             socketRef.current?.close();
             socketRef.current = null;
         };
-    }, []);
+    }, [phoneGate]);
 
     /** Unlocks audio with the click browsers require, then tells the room the screen is live. */
     const start = (): void => {
@@ -187,8 +203,17 @@ export function App(): ReactElement {
             <main className="phone-gate">
                 <h1>This is the big-screen view.</h1>
                 <p>Join as a player instead?</p>
-                <a className="phone-gate-join" href={state.joinUrl === "" ? "/" : state.joinUrl}>Join as a player</a>
+                <a className="phone-gate-join" href="/">Join as a player</a>
                 <button className="phone-gate-continue" onClick={() => { setPhoneGate(false); }}>Continue anyway</button>
+            </main>
+        );
+    }
+
+    if (state.turnedAway === true) {
+        return (
+            <main className="phone-gate">
+                <h1>Every room is in use.</h1>
+                <p>Try again in a few minutes.</p>
             </main>
         );
     }

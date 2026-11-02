@@ -145,6 +145,8 @@ export class Room implements HostStage {
     private readonly timeline: RoomEvent[] = [];
     private readonly host: Host;
     private readonly voice: HostVoice;
+    private readonly speech: OpenAiRealtimeSpeech = new OpenAiRealtimeSpeech();
+    private woken: boolean = false;
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
@@ -167,9 +169,30 @@ export class Room implements HostStage {
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         const games: string[] = [WEREWOLF_MANIFEST].map((manifest) => `${manifest.name}, ${manifest.minPlayers} to ${manifest.maxPlayers} players`);
         this.host = new Host(this, PLACEHOLDER_PERSONA, games);
-        const speech: OpenAiRealtimeSpeech = new OpenAiRealtimeSpeech();
-        speech.warm();
-        this.voice = new HostVoice(speech, this.voiceOutput());
+        this.voice = new HostVoice(this.speech, this.voiceOutput());
+    }
+
+    /**
+     * True when no screen or player is in the room.
+     * @returns whether the room is empty.
+     */
+    public isEmpty(): boolean {
+        return this.screens.size === 0 && this.players.size === 0;
+    }
+
+    /** Silences the host and releases the room's voice connection. */
+    public close(): void {
+        this.host.interrupt(false);
+        this.speech.close();
+    }
+
+    /** Readies the voice on first real use, so a page load alone spends nothing. */
+    private wake(): void {
+        if (this.woken === true) {
+            return;
+        }
+        this.woken = true;
+        this.speech.warm();
         this.renderAcknowledgements().catch((error: unknown) => { log(this.scope(), `acknowledgements unavailable: ${error instanceof Error ? error.message : String(error)}`); });
     }
 
@@ -189,6 +212,7 @@ export class Room implements HostStage {
             if (message?.type !== "ready") {
                 return;
             }
+            this.wake();
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
             this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
         });
@@ -299,6 +323,7 @@ export class Room implements HostStage {
             socket.close(4003, "room full");
             return null;
         }
+        this.wake();
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;

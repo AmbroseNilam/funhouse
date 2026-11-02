@@ -53,6 +53,13 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
         this.connect().catch((error: unknown) => { console.error("realtime voice warm-up failed:", error instanceof Error ? error.message : String(error)); });
     }
 
+    /** Closes the connection; the next line would open a new one. */
+    public close(): void {
+        this.socket?.close();
+        this.socket = null;
+        this.ready = null;
+    }
+
     /**
      * Streams 24 kHz 16-bit mono PCM for one line. Lines run one at a time in call order.
      * @param request what to say, the voice, the delivery, and a cancel signal.

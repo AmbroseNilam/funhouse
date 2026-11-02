@@ -1,12 +1,14 @@
 // Process entry point. Serves the built stages and the landing page as static files and
-// routes WebSocket connections to the room: /ws/screen for the public stage and /ws/phone for
-// phones. One room per process for now; a room directory comes when more than one is needed.
+// routes WebSocket connections to rooms: /ws/screen for the public stage and /ws/phone for
+// phones, each with a ?room= code. A screen without a known code opens a new room.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { makeRoomCode, Room } from "./room.ts";
+import type { RejectedReason } from "../shared/protocol.ts";
+import { RoomDirectory } from "./directory.ts";
+import type { Room } from "./room.ts";
 
 /** Port the room listens on inside its pod. */
 const PORT: number = Number(process.env.PORT ?? 8740);
@@ -36,7 +38,17 @@ const MEDIA_TYPES: Record<string, string> = {
 /** Largest message a stage may send: well above one 3,840-byte audio frame or a short text. */
 const MAX_MESSAGE_BYTES: number = 65536;
 
-const room: Room = new Room(makeRoomCode(), PUBLIC_URL);
+const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL);
+
+/**
+ * Tells a stage it can't come in and hangs up.
+ * @param socket the stage's WebSocket.
+ * @param reason why.
+ */
+function turnAway(socket: WebSocket, reason: RejectedReason): void {
+    socket.send(JSON.stringify({ type: "rejected", reason }));
+    socket.close(4004, reason);
+}
 
 /**
  * Serves one static file from a stage's build output, refusing paths outside it.
@@ -78,18 +90,28 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     // An oversized or malformed frame raises an error on the socket, and ws closes it; without
     // a listener that error would end the process and every room with it.
     socket.on("error", (error: Error) => { console.warn(`socket error: ${error.message}`); });
-    const path: string = new URL(request.url ?? "/", "http://room").pathname;
-    if (path === "/ws/screen") {
+    const url: URL = new URL(request.url ?? "/", "http://room");
+    const existing: Room | undefined = directory.find(url.searchParams.get("room") ?? "");
+    if (url.pathname === "/ws/screen") {
+        const room: Room | null = existing ?? directory.create();
+        if (room === null) {
+            turnAway(socket, "noRoomsFree");
+            return;
+        }
         room.attachScreen(socket);
         return;
     }
-    if (path === "/ws/phone") {
-        room.attachPhone(socket);
+    if (url.pathname === "/ws/phone") {
+        if (existing === undefined) {
+            turnAway(socket, "unknownRoom");
+            return;
+        }
+        existing.attachPhone(socket);
         return;
     }
     socket.close(1008, "use /ws/screen or /ws/phone");
 });
 
 server.listen(PORT, () => {
-    console.warn(`room ${room.code} listening on http://localhost:${PORT}  screen: /screen/  phones: ${PUBLIC_URL}/phone/?room=${room.code}`);
+    console.warn(`listening on http://localhost:${PORT}  public: ${PUBLIC_URL}`);
 });

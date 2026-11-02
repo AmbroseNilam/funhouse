@@ -14,6 +14,7 @@ interface SavedSeat {
     playerId: string;
     resumeToken: string;
     name: string;
+    roomCode: string;
 }
 
 /** Storage key for the saved seat. */
@@ -33,10 +34,10 @@ function readSeat(): SavedSeat | null {
             return null;
         }
         const parsed: Partial<SavedSeat> = JSON.parse(raw) as Partial<SavedSeat>;
-        if (typeof parsed.playerId !== "string" || typeof parsed.resumeToken !== "string" || typeof parsed.name !== "string") {
+        if (typeof parsed.playerId !== "string" || typeof parsed.resumeToken !== "string" || typeof parsed.name !== "string" || typeof parsed.roomCode !== "string") {
             return null;
         }
-        return { playerId: parsed.playerId, resumeToken: parsed.resumeToken, name: parsed.name };
+        return { playerId: parsed.playerId, resumeToken: parsed.resumeToken, name: parsed.name, roomCode: parsed.roomCode };
     } catch {
         return null;
     }
@@ -102,7 +103,19 @@ type PhoneAction =
     | { type: "connection"; connected: boolean }
     | { type: "joining" };
 
-const INITIAL_STATE: PhoneState = { stage: readSeat() === null ? "name" : "joining", connected: false, playerId: "", roomCode: new URLSearchParams(location.search).get("room") ?? "", view: null, holding: false, micError: "" };
+/** The room this page is for: the one in the link, or else the one this phone last sat in. */
+const ROOM_CODE: string = (new URLSearchParams(location.search).get("room") ?? readSeat()?.roomCode ?? "").toUpperCase();
+
+/**
+ * The saved seat, if it belongs to this page's room.
+ * @returns the seat or null.
+ */
+function seatInThisRoom(): SavedSeat | null {
+    const seat: SavedSeat | null = readSeat();
+    return seat?.roomCode === ROOM_CODE ? seat : null;
+}
+
+const INITIAL_STATE: PhoneState = { stage: seatInThisRoom() === null ? "name" : "joining", connected: false, playerId: "", roomCode: ROOM_CODE, view: null, holding: false, micError: "" };
 
 /**
  * Pure reducer from room messages and local actions to phone state.
@@ -180,6 +193,10 @@ export function App(): ReactElement {
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
 
     useEffect(() => {
+        if (ROOM_CODE === "") {
+            location.replace("/");
+            return;
+        }
         let stopped: boolean = false;
         let retryTimer: number = 0;
         let retryDelay: number = 500;
@@ -187,13 +204,13 @@ export function App(): ReactElement {
         /** Opens the socket and, once open, reclaims the saved seat if there is one. */
         const connect = (): void => {
             const protocol: string = location.protocol === "https:" ? "wss" : "ws";
-            const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/phone`);
+            const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/phone?room=${encodeURIComponent(ROOM_CODE)}`);
             socket.binaryType = "arraybuffer";
             socketRef.current = socket;
             socket.onopen = (): void => {
                 retryDelay = 500;
                 dispatch({ type: "connection", connected: true });
-                const seat: SavedSeat | null = readSeat();
+                const seat: SavedSeat | null = seatInThisRoom();
                 if (seat !== null) {
                     socket.send(JSON.stringify({ type: "hello", name: seat.name, playerId: seat.playerId, resumeToken: seat.resumeToken } satisfies PhoneMessage));
                 }
@@ -203,8 +220,14 @@ export function App(): ReactElement {
                 if (message === null) {
                     return;
                 }
+                if (message.type === "rejected") {
+                    stopped = true;
+                    clearSeat();
+                    location.assign(`/?${message.reason === "roomFull" ? "full" : "missing"}=${encodeURIComponent(ROOM_CODE)}`);
+                    return;
+                }
                 if (message.type === "welcome") {
-                    writeSeat({ playerId: message.playerId, resumeToken: message.resumeToken, name: message.name });
+                    writeSeat({ playerId: message.playerId, resumeToken: message.resumeToken, name: message.name, roomCode: message.roomCode });
                 }
                 dispatch({ type: "message", message });
             };
