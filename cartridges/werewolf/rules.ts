@@ -206,13 +206,12 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         if (top === undefined) {
             facts.push(publicFact("vote-result", "Nobody voted. Nobody is out tonight."));
         }
-        facts.push(publicFact("night", "Night falls on the village."));
         const next: WerewolfState = { ...state, seats, phase: "night", round: state.round + 1, dayVotes: {}, lastLynched: lynchedName };
         const over: Step<WerewolfState> | null = finishIfOver(next, facts);
         if (over !== null) {
             return over;
         }
-        return { state: next, facts, nextPhaseId: "night", timers: { night: NIGHT_SECONDS } };
+        return { state: next, facts: [...facts, publicFact("night", "Night falls on the village.")], nextPhaseId: "night", timers: { night: NIGHT_SECONDS } };
     };
 
     return {
@@ -461,17 +460,26 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return { state, facts: [] };
         }
         const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false } : seat));
-        const next: WerewolfState = { ...state, seats };
+        const kept = (choices: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(choices).filter(([voter, target]) => voter !== playerId && target !== playerId));
+        const next: WerewolfState = {
+            ...state,
+            seats,
+            nightChoices: kept(state.nightChoices),
+            dayVotes: kept(state.dayVotes),
+            seerTarget: state.seerTarget === playerId ? null : state.seerTarget,
+        };
         const facts: ScopedFact[] = [publicFact("left", `${leaver.name} left the game.`)];
         const over: Step<WerewolfState> | null = finishIfOver(next, facts);
         if (over !== null) {
             return over;
         }
         if (state.phase === "night" && nightComplete(next) === true) {
-            return resolveNight(next);
+            const resolved: Step<WerewolfState> = resolveNight(next);
+            return { ...resolved, facts: [...facts, ...resolved.facts] };
         }
         if (state.phase === "vote" && voteComplete(next) === true) {
-            return resolveVote(next);
+            const resolved: Step<WerewolfState> = resolveVote(next);
+            return { ...resolved, facts: [...facts, ...resolved.facts] };
         }
         return { state: next, facts };
     }
