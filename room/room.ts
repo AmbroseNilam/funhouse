@@ -38,8 +38,11 @@ interface Player {
     /** Replaces the standby before the provider closes it for sitting idle. */
     standbyTimer: NodeJS.Timeout | null;
     holdingToTalk: boolean;
-    /** True from pressing talk until that utterance's final text is handled once. */
-    awaitingFinal: boolean;
+    /** Sessions whose press has not produced final text yet; a new press can overlap the last. */
+    awaitingFinal: Set<TranscribeSession>;
+    /** A short message replacing the phone's status line, such as a press that wasn't heard. */
+    hint: string;
+    hintTimer: NodeJS.Timeout | null;
     releasedAt: number;
     /** Latest partial transcript of the current utterance. */
     partial: string;
@@ -77,6 +80,15 @@ const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "
  * time, and an idle session falls behind from the moment it opens.
  */
 const STANDBY_REFRESH_MILLISECONDS: number = 10000;
+
+/** How long a released press may wait for its final text before it counts as not heard. */
+const FINAL_WAIT_MILLISECONDS: number = 6000;
+
+/** How long a hint stays on the phone. */
+const HINT_MILLISECONDS: number = 3000;
+
+/** What a phone shows when a press produced no words. */
+const NOT_HEARD_HINT: string = "Didn't catch that. Try again?";
 
 /** How long a dropped phone keeps its seat before the room says they left. */
 const REJOIN_GRACE_MILLISECONDS: number = 30000;
@@ -280,7 +292,7 @@ export class Room implements HostStage {
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: false, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${name} joined as ${playerId}`);
@@ -361,6 +373,7 @@ export class Room implements HostStage {
         player.standby?.abort();
         player.standby = null;
         this.clearStandbyTimer(player);
+        this.setHint(player, "");
         this.players.delete(player.playerId);
         this.record({ type: "playerLeft", at: Date.now(), playerId: player.playerId });
         log(this.scope(), `${player.name} left`);
@@ -387,32 +400,93 @@ export class Room implements HostStage {
     }
 
     /**
-     * Opens or closes the player's transcription session as they press and release. Pressing
-     * also cuts the host off.
+     * Opens the player's transcription session on a press and finishes it on release. A session
+     * belongs to one press, so a quick second press gets its own and the first can still deliver
+     * its text. Pressing also cuts the host off.
      * @param player the player.
      * @param down true while the button is held.
      */
     private onHoldToTalk(player: Player, down: boolean): void {
-        player.holdingToTalk = down;
-        if (down === true) {
-            player.awaitingFinal = true;
-            player.partial = "";
-            this.cancelAcknowledgement();
-            if (this.hostSpeaking === true || this.hostThinking === true) {
-                log(this.scope(), `${player.name} cut in`);
-            }
-            this.host.interrupt(this.hostSpeaking);
-        }
-        if (down === true && player.transcribe === null) {
-            player.transcribe = player.standby ?? this.openTranscribe(player, "PUSH_TO_TALK");
-            player.standby = null;
-            this.clearStandbyTimer(player);
+        if (down === player.holdingToTalk) {
             return;
         }
-        if (down === false && player.transcribe !== null) {
-            player.releasedAt = Date.now();
-            player.transcribe.end();
+        player.holdingToTalk = down;
+        if (down === true) {
+            this.startPress(player);
+            return;
         }
+        this.finishPress(player);
+    }
+
+    /**
+     * Starts one press: quiets the host and puts a session on the player's audio.
+     * @param player the player.
+     */
+    private startPress(player: Player): void {
+        player.partial = "";
+        this.setHint(player, "");
+        this.cancelAcknowledgement();
+        if (this.hostSpeaking === true || this.hostThinking === true) {
+            log(this.scope(), `${player.name} cut in`);
+        }
+        this.host.interrupt(this.hostSpeaking);
+        const session: TranscribeSession = player.standby ?? this.openTranscribe(player, "PUSH_TO_TALK");
+        player.standby = null;
+        this.clearStandbyTimer(player);
+        player.transcribe = session;
+        player.awaitingFinal.add(session);
+    }
+
+    /**
+     * Finishes one press: asks for its final text, gives up on it if none comes, and readies
+     * the next session straight away.
+     * @param player the player.
+     */
+    private finishPress(player: Player): void {
+        const session: TranscribeSession | null = player.transcribe;
+        if (session === null) {
+            return;
+        }
+        player.transcribe = null;
+        player.releasedAt = Date.now();
+        session.end();
+        setTimeout(() => {
+            if (player.awaitingFinal.has(session) === true) {
+                session.abort();
+            }
+        }, FINAL_WAIT_MILLISECONDS);
+        this.prepareStandby(player);
+    }
+
+    /**
+     * Tells a player their press produced no words.
+     * @param player the player.
+     */
+    private onNotHeard(player: Player): void {
+        player.speaking = false;
+        this.setHint(player, NOT_HEARD_HINT);
+        this.broadcastScene();
+    }
+
+    /**
+     * Shows a short message on a player's phone for a moment. An empty message clears it.
+     * @param player the player.
+     * @param hint the message.
+     */
+    private setHint(player: Player, hint: string): void {
+        if (player.hintTimer !== null) {
+            clearTimeout(player.hintTimer);
+            player.hintTimer = null;
+        }
+        if (hint === "" && player.hint === "") {
+            return;
+        }
+        player.hint = hint;
+        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
+        if (hint === "") {
+            return;
+        }
+        player.hintTimer = setTimeout(() => { this.setHint(player, ""); }, HINT_MILLISECONDS);
     }
 
     /**
@@ -465,26 +539,28 @@ export class Room implements HostStage {
             },
             onTranscript: (text: string, isFinal: boolean): void => {
                 if (isFinal === true && mode === "PUSH_TO_TALK") {
-                    this.onSpeechEnded(player, text);
+                    this.onSpeechEnded(player, session, text);
                     return;
                 }
-                if (isFinal === false && player.awaitingFinal === true) {
+                if (isFinal === false && player.awaitingFinal.has(session) === true) {
                     this.onPartial(player, text);
                 }
             },
-            onSpeechComplete: (_turnId: string, text: string): void => { this.onSpeechEnded(player, text); },
+            onSpeechComplete: (_turnId: string, text: string): void => { this.onSpeechEnded(player, session, text); },
             onError: (message: string): void => { log(this.scope(), `transcribe error for ${player.name}: ${message}`); },
             onClose: (): void => {
                 if (player.standby === session) {
                     player.standby = null;
                 }
-                if (player.transcribe !== session) {
-                    return;
+                const wasCurrent: boolean = player.transcribe === session;
+                if (wasCurrent === true) {
+                    player.transcribe = null;
+                    this.prepareStandby(player);
                 }
-                player.transcribe = null;
-                player.speaking = false;
-                this.broadcastScene();
-                this.prepareStandby(player);
+                if (player.awaitingFinal.delete(session) === true) {
+                    log(this.scope(), `lost a press from ${player.name}`);
+                    this.onNotHeard(player);
+                }
             },
         });
         session.open().catch((error: unknown) => {
@@ -494,6 +570,9 @@ export class Room implements HostStage {
             }
             if (player.standby === session) {
                 player.standby = null;
+            }
+            if (player.awaitingFinal.delete(session) === true) {
+                this.onNotHeard(player);
             }
         });
         return session;
@@ -521,20 +600,20 @@ export class Room implements HostStage {
     /**
      * Handles one finished utterance, once, and wakes the host.
      * @param player who spoke.
+     * @param session the session that heard them.
      * @param text what they said.
      */
-    private onSpeechEnded(player: Player, text: string): void {
+    private onSpeechEnded(player: Player, session: TranscribeSession, text: string): void {
         player.speaking = false;
-        if (player.awaitingFinal === false) {
+        if (player.awaitingFinal.delete(session) === false) {
             return;
         }
-        player.awaitingFinal = false;
         const said: string = text.trim();
         const sinceRelease: string = player.releasedAt === 0 ? "" : ` (${Date.now() - player.releasedAt} ms after release)`;
         log(this.scope(), said === "" ? `heard nothing from ${player.name}${sinceRelease}` : `heard ${player.name}: "${said}"${sinceRelease}`);
         this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
         if (said === "") {
-            this.broadcastScene();
+            this.onNotHeard(player);
             return;
         }
         this.caption = { speaker: player.name, text: said, final: true };
@@ -688,7 +767,10 @@ export class Room implements HostStage {
             status = `${hostName} is thinking…`;
         }
         if (this.hostSpeaking === true) {
-            status = `${hostName} is talking. Hold to cut in.`;
+            status = `${hostName} is talking. Press to cut in.`;
+        }
+        if (player.hint !== "") {
+            status = player.hint;
         }
         return {
             playerName: player.name,
