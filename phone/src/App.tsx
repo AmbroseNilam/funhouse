@@ -184,6 +184,8 @@ export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
     const socketRef = useRef<WebSocket | null>(null);
     const captureRef = useRef<MicrophoneCapture | null>(null);
+    const startingMicrophoneRef = useRef<Promise<void> | null>(null);
+    const pendingNameRef = useRef<string | null>(null);
     const holdingRef = useRef<boolean>(false);
     const talkRef = useRef<HTMLButtonElement | null>(null);
     const pressedAtRef = useRef<number>(0);
@@ -213,6 +215,10 @@ export function App(): ReactElement {
                 const seat: SavedSeat | null = seatInThisRoom();
                 if (seat !== null) {
                     socket.send(JSON.stringify({ type: "hello", name: seat.name, playerId: seat.playerId, resumeToken: seat.resumeToken } satisfies PhoneMessage));
+                    return;
+                }
+                if (pendingNameRef.current !== null) {
+                    socket.send(JSON.stringify({ type: "hello", name: pendingNameRef.current } satisfies PhoneMessage));
                 }
             };
             socket.onmessage = (event: MessageEvent<string>): void => {
@@ -227,6 +233,7 @@ export function App(): ReactElement {
                     return;
                 }
                 if (message.type === "welcome") {
+                    pendingNameRef.current = null;
                     writeSeat({ playerId: message.playerId, resumeToken: message.resumeToken, name: message.name, roomCode: message.roomCode });
                 }
                 dispatch({ type: "message", message });
@@ -320,7 +327,8 @@ export function App(): ReactElement {
         }
     };
 
-    const ensureMicrophone = async (): Promise<void> => {
+    /** Makes sure a live capture exists. Only one start runs at a time; a second would double the audio. */
+    const startMicrophoneOnce = async (): Promise<void> => {
         const existing: MicrophoneCapture | null = captureRef.current;
         if (existing !== null && existing.isLive() === false) {
             await existing.resume().catch(() => undefined);
@@ -339,6 +347,17 @@ export function App(): ReactElement {
         } catch (error: unknown) {
             dispatch({ type: "micError", error: error instanceof DOMException && error.name === "NotAllowedError" ? "Allow the microphone in your browser to talk." : "Couldn't start the microphone." });
         }
+    };
+
+    const ensureMicrophone = async (): Promise<void> => {
+        if (startingMicrophoneRef.current !== null) {
+            await startingMicrophoneRef.current;
+            return;
+        }
+        const starting: Promise<void> = startMicrophoneOnce();
+        startingMicrophoneRef.current = starting;
+        await starting;
+        startingMicrophoneRef.current = null;
     };
 
     const setHolding = (holding: boolean): void => {
@@ -389,7 +408,7 @@ export function App(): ReactElement {
             <main className="phone name">
                 <h1>Game Room</h1>
                 <p>Room {state.roomCode || "?"}</p>
-                <form onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
+                <form onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
                     <input name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoFocus required />
                     <button type="submit">Join</button>
                 </form>
@@ -421,6 +440,9 @@ export function App(): ReactElement {
 
     const view: PhoneView | null = state.view;
     const canTalk: boolean = view?.listening === "holdToTalk" || view?.listening === "openFloor";
+    if (canTalk === false && state.holding === true) {
+        stopTalking();
+    }
     return (
         <main className={`phone joined listening-${view?.listening ?? "muted"}`}>
             <header className="top-bar">
