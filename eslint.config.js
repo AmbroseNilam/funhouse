@@ -6,7 +6,7 @@ import eslintJavaScript from "@eslint/js";
 import typescriptEslint from "typescript-eslint";
 
 export default typescriptEslint.config(
-    { ignores: ["dist/", "node_modules/", "screen/dist/", "phone/dist/", "tools/out/", "phone/public/", "screen/public/"] },
+    { ignores: ["dist/", "node_modules/", "screen/dist/", "phone/dist/", "landing/dist/", "tools/out/", "phone/public/", "screen/public/"] },
     eslintJavaScript.configs.recommended,
     ...typescriptEslint.configs.recommendedTypeChecked,
     {
