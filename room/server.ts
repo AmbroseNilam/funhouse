@@ -33,6 +33,9 @@ const MEDIA_TYPES: Record<string, string> = {
     ".json": "application/json",
 };
 
+/** Largest message a stage may send: well above one 3,840-byte audio frame or a short text. */
+const MAX_MESSAGE_BYTES: number = 65536;
+
 const room: Room = new Room(makeRoomCode(), PUBLIC_URL);
 
 /**
@@ -70,8 +73,11 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
     });
 });
 
-const sockets: WebSocketServer = new WebSocketServer({ server });
+const sockets: WebSocketServer = new WebSocketServer({ server, maxPayload: MAX_MESSAGE_BYTES });
 sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
+    // An oversized or malformed frame raises an error on the socket, and ws closes it; without
+    // a listener that error would end the process and every room with it.
+    socket.on("error", (error: Error) => { console.warn(`socket error: ${error.message}`); });
     const path: string = new URL(request.url ?? "/", "http://room").pathname;
     if (path === "/ws/screen") {
         room.attachScreen(socket);

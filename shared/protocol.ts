@@ -5,6 +5,9 @@
 import type { ControlInput, PhoneView } from "./controls.ts";
 import type { Scene } from "./scene.ts";
 
+/** Why the room turned a stage away. */
+export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree";
+
 /** Phone to room. */
 export type PhoneMessage =
     | { type: "hello"; name: string; playerId?: string; resumeToken?: string }
@@ -17,7 +20,7 @@ export type PhoneMessage =
 export type RoomToPhoneMessage =
     | { type: "welcome"; playerId: string; roomCode: string; name: string; resumeToken: string }
     | { type: "view"; view: PhoneView }
-    | { type: "rejected"; reason: string };
+    | { type: "rejected"; reason: RejectedReason };
 
 /** Screen to room. */
 export type ScreenMessage =
@@ -34,7 +37,31 @@ export type RoomToScreenMessage =
     | { type: "audioEnd" }
     | { type: "audioCancel" }
     | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
-    | { type: "micLevel"; level: number };
+    | { type: "micLevel"; level: number }
+    | { type: "rejected"; reason: RejectedReason };
+
+/**
+ * Checks a parsed message from a phone has the fields the room will read. Phones are outside
+ * the room's trust, and a missing field must not bring the room down.
+ * @param message a message with some type.
+ * @returns true when it is a well-formed phone message.
+ */
+export function isPhoneMessage(message: { type: string } & Record<string, unknown>): boolean {
+    if (message.type === "hello") {
+        return typeof message.name === "string" && ["string", "undefined"].includes(typeof message.playerId) === true && ["string", "undefined"].includes(typeof message.resumeToken) === true;
+    }
+    if (message.type === "holdToTalk") {
+        return typeof message.down === "boolean";
+    }
+    if (message.type === "rename") {
+        return typeof message.name === "string";
+    }
+    if (message.type === "input") {
+        const input: { value?: unknown; controlIndex?: unknown } | null = typeof message.input === "object" ? message.input : null;
+        return typeof input?.value === "string" && typeof input.controlIndex === "number";
+    }
+    return message.type === "leave";
+}
 
 /**
  * Parses a text frame into a message, or returns null when it is not valid JSON with a type.

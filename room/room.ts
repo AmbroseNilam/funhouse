@@ -13,7 +13,7 @@ import type WebSocket from "ws";
 import type { ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
-import { parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
+import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { WEREWOLF_MANIFEST } from "../cartridges/werewolf/manifest.ts";
@@ -80,6 +80,9 @@ const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "
  * time, and an idle session falls behind from the moment it opens.
  */
 const STANDBY_REFRESH_MILLISECONDS: number = 10000;
+
+/** Most players one room seats. The largest game plays ten; two more can watch and talk. */
+const MAX_PLAYERS: number = 12;
 
 /** How long a released press may wait for its final text before it counts as not heard. */
 const FINAL_WAIT_MILLISECONDS: number = 6000;
@@ -206,15 +209,16 @@ export class Room implements HostStage {
                 }
                 return;
             }
-            const message: PhoneMessage | null = parseMessage<PhoneMessage>(rawDataToText(data));
-            if (message === null) {
+            const parsed: (PhoneMessage & Record<string, unknown>) | null = parseMessage<PhoneMessage & Record<string, unknown>>(rawDataToText(data));
+            if (parsed === null || isPhoneMessage(parsed) === false) {
                 return;
             }
-            if (message.type === "hello") {
+            const message: PhoneMessage = parsed;
+            if (message.type === "hello" && player === null) {
                 player = this.resume(socket, message.playerId, message.resumeToken) ?? this.join(socket, message.name);
                 return;
             }
-            if (player === null) {
+            if (player === null || message.type === "hello") {
                 return;
             }
             if (message.type === "holdToTalk") {
@@ -286,9 +290,15 @@ export class Room implements HostStage {
      * Seats a new player and tells everyone.
      * @param socket the phone's WebSocket.
      * @param rawName the name the player typed.
-     * @returns the player record.
+     * @returns the player record, or null when the room is full.
      */
-    private join(socket: WebSocket, rawName: string): Player {
+    private join(socket: WebSocket, rawName: string): Player | null {
+        if (this.players.size >= MAX_PLAYERS) {
+            const rejected: RoomToPhoneMessage = { type: "rejected", reason: "roomFull" };
+            socket.send(JSON.stringify(rejected));
+            socket.close(4003, "room full");
+            return null;
+        }
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
