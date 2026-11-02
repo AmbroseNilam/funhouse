@@ -37,6 +37,11 @@
     .tally { border-collapse: collapse; font-size: 1.2em; }
     .tally td { padding: 0.3em 1em 0.3em 0; }
     .tally .highlight { color: var(--accent); }
+    .progress { display: grid; grid-template-columns: 1fr auto; gap: 0.4em 1em; align-items: baseline; }
+    .progress span { color: var(--muted); }
+    .progress strong { font-family: var(--font-display); font-size: 1.6em; font-weight: 600; }
+    .progress-track { grid-column: 1 / -1; height: 10px; border-radius: 999px; background: var(--panel); overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); transition: width 400ms ease; }
     .caption { color: var(--muted); border-left: 3px solid var(--accent); padding-left: 0.8em; }
     .join { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1em; background: var(--panel); border-radius: 24px; padding: 2vw; }
     .join img { width: 100%; border-radius: 12px; background: white; padding: 4%; box-sizing: border-box; }

@@ -10,14 +10,17 @@
 
 import { randomBytes } from "node:crypto";
 import type WebSocket from "ws";
-import type { ListeningMode, PhoneView } from "../shared/controls.ts";
+import type { CartridgeManifest } from "../shared/cartridge.ts";
+import type { Control, ControlOption, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
-import { WEREWOLF_MANIFEST } from "../cartridges/werewolf/manifest.ts";
+import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import { streamSpark } from "../providers/meta/spark.ts";
+import type { GameStage, RunningGame } from "./game-session.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -88,6 +91,18 @@ const STANDBY_REFRESH_MILLISECONDS: number = 10000;
  */
 const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
 
+/** Room for hidden reasoning plus a list of questions or a secret. */
+const CONTENT_TOKEN_LIMIT: number = 2000;
+
+/** Longest text a phone may send through a control. */
+const MAX_INPUT_CHARACTERS: number = 200;
+
+/** Control value that starts a game; the game's id follows. */
+const START_GAME_PREFIX: string = "room:start:";
+
+/** Control value that ends the game and goes back to the lobby. */
+const BACK_TO_LOBBY: string = "room:lobby";
+
 /** Most players one room seats. The largest game plays ten; two more can watch and talk. */
 const MAX_PLAYERS: number = 12;
 
@@ -154,6 +169,9 @@ export class Room implements HostStage {
     private readonly voice: HostVoice;
     private readonly speech: OpenAiRealtimeSpeech | SilentSpeech = TEXT_ONLY === true ? new SilentSpeech() : new OpenAiRealtimeSpeech();
     private woken: boolean = false;
+    private game: RunningGame | null = null;
+    /** Who spoke last, so a ruling can be credited to them. */
+    private lastSpeakerId: string | null = null;
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
@@ -174,8 +192,7 @@ export class Room implements HostStage {
     public constructor(code: string, publicUrl: string) {
         this.code = code;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
-        const games: string[] = [WEREWOLF_MANIFEST].map((manifest) => `${manifest.name}, ${manifest.minPlayers} to ${manifest.maxPlayers} players`);
-        this.host = new Host(this, PLACEHOLDER_PERSONA, games);
+        this.host = new Host(this, PLACEHOLDER_PERSONA);
         this.voice = new HostVoice(this.speech, this.voiceOutput());
     }
 
@@ -269,7 +286,7 @@ export class Room implements HostStage {
                 player = null;
                 return;
             }
-            this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value: message.input.value, controlIndex: message.input.controlIndex });
+            this.onControl(player, message.input.value.slice(0, MAX_INPUT_CHARACTERS), message.input.controlIndex);
         });
         socket.on("close", (code: number) => {
             if (player === null || player.socket !== socket) {
@@ -285,6 +302,46 @@ export class Room implements HostStage {
      */
     public playerNames(): string[] {
         return [...this.players.values()].map((player) => player.name);
+    }
+
+    /**
+     * What the host needs to know: the running game, or the lobby and what can be started.
+     * @returns the brief.
+     */
+    public brief(): string {
+        if (this.game !== null) {
+            return `${this.game.brief()}\n\nIf the group clearly wants to stop playing, write [[quit]] first.`;
+        }
+        const games: string[] = GAMES.map((game: InstalledGame) => `- ${game.manifest.name} (id ${game.manifest.id}), ${game.manifest.minPlayers} to ${game.manifest.maxPlayers} players: ${game.pitch}`);
+        return [
+            "Right now: the lobby. Games you can start:",
+            ...games,
+            "When the group clearly asks to play one and there are enough players, write [[start: id]] first, then one short line. If there aren't enough, say how many more you need. Players can also pick a game on their phones.",
+        ].join("\n");
+    }
+
+    /**
+     * Acts on a ruling from the host. A ruling the moment doesn't allow is dropped, so the host
+     * can never change the game on its own say-so.
+     * @param ruling the ruling's name.
+     * @param detail anything written after it.
+     */
+    public applyRuling(ruling: string, detail: string): void {
+        if (this.game === null) {
+            if (ruling === "start") {
+                this.startGame(detail);
+            }
+            return;
+        }
+        if (ruling === "quit") {
+            this.endGame();
+            return;
+        }
+        if (this.game.allowsRuling(ruling) === false) {
+            log(this.scope(), `ignored ruling ${ruling}`);
+            return;
+        }
+        this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: this.lastSpeakerId });
     }
 
     /**
@@ -344,6 +401,7 @@ export class Room implements HostStage {
         log(this.scope(), `${name} joined as ${playerId}`);
         this.welcome(player);
         this.broadcastScene();
+        this.refreshPhones();
         this.prepareStandby(player);
         this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
         return player;
@@ -388,6 +446,114 @@ export class Room implements HostStage {
     }
 
     /**
+     * Handles a button press or typed text: the room's own, or else the running game's.
+     * @param player who.
+     * @param value the option id or text.
+     * @param controlIndex which control.
+     */
+    private onControl(player: Player, value: string, controlIndex: number): void {
+        this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
+        if (value.startsWith(START_GAME_PREFIX) === true && this.game === null) {
+            this.startGame(value.slice(START_GAME_PREFIX.length));
+            return;
+        }
+        if (value === BACK_TO_LOBBY) {
+            this.endGame();
+            return;
+        }
+        this.game?.input(player.playerId, value);
+        this.refreshPhones();
+    }
+
+    /**
+     * Starts a game, if it's installed and the room has the right number of players.
+     * @param gameId the game's id or name, in any case.
+     */
+    private startGame(gameId: string): void {
+        const wanted: string = gameId.trim().toLowerCase();
+        const installed: InstalledGame | undefined = GAMES.find((game: InstalledGame) => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted);
+        if (installed === undefined || this.game !== null) {
+            log(this.scope(), `can't start "${gameId}"`);
+            return;
+        }
+        const count: number = this.players.size;
+        if (count < installed.manifest.minPlayers || count > installed.manifest.maxPlayers) {
+            const { name, minPlayers, maxPlayers }: CartridgeManifest = installed.manifest;
+            this.host.notice(`(Game: ${name} needs ${minPlayers} to ${maxPlayers} players and there are ${count}.)`, WAKE_DELAY_MILLISECONDS.screen);
+            return;
+        }
+        log(this.scope(), `starting ${installed.manifest.name} with ${count}`);
+        this.caption = null;
+        this.game = installed.create(this.gameStage());
+        this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
+        this.broadcastScene();
+        this.refreshPhones();
+    }
+
+    /** Ends the running game and returns everyone to the lobby. */
+    private endGame(): void {
+        if (this.game === null) {
+            return;
+        }
+        log(this.scope(), `ended ${this.game.manifest.name}`);
+        this.game.stop();
+        this.game = null;
+        this.caption = null;
+        this.broadcastScene();
+        this.refreshPhones();
+    }
+
+    /**
+     * What a game may ask of this room.
+     * @returns the stage.
+     */
+    private gameStage(): GameStage {
+        return {
+            tellHost: (line: string): void => { this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen); },
+            changed: (): void => {
+                this.broadcastScene();
+                this.refreshPhones();
+            },
+            requestContent: (prompt: string): void => { this.writeContent(prompt); },
+            record: (event: RoomEvent): void => { this.record(event); },
+        };
+    }
+
+    /**
+     * Has the host's model write content for the running game. Failure comes back as empty
+     * text, and the game falls back on its own content.
+     * @param prompt what to write.
+     */
+    private writeContent(prompt: string): void {
+        const game: RunningGame | null = this.game;
+        const startedAt: number = Date.now();
+        const collect = async (): Promise<string> => {
+            let text: string = "";
+            const system: string = "You write content for a party game. Reply with exactly what is asked and nothing else.";
+            for await (const delta of streamSpark([{ role: "system", content: system }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT })) {
+                text += delta;
+            }
+            return text;
+        };
+        collect().catch((error: unknown) => {
+            log(this.scope(), `content failed: ${error instanceof Error ? error.message : String(error)}`);
+            return "";
+        }).then((text: string) => {
+            log(this.scope(), `content ready in ${Date.now() - startedAt} ms`);
+            if (this.game === game) {
+                game?.event({ type: "contentReady", at: Date.now(), text });
+            }
+        }).catch((error: unknown) => { log(this.scope(), `content not applied: ${error instanceof Error ? error.message : String(error)}`); });
+    }
+
+    /** Sends every phone its current view. */
+    private refreshPhones(): void {
+        for (const player of this.players.values()) {
+            this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
+        }
+    }
+
+    /**
      * Holds a dropped player's seat for the grace period, then lets them go.
      * @param player the player whose phone dropped.
      * @param code the WebSocket close code, logged to tell refreshes from network loss.
@@ -421,10 +587,13 @@ export class Room implements HostStage {
         this.clearStandbyTimer(player);
         this.setHint(player, "");
         this.players.delete(player.playerId);
-        this.record({ type: "playerLeft", at: Date.now(), playerId: player.playerId });
+        const left: RoomEvent = { type: "playerLeft", at: Date.now(), playerId: player.playerId };
+        this.record(left);
+        this.game?.event(left);
         log(this.scope(), `${player.name} left`);
         this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
         this.broadcastScene();
+        this.refreshPhones();
     }
 
     /**
@@ -453,7 +622,7 @@ export class Room implements HostStage {
      * @param down true while the button is held.
      */
     private onHoldToTalk(player: Player, down: boolean): void {
-        if (down === player.holdingToTalk) {
+        if (down === player.holdingToTalk || (down === true && this.canTalk(player) === false)) {
             return;
         }
         player.holdingToTalk = down;
@@ -462,6 +631,16 @@ export class Room implements HostStage {
             return;
         }
         this.finishPress(player);
+    }
+
+    /**
+     * Whether this player's microphone is allowed to open right now.
+     * @param player the player.
+     * @returns false when the game has phones quiet.
+     */
+    private canTalk(player: Player): boolean {
+        const mode: ListeningMode = this.game?.listening(player.playerId) ?? "holdToTalk";
+        return mode === "holdToTalk" || mode === "openFloor";
     }
 
     /**
@@ -542,13 +721,11 @@ export class Room implements HostStage {
      * @param text the words.
      */
     private onTextOnlySay(player: Player, text: string): void {
-        if (TEXT_ONLY === false) {
+        if (TEXT_ONLY === false || this.canTalk(player) === false) {
             return;
         }
         this.host.interrupt(this.hostSpeaking);
-        this.caption = { speaker: player.name, text, final: true };
-        this.broadcastScene();
-        this.host.notice(`${player.name}: ${text}`, WAKE_DELAY_MILLISECONDS.speech);
+        this.onHeard(player, text);
     }
 
     /**
@@ -673,15 +850,28 @@ export class Room implements HostStage {
         const said: string = text.trim();
         const sinceRelease: string = player.releasedAt === 0 ? "" : ` (${Date.now() - player.releasedAt} ms after release)`;
         log(this.scope(), said === "" ? `heard nothing from ${player.name}${sinceRelease}` : `heard ${player.name}: "${said}"${sinceRelease}`);
-        this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
         if (said === "") {
+            this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
             this.onNotHeard(player);
             return;
         }
+        this.onHeard(player, said);
+        this.scheduleAcknowledgement(said);
+    }
+
+    /**
+     * Takes in something a player said: the screen shows it, the game hears it, the host reacts.
+     * @param player who spoke.
+     * @param said their words.
+     */
+    private onHeard(player: Player, said: string): void {
+        const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
+        this.record(event);
+        this.lastSpeakerId = player.playerId;
+        this.game?.event(event);
         this.caption = { speaker: player.name, text: said, final: true };
         this.broadcastScene();
         this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
-        this.scheduleAcknowledgement(said);
     }
 
     /**
@@ -805,12 +995,17 @@ export class Room implements HostStage {
     }
 
     /**
-     * The scene for the current moment: the lobby and the last line said.
-     * Until a cartridge is loaded, the base is always the lobby.
+     * The scene for the current moment: the game's, or the lobby, with who is talking marked
+     * on any roster and the last line said underneath.
      * @returns the scene.
      */
     private currentScene(): Scene {
-        const scene: Scene = lobbyScene(this.joinUrl, this.code, this.roster());
+        const scene: Scene = this.game === null ? lobbyScene(this.joinUrl, this.code, this.roster()) : this.game.scene();
+        for (const block of scene.blocks) {
+            if (block.type === "roster") {
+                block.players = block.players.map((entry: RosterEntry) => ({ ...entry, speaking: this.players.get(entry.playerId)?.speaking === true }));
+            }
+        }
         if (this.caption !== null) {
             scene.blocks.push({ type: "caption", speaker: this.caption.speaker, text: this.caption.text, final: this.caption.final });
         }
@@ -834,12 +1029,33 @@ export class Room implements HostStage {
         if (player.hint !== "") {
             status = player.hint;
         }
-        return {
-            playerName: player.name,
-            listening: player.listening,
-            status,
-            controls: [{ type: "waiting", text: "Waiting for the game to start." }],
-        };
+        player.listening = this.game?.listening(player.playerId) ?? "holdToTalk";
+        if (this.canTalk(player) === false) {
+            status = "Phones are quiet for now.";
+        }
+        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player) };
+    }
+
+    /**
+     * What a phone offers: the game's controls, a way back once it's over, or the lobby's games.
+     * @param player the player.
+     * @returns the controls.
+     */
+    private phoneControls(player: Player): Control[] {
+        if (this.game !== null) {
+            const controls: Control[] = this.game.controls(player.playerId);
+            if (this.game.outcome() === null) {
+                return controls;
+            }
+            return [...controls, { type: "buttons", options: [{ id: BACK_TO_LOBBY, label: "Back to the games" }] }];
+        }
+        const count: number = this.players.size;
+        const options: ControlOption[] = GAMES.map((game: InstalledGame) => {
+            const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
+            const fits: boolean = count >= minPlayers && count <= maxPlayers;
+            return { id: `${START_GAME_PREFIX}${id}`, label: fits === true ? name : `${name} (${minPlayers}+ players)`, disabled: fits === false };
+        });
+        return [{ type: "buttons", prompt: "Pick a game, or just ask out loud.", options }];
     }
 
     /**
@@ -853,9 +1069,7 @@ export class Room implements HostStage {
     /** Tells screens and phones what the host is doing. */
     private broadcastHostState(): void {
         this.broadcastToScreens(this.hostStateMessage());
-        for (const player of this.players.values()) {
-            this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
-        }
+        this.refreshPhones();
     }
 
     /** Sends the current scene to every screen. */

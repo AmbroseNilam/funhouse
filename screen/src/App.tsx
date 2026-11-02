@@ -95,6 +95,9 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     if (block.type === "tally") {
         return <table key={index} className="tally"><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
     }
+    if (block.type === "progress") {
+        return <div key={index} className="progress"><span>{block.label}</span><strong>{block.current} / {block.max}</strong><div className="progress-track"><div className="progress-fill" style={{ width: `${Math.min(100, (block.current / Math.max(1, block.max)) * 100)}%` }} /></div></div>;
+    }
     return <p key={index} className={`caption ${block.final === true ? "final" : ""}`}><strong>{block.speaker}</strong> {block.text}</p>;
 }
 

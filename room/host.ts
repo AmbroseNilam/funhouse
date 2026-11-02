@@ -61,6 +61,10 @@ export const PLACEHOLDER_PERSONA: HostPersona = {
 export interface HostStage {
     /** Names of the players present right now. */
     playerNames(): string[];
+    /** What is going on right now and what the host may do about it. */
+    brief(): string;
+    /** Acts on one ruling the host made; the room ignores any it doesn't allow. */
+    applyRuling(ruling: string, detail: string): void;
     /** Shows or clears the cue that the host is working out a reply. */
     setThinking(thinking: boolean): void;
     /** Queues one sentence to speak; its audio starts fetching at once. */
@@ -78,14 +82,22 @@ const PENDING_LIMIT: number = 20;
 /** What the host replies to say nothing. Checked before speaking, not left to cleanup. */
 const QUIET_MARKER: string = "(quiet)";
 
-/** Room for Spark's hidden reasoning plus a short spoken reply. Measured: 96 to 192 reasoning tokens at minimal effort. */
-const REPLY_TOKEN_LIMIT: number = 600;
+/** Matches one ruling at the start of a reply, such as [[no]] or [[start: quizmaster]]. */
+const RULING_PATTERN: RegExp = /^\s*\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]\]/;
+
+/** Room for Spark's hidden reasoning plus a spoken reply. A brief with rulings reasons longer, and running out means no reply at all. */
+const REPLY_TOKEN_LIMIT: number = 1500;
+
+/** How long one reply may take before it is tried again. A request can hang with no error. */
+const REPLY_TIME_LIMIT_MILLISECONDS: number = 12000;
+
+/** Tries each turn gets; a game can't be left waiting on a host who went silent. */
+const REPLY_ATTEMPTS: number = 2;
 
 /** The host loop. One instance per room. */
 export class Host {
     public readonly persona: HostPersona;
     private readonly stage: HostStage;
-    private readonly lobbyBrief: string;
     private readonly history: string[] = [];
     private readonly pending: string[] = [];
     private wakeTimer: NodeJS.Timeout | null = null;
@@ -95,16 +107,10 @@ export class Host {
      * Creates a host that acts through the given stage.
      * @param stage what the host can do in the room.
      * @param persona who the host is.
-     * @param gameSummaries one line per installed game, for the lobby brief.
      */
-    public constructor(stage: HostStage, persona: HostPersona, gameSummaries: string[]) {
+    public constructor(stage: HostStage, persona: HostPersona) {
         this.stage = stage;
         this.persona = persona;
-        this.lobbyBrief = [
-            "Right now: the lobby. Installed games:",
-            ...gameSummaries.map((summary: string) => `- ${summary}`),
-            "Starting a game isn't wired up yet; if asked, say it's nearly ready.",
-        ].join("\n");
     }
 
     /**
@@ -147,11 +153,10 @@ export class Host {
             this.remember(...lines);
             const turn: AbortController = new AbortController();
             this.turn = turn;
-            try {
-                await this.act(earlier, lines, turn.signal);
-            } catch (error: unknown) {
-                if (turn.signal.aborted === false) {
-                    log("host", `turn failed: ${error instanceof Error ? error.message : String(error)}`);
+            for (let attempt = 1; attempt <= REPLY_ATTEMPTS && turn.signal.aborted === false; attempt += 1) {
+                const replied: boolean = await this.attempt(earlier, lines, turn.signal);
+                if (replied === true) {
+                    break;
                 }
             }
             this.stage.setThinking(false);
@@ -160,13 +165,32 @@ export class Host {
     }
 
     /**
+     * Makes one try at a reply, within the time limit.
+     * @param earlier the conversation before this turn.
+     * @param lines what happened since the last turn.
+     * @param interrupted cancels the turn when someone cuts in.
+     * @returns true when the model replied, even if only to stay quiet.
+     */
+    private async attempt(earlier: string[], lines: string[], interrupted: AbortSignal): Promise<boolean> {
+        try {
+            return await this.act(earlier, lines, AbortSignal.any([interrupted, AbortSignal.timeout(REPLY_TIME_LIMIT_MILLISECONDS)]));
+        } catch (error: unknown) {
+            if (interrupted.aborted === false) {
+                log("host", `reply failed: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            return false;
+        }
+    }
+
+    /**
      * Streams one reply from Spark and queues it to the voice as one line. A reply that opens
      * with the quiet marker says nothing at all.
      * @param earlier the conversation before this turn.
      * @param lines what happened since the last turn.
-     * @param signal cancels the turn on interruption.
+     * @param signal cancels the turn on interruption or at the time limit.
+     * @returns true when the model replied, false when it sent no text at all.
      */
-    private async act(earlier: string[], lines: string[], signal: AbortSignal): Promise<void> {
+    private async act(earlier: string[], lines: string[], signal: AbortSignal): Promise<boolean> {
         const startedAt: number = Date.now();
         let firstTextAt: number = 0;
         let reply: string = "";
@@ -184,15 +208,43 @@ export class Host {
         }
 
         const timing: string = `first text ${firstTextAt === 0 ? "-" : firstTextAt - startedAt} ms, complete ${Date.now() - startedAt} ms`;
-        const spoken: string = reply.trimStart().startsWith(QUIET_MARKER) === true ? "" : cleanSpeech(reply);
-        if (spoken === "" || signal.aborted === true) {
+        if (signal.aborted === true) {
+            log("host", `cut off (${timing})`);
+            return true;
+        }
+        if (reply.trim() === "") {
+            log("host", `sent no text (${timing})`);
+            return false;
+        }
+        const rest: string = this.applyRulings(reply);
+        const spoken: string = rest.trimStart().startsWith(QUIET_MARKER) === true ? "" : cleanSpeech(rest);
+        if (spoken === "") {
             log("host", `stayed quiet (${timing})`);
-            return;
+            return true;
         }
         log("host", `said "${spoken}" (${timing})`);
         this.stage.setThinking(false);
         this.stage.say(spoken, this.persona.style);
         this.remember(`${this.persona.name}: ${spoken}`);
+        return true;
+    }
+
+    /**
+     * Takes the rulings off the front of a reply and hands them to the room.
+     * @param reply the whole reply.
+     * @returns what is left to say.
+     */
+    private applyRulings(reply: string): string {
+        let rest: string = reply;
+        let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
+        while (match !== null) {
+            const ruling: string = match[1] ?? "";
+            log("host", `ruled ${ruling}${match[2] === undefined ? "" : `: ${match[2]}`}`);
+            this.stage.applyRuling(ruling, match[2] ?? "");
+            rest = rest.slice(match[0].length);
+            match = RULING_PATTERN.exec(rest);
+        }
+        return rest;
     }
 
     /**
@@ -213,8 +265,8 @@ export class Host {
     private systemPrompt(): string {
         return [
             this.persona.character,
-            "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet).",
-            this.lobbyBrief,
+            "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet) and any [[ruling]] you are told you may make, which goes first and is never read aloud.",
+            this.stage.brief(),
         ].join("\n\n");
     }
 

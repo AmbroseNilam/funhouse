@@ -33,6 +33,11 @@ export interface PhaseSpec {
     hostMayInterject: boolean;
     /** Seconds of silence before the host is woken; 0 disables the silence trigger. */
     silenceSeconds: number;
+    /**
+     * Rulings the host may make in this phase, by name, each with when to make it. The host
+     * judges what it hears, such as whether a guess is right; the rules decide what follows.
+     */
+    hostRulings?: Record<string, string>;
 }
 
 /** Declarative half of a cartridge. */
@@ -63,6 +68,8 @@ export interface Step<State> {
     nextPhaseId?: string;
     /** Timers to start, in seconds, keyed by timer id. */
     timers?: Record<string, number>;
+    /** Asks the host's model to write content, such as a secret; it returns as contentReady. */
+    contentRequest?: string;
 }
 
 /** The executable half of a cartridge. Pure functions over an immutable state. */
@@ -78,7 +85,7 @@ export interface Cartridge<State> {
     groupsOf(state: State, playerId: string): ReadonlySet<string>;
     /** Actions a player may take right now. */
     legalActions(state: State, playerId: string): LegalAction[];
-    /** Applies one player action; must reject illegal ones by returning the same state with no facts. */
+    /** Applies one player action, an option id or typed text; must reject illegal ones by returning the same state with no facts. */
     apply(state: State, playerId: string, actionId: string): Step<State>;
     /** Reacts to a room event such as a timer or a host request to advance. */
     onEvent(state: State, event: RoomEvent): Step<State>;

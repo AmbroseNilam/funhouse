@@ -16,7 +16,9 @@ export type RoomEvent =
     | { type: "silence"; at: number; seconds: number }
     | { type: "hostSaid"; at: number; text: string; scopeKey: string }
     | { type: "hostDrew"; at: number; prompt: string; src: string }
-    | { type: "fact"; at: number; fact: ScopedFact };
+    | { type: "fact"; at: number; fact: ScopedFact }
+    | { type: "hostRuled"; at: number; ruling: string; detail: string; playerId: string | null }
+    | { type: "contentReady"; at: number; text: string };
 
 /** Maximum events a room keeps in memory; older ones roll off the front. */
 export const TIMELINE_LIMIT: number = 5000;

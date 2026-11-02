@@ -17,6 +17,8 @@ export interface ScopedFact {
     kind: string;
     /** Human-readable text the host may narrate when the scope allows it. */
     text: string;
+    /** True when the host should know this but has no need to react out loud. */
+    quiet?: boolean;
 }
 
 /** The scope every stage and the host can always see. */
