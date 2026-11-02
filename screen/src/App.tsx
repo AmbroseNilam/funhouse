@@ -5,6 +5,7 @@ import { useEffect, useReducer, useRef, useState, type ReactElement } from "reac
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
+import { Orb } from "./Orb.tsx";
 import { HostSpeaker } from "./speaker.ts";
 
 /** Local state reduced from room messages. */
@@ -97,6 +98,7 @@ export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
     const socketRef = useRef<WebSocket | null>(null);
     const speakerRef = useRef<HostSpeaker | null>(null);
+    const micRef = useRef<{ level: number; at: number }>({ level: 0, at: 0 });
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
@@ -133,6 +135,10 @@ export function App(): ReactElement {
                 }
                 if (message.type === "audioCancel") {
                     speakerRef.current?.cancel();
+                    return;
+                }
+                if (message.type === "micLevel") {
+                    micRef.current = { level: message.level, at: performance.now() };
                     return;
                 }
                 if (message.type === "audioEnd") {
@@ -194,7 +200,8 @@ export function App(): ReactElement {
             <aside className="join">
                 {state.qrDataUrl !== "" ? <img src={state.qrDataUrl} alt={`QR code to join room ${state.roomCode}`} /> : null}
                 <p className="code">{state.roomCode}</p>
-                <p className={`host ${state.hostThinking === true ? "thinking" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>{state.hostName}{state.hostThinking === true ? <span className="dots" aria-label="thinking" /> : null}</p>
+                <Orb micRef={micRef} speakerRef={speakerRef} thinking={state.hostThinking} speaking={state.hostSpeaking} />
+                <p className="host">{state.hostName}</p>
             </aside>
             {state.started === false ? (
                 <button className="sound-gate" disabled={state.connected === false} onClick={start}>

@@ -33,7 +33,8 @@ export type RoomToScreenMessage =
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
-    | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string };
+    | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
+    | { type: "micLevel"; level: number };
 
 /**
  * Parses a text frame into a message, or returns null when it is not valid JSON with a type.

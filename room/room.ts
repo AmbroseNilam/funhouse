@@ -81,6 +81,12 @@ const STANDBY_REFRESH_MILLISECONDS: number = 10000;
 /** How long a dropped phone keeps its seat before the room says they left. */
 const REJOIN_GRACE_MILLISECONDS: number = 30000;
 
+/** Bytes between the samples measured for loudness; every fourth sample is plenty. */
+const LEVEL_SAMPLE_STRIDE_BYTES: number = 8;
+
+/** Scales raw loudness so ordinary speech fills most of the 0 to 1 range. */
+const LEVEL_GAIN: number = 5;
+
 /** Characters used for room codes; no vowels, so codes never spell words. */
 const CODE_ALPHABET: string = "BCDFGHJKLMNPQRSTVWXZ";
 
@@ -94,6 +100,25 @@ export function makeRoomCode(): string {
         code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
     }
     return code;
+}
+
+/**
+ * Measures how loud one frame of PCM is, for the orb on the big screen.
+ * @param frame 16-bit little-endian samples.
+ * @returns loudness from 0 to about 1, rounded to keep the message short.
+ */
+function frameLevel(frame: Buffer): number {
+    let sum: number = 0;
+    let count: number = 0;
+    for (let offset = 0; offset + 1 < frame.length; offset += LEVEL_SAMPLE_STRIDE_BYTES) {
+        const sample: number = frame.readInt16LE(offset) / 32768;
+        sum += sample * sample;
+        count += 1;
+    }
+    if (count === 0) {
+        return 0;
+    }
+    return Math.round(Math.min(1, Math.sqrt(sum / count) * LEVEL_GAIN) * 100) / 100;
 }
 
 /** The room runtime. One instance per live room. */
@@ -490,6 +515,7 @@ export class Room implements HostStage {
             return;
         }
         player.transcribe.sendFrame(new Uint8Array(frame));
+        this.broadcastToScreens({ type: "micLevel", level: frameLevel(frame) });
     }
 
     /**

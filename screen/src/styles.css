@@ -42,9 +42,9 @@
     .join img { width: 100%; border-radius: 12px; background: white; padding: 4%; box-sizing: border-box; }
     .code { font-family: var(--font-display); font-size: 2.4em; letter-spacing: 0.3em; margin: 0; }
     .host { color: var(--muted); margin: 0; }
-    .host.thinking { color: var(--accent); }
-    .host .dots::after { content: "…"; display: inline-block; opacity: 0; animation: dots-appear 0s linear 400ms forwards, host-pulse 500ms ease-in-out 400ms infinite alternate; }
-    .host.speaking { color: var(--fg); animation: host-pulse 900ms ease-in-out infinite alternate; }
+    .orb { --level: 0; width: 42%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fff 0%, var(--accent) 38%, color-mix(in srgb, var(--accent) 45%, var(--panel)) 100%); opacity: 0.55; transform: scale(calc(1 + var(--level) * 0.4)); box-shadow: 0 0 calc(8px + var(--level) * 60px) calc(var(--level) * 18px) color-mix(in srgb, var(--accent) 60%, transparent); transition: opacity 200ms ease; }
+    .orb[data-state="listening"], .orb[data-state="speaking"] { opacity: 1; }
+    .orb[data-state="thinking"] { opacity: 0.9; animation: orb-breathe 1100ms ease-in-out infinite alternate; }
     .sound-gate { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6em; border: 0; font: inherit; color: var(--fg); background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); cursor: pointer; }
     .sound-gate:disabled { cursor: wait; }
     .sound-gate-title { font-family: var(--font-display); font-size: 2.6em; color: var(--accent); animation: host-pulse 1200ms ease-in-out infinite alternate; }
@@ -57,8 +57,14 @@
     .stage[data-connected="false"] .join::after { content: "Reconnecting…"; color: var(--muted); font-size: 0.8em; }
 }
 
-@keyframes dots-appear {
-    to { opacity: 1; }
+@keyframes orb-breathe {
+    from { scale: 0.92; }
+    to { scale: 1.08; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .orb { transform: none; }
+    .orb[data-state="thinking"] { animation: none; }
 }
 
 @keyframes host-pulse {
