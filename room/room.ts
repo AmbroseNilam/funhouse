@@ -312,7 +312,10 @@ export class Room implements HostStage {
         if (this.game !== null) {
             return `${this.game.brief()}\n\nIf the group clearly wants to stop playing, write [[quit]] first.`;
         }
-        const games: string[] = GAMES.map((game: InstalledGame) => `- ${game.manifest.name} (id ${game.manifest.id}), ${game.manifest.minPlayers} to ${game.manifest.maxPlayers} players: ${game.pitch}`);
+        const games: string[] = GAMES.map((game: InstalledGame) => {
+            const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
+            return `- ${name} (id ${id}), ${minPlayers} to ${maxPlayers} players: ${game.pitch}`;
+        });
         return [
             "Right now: the lobby. Games you can start:",
             ...games,

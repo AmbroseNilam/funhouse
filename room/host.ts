@@ -37,6 +37,7 @@ export const PLACEHOLDER_PERSONA: HostPersona = {
         "",
         "Table rules:",
         "- Don't use names unless you're picking one person out of the group. Never start with a name.",
+        "- You can't see anyone and only know their names, so never guess someone's gender. Say \"they\".",
         "- Don't repeat what someone said back to them. Don't narrate what you're doing or about to do.",
         "- Vary your openers; never use the same phrase twice in a row.",
         "- What you get is speech-to-text. If it's garbled, half a sentence, or clearly not aimed at you, reply exactly (quiet) rather than guessing.",
