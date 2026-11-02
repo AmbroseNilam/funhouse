@@ -9,7 +9,9 @@ import type { Scene } from "./scene.ts";
 export type PhoneMessage =
     | { type: "hello"; name: string; playerId?: string; resumeToken?: string }
     | { type: "input"; input: ControlInput }
-    | { type: "holdToTalk"; down: boolean };
+    | { type: "holdToTalk"; down: boolean }
+    | { type: "rename"; name: string }
+    | { type: "leave" };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =

@@ -20,15 +20,30 @@
     .phone { min-height: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
     .phone.name { justify-content: center; text-align: center; }
     .phone.name form { display: flex; flex-direction: column; gap: 12px; }
-    .phone header { display: flex; justify-content: space-between; color: var(--muted); }
+    .top-bar { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+    .top-bar strong { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top-bar span { flex: none; font-size: 0.85em; }
+    .menu-button { flex: none; margin-left: auto; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 1.2em; line-height: 1; }
     .controls { flex: 1; display: flex; flex-direction: column; gap: 12px; }
     .card { background: var(--panel); border-radius: 20px; padding: 20px; }
     .card.secret { border: 1px solid var(--accent); }
     .buttons { display: flex; flex-direction: column; gap: 10px; }
     .notice.warning { color: var(--danger); }
     .notice.secret { color: var(--accent); }
+    .controls:has(> .waiting:only-child) { justify-content: center; }
     .waiting, .status { color: var(--muted); text-align: center; margin: 0; }
-    .talk { height: 96px; font-size: 1.2em; font-weight: 600; background: var(--accent); color: #111; user-select: none; touch-action: none; }
+    .status { min-height: 2.8em; font-size: 0.95em; }
+    .talk { align-self: center; flex: none; width: min(68vw, 42vh, 300px); aspect-ratio: 1; padding: 0; border-radius: 50%; font-size: 1.2em; font-weight: 600; background: var(--accent); color: #111; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
     .talk.holding { background: #fff; box-shadow: 0 0 0 6px rgba(242, 193, 78, 0.4); }
+    .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(0, 0, 0, 0.6); }
+    .sheet { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; background: #1d1d27; }
+    .sheet form { display: flex; flex-direction: column; gap: 10px; }
+    .sheet label { color: var(--muted); font-size: 0.85em; }
+    .sheet p { margin: 0 0 6px; }
+    .sheet input { background: var(--bg); }
+    .sheet button { background: var(--panel); }
+    .sheet .primary { background: var(--accent); color: #111; font-weight: 600; }
+    .sheet .danger { background: var(--danger); color: #111; font-weight: 600; }
+    .sheet .quiet { background: none; color: var(--muted); }
     .listening-muted .talk { background: var(--panel); color: var(--muted); }
 }

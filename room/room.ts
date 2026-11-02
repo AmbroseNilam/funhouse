@@ -184,6 +184,15 @@ export class Room implements HostStage {
                 this.onHoldToTalk(player, message.down);
                 return;
             }
+            if (message.type === "rename") {
+                this.rename(player, message.name);
+                return;
+            }
+            if (message.type === "leave") {
+                this.removePlayer(player);
+                player = null;
+                return;
+            }
             this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value: message.input.value, controlIndex: message.input.controlIndex });
         });
         socket.on("close", (code: number) => {
@@ -310,13 +319,46 @@ export class Room implements HostStage {
         this.clearStandbyTimer(player);
         log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${REJOIN_GRACE_MILLISECONDS / 1000} s`);
         this.broadcastScene();
-        player.leaveTimer = setTimeout(() => {
-            this.players.delete(player.playerId);
-            this.record({ type: "playerLeft", at: Date.now(), playerId: player.playerId });
-            log(this.scope(), `${player.name} left`);
-            this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
-            this.broadcastScene();
-        }, REJOIN_GRACE_MILLISECONDS);
+        player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, REJOIN_GRACE_MILLISECONDS);
+    }
+
+    /**
+     * Gives a player their seat up for good and tells the room.
+     * @param player the player who is leaving.
+     */
+    private removePlayer(player: Player): void {
+        if (player.leaveTimer !== null) {
+            clearTimeout(player.leaveTimer);
+            player.leaveTimer = null;
+        }
+        player.connected = false;
+        player.transcribe?.abort();
+        player.standby?.abort();
+        player.standby = null;
+        this.clearStandbyTimer(player);
+        this.players.delete(player.playerId);
+        this.record({ type: "playerLeft", at: Date.now(), playerId: player.playerId });
+        log(this.scope(), `${player.name} left`);
+        this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+        this.broadcastScene();
+    }
+
+    /**
+     * Changes a player's name and tells the room. A blank or unchanged name does nothing.
+     * @param player the player.
+     * @param rawName the name the player typed.
+     */
+    private rename(player: Player, rawName: string): void {
+        const name: string = rawName.trim().slice(0, 24);
+        if (name === "" || name === player.name) {
+            return;
+        }
+        const previous: string = player.name;
+        player.name = name;
+        log(this.scope(), `${previous} is now ${name}`);
+        this.welcome(player);
+        this.broadcastScene();
+        this.host.notice(`(${previous} now goes by ${name})`, WAKE_DELAY_MILLISECONDS.join);
     }
 
     /**
@@ -626,7 +668,7 @@ export class Room implements HostStage {
             playerName: player.name,
             listening: player.listening,
             status,
-            controls: [{ type: "waiting", text: `You're in room ${this.code}. Waiting for the game to start.` }],
+            controls: [{ type: "waiting", text: "Waiting for the game to start." }],
         };
     }
 

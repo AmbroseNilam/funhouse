@@ -3,10 +3,11 @@
 // game logic; it renders controls and reports input. It remembers its seat so a refresh, a
 // locked screen or a network blip reconnects into the same seat without asking again.
 
-import { useEffect, useReducer, useRef, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
 import { parseMessage, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
 import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
+import { keepScreenOn } from "./wakeLock.ts";
 
 /** What the phone remembers about its seat, across reloads. */
 interface SavedSeat {
@@ -50,6 +51,15 @@ function writeSeat(seat: SavedSeat): void {
         localStorage.setItem(SEAT_KEY, JSON.stringify(seat));
     } catch {
         // Private browsing or blocked storage: reconnects within this page still work.
+    }
+}
+
+/** Forgets the seat, so this phone joins as someone new next time. */
+function clearSeat(): void {
+    try {
+        localStorage.removeItem(SEAT_KEY);
+    } catch {
+        // Blocked storage never held a seat to begin with.
     }
 }
 
@@ -141,6 +151,7 @@ export function App(): ReactElement {
     const socketRef = useRef<WebSocket | null>(null);
     const captureRef = useRef<MicrophoneCapture | null>(null);
     const holdingRef = useRef<boolean>(false);
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
 
     useEffect(() => {
         let stopped: boolean = false;
@@ -202,6 +213,14 @@ export function App(): ReactElement {
         };
     }, []);
 
+    const joined: boolean = state.stage === "joined";
+    useEffect(() => {
+        if (joined === false) {
+            return;
+        }
+        return keepScreenOn();
+    }, [joined]);
+
     const send = (message: PhoneMessage): void => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(JSON.stringify(message));
@@ -225,7 +244,7 @@ export function App(): ReactElement {
                 }
             });
         } catch (error: unknown) {
-            dispatch({ type: "micError", error: error instanceof Error ? error.message : "Microphone unavailable." });
+            dispatch({ type: "micError", error: error instanceof DOMException && error.name === "NotAllowedError" ? "Allow the microphone in your browser to talk." : "Couldn't start the microphone." });
         }
     };
 
@@ -257,13 +276,29 @@ export function App(): ReactElement {
         );
     }
 
+    const leave = (): void => {
+        send({ type: "leave" });
+        clearSeat();
+        location.assign("/");
+    };
+
+    const rename = (event: FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement;
+        send({ type: "rename", name: field.value });
+        setMenu("closed");
+    };
+
     const view: PhoneView | null = state.view;
     const canTalk: boolean = view?.listening === "holdToTalk" || view?.listening === "openFloor";
     return (
         <main className={`phone joined listening-${view?.listening ?? "muted"}`}>
-            <header><strong>{view?.playerName ?? ""}</strong><span>Room {state.roomCode}</span></header>
+            <header className="top-bar">
+                <strong>{view?.playerName ?? ""}</strong>
+                <span>Room {state.roomCode}</span>
+                <button className="menu-button" aria-label="Menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>⋯</button>
+            </header>
             <section className="controls">{view?.controls.map((control, index) => renderControl(control, index, send))}</section>
-            <p className="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : view?.status ?? ""}</p>
             <button
                 className={`talk ${state.holding === true ? "holding" : ""}`}
                 disabled={canTalk === false}
@@ -272,8 +307,37 @@ export function App(): ReactElement {
                 onPointerCancel={() => { setHolding(false); }}
                 onContextMenu={(event) => { event.preventDefault(); }}
             >
-                {state.holding === true ? "Listening…" : "Hold to talk"}
+                {state.holding === true ? "Listening" : "Hold to talk"}
             </button>
+            <p className="status" role="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : state.holding === true ? "Let go when you're done." : view?.status ?? ""}</p>
+            {menu === "closed" ? null : (
+                <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
+                    <div className="sheet" role="dialog" aria-modal="true" aria-label="Menu">
+                        {menu === "open" ? (
+                            <>
+                                <button onClick={() => { setMenu("rename"); }}>Change name</button>
+                                <button onClick={() => { setMenu("leave"); }}>Leave room</button>
+                                <button className="quiet" onClick={() => { setMenu("closed"); }}>Close</button>
+                            </>
+                        ) : null}
+                        {menu === "rename" ? (
+                            <form onSubmit={rename}>
+                                <label htmlFor="new-name">New name</label>
+                                <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoFocus required />
+                                <button type="submit" className="primary">Save</button>
+                                <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Cancel</button>
+                            </form>
+                        ) : null}
+                        {menu === "leave" ? (
+                            <>
+                                <p>Leave room {state.roomCode}? You'll give up your seat.</p>
+                                <button className="danger" onClick={leave}>Leave</button>
+                                <button className="quiet" onClick={() => { setMenu("closed"); }}>Stay</button>
+                            </>
+                        ) : null}
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
