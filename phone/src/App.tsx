@@ -5,7 +5,7 @@
 
 import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
-import { parseMessage, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
+import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
 import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -202,6 +202,13 @@ export function App(): ReactElement {
         let stopped: boolean = false;
         let retryTimer: number = 0;
         let retryDelay: number = 500;
+        let silenceTimer: number = 0;
+
+        /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
+        const heardFromServer = (socket: WebSocket): void => {
+            window.clearTimeout(silenceTimer);
+            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+        };
 
         /** Opens the socket and, once open, reclaims the saved seat if there is one. */
         const connect = (): void => {
@@ -221,7 +228,9 @@ export function App(): ReactElement {
                     socket.send(JSON.stringify({ type: "hello", name: pendingNameRef.current } satisfies PhoneMessage));
                 }
             };
+            heardFromServer(socket);
             socket.onmessage = (event: MessageEvent<string>): void => {
+                heardFromServer(socket);
                 const message: RoomToPhoneMessage | null = parseMessage<RoomToPhoneMessage>(event.data);
                 if (message === null) {
                     return;
@@ -263,6 +272,7 @@ export function App(): ReactElement {
         return (): void => {
             stopped = true;
             window.clearTimeout(retryTimer);
+            window.clearTimeout(silenceTimer);
             document.removeEventListener("visibilitychange", onVisible);
             socketRef.current?.close();
             captureRef.current?.stop();

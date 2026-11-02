@@ -39,6 +39,12 @@ const MEDIA_TYPES: Record<string, string> = {
 /** Largest message a stage may send: well above one 3,840-byte audio frame or a short text. */
 const MAX_MESSAGE_BYTES: number = 65536;
 
+/** How often the server checks on every connection. Cloudflare closes one after 100 s idle. */
+const HEARTBEAT_MILLISECONDS: number = 30000;
+
+/** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
+const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
+
 const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL);
 
 /**
@@ -97,10 +103,29 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
 });
 
 const sockets: WebSocketServer = new WebSocketServer({ server, maxPayload: MAX_MESSAGE_BYTES });
+
+/** Sockets that answered the last heartbeat. */
+const answered: WeakSet<WebSocket> = new WeakSet();
+
+// Every heartbeat keeps idle connections alive through Cloudflare, ends any socket that stopped
+// answering so its seat can be held properly, and tells each stage the server is still there.
+setInterval(() => {
+    for (const socket of sockets.clients) {
+        if (answered.has(socket) === false) {
+            socket.terminate();
+            continue;
+        }
+        answered.delete(socket);
+        socket.ping();
+        socket.send(HEARTBEAT_MESSAGE);
+    }
+}, HEARTBEAT_MILLISECONDS).unref();
 sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     // An oversized or malformed frame raises an error on the socket, and ws closes it; without
     // a listener that error would end the process and every room with it.
     socket.on("error", (error: Error) => { console.warn(`socket error: ${error.message}`); });
+    answered.add(socket);
+    socket.on("pong", () => { answered.add(socket); });
     const url: URL | null = URL.canParse(request.url ?? "/", "http://room") === true ? new URL(request.url ?? "/", "http://room") : null;
     if (url === null) {
         socket.close(1008, "bad address");

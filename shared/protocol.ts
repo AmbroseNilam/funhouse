@@ -21,7 +21,8 @@ export type PhoneMessage =
 export type RoomToPhoneMessage =
     | { type: "welcome"; playerId: string; roomCode: string; name: string; resumeToken: string }
     | { type: "view"; view: PhoneView }
-    | { type: "rejected"; reason: RejectedReason };
+    | { type: "rejected"; reason: RejectedReason }
+    | { type: "heartbeat" };
 
 /** Screen to room. */
 export type ScreenMessage =
@@ -39,7 +40,11 @@ export type RoomToScreenMessage =
     | { type: "audioCancel" }
     | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
     | { type: "micLevel"; level: number }
-    | { type: "rejected"; reason: RejectedReason };
+    | { type: "rejected"; reason: RejectedReason }
+    | { type: "heartbeat" };
+
+/** How long a stage waits with nothing from the server before it assumes the connection died. */
+export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 70000;
 
 /**
  * Checks a parsed message from a phone has the fields the room will read. Phones are outside

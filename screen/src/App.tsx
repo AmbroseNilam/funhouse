@@ -4,7 +4,7 @@
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
-import { parseMessage, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
+import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
 import { Orb } from "./Orb.tsx";
 import { HostSpeaker } from "./speaker.ts";
 
@@ -136,6 +136,13 @@ export function App(): ReactElement {
         let stopped: boolean = false;
         let retryTimer: number = 0;
         let retryDelay: number = 500;
+        let silenceTimer: number = 0;
+
+        /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
+        const heardFromServer = (socket: WebSocket): void => {
+            window.clearTimeout(silenceTimer);
+            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+        };
 
         /** Opens the socket; on close, retries with backoff so a network blip heals itself. */
         const connect = (): void => {
@@ -155,7 +162,9 @@ export function App(): ReactElement {
                 retryTimer = window.setTimeout(connect, retryDelay);
                 retryDelay = Math.min(retryDelay * 2, MAX_RECONNECT_DELAY_MILLISECONDS);
             };
+            heardFromServer(socket);
             socket.onmessage = (event: MessageEvent<string | ArrayBuffer>): void => {
+                heardFromServer(socket);
                 if (event.data instanceof ArrayBuffer) {
                     speakerRef.current?.play(event.data);
                     return;
@@ -192,6 +201,7 @@ export function App(): ReactElement {
         return (): void => {
             stopped = true;
             window.clearTimeout(retryTimer);
+            window.clearTimeout(silenceTimer);
             socketRef.current?.close();
             socketRef.current = null;
         };
