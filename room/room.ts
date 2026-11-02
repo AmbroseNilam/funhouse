@@ -16,6 +16,7 @@ import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
+import { SilentSpeech } from "../providers/silent-speech.ts";
 import { WEREWOLF_MANIFEST } from "../cartridges/werewolf/manifest.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
@@ -81,6 +82,12 @@ const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "
  */
 const STANDBY_REFRESH_MILLISECONDS: number = 10000;
 
+/**
+ * True in the text-only test mode: phones send text instead of audio, the voice is silent, and
+ * no transcription sessions open. Off unless the server is started with GAME_ROOM_TEXT_ONLY=1.
+ */
+const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
+
 /** Most players one room seats. The largest game plays ten; two more can watch and talk. */
 const MAX_PLAYERS: number = 12;
 
@@ -145,7 +152,7 @@ export class Room implements HostStage {
     private readonly timeline: RoomEvent[] = [];
     private readonly host: Host;
     private readonly voice: HostVoice;
-    private readonly speech: OpenAiRealtimeSpeech = new OpenAiRealtimeSpeech();
+    private readonly speech: OpenAiRealtimeSpeech | SilentSpeech = TEXT_ONLY === true ? new SilentSpeech() : new OpenAiRealtimeSpeech();
     private woken: boolean = false;
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
@@ -251,6 +258,10 @@ export class Room implements HostStage {
             }
             if (message.type === "rename") {
                 this.rename(player, message.name);
+                return;
+            }
+            if (message.type === "textOnlySay") {
+                this.onTextOnlySay(player, message.text);
                 return;
             }
             if (message.type === "leave") {
@@ -525,11 +536,27 @@ export class Room implements HostStage {
     }
 
     /**
+     * Treats text from a test phone as a finished utterance. Ignored outside the test mode, so
+     * no phone can put words in the room without speaking them.
+     * @param player the player.
+     * @param text the words.
+     */
+    private onTextOnlySay(player: Player, text: string): void {
+        if (TEXT_ONLY === false) {
+            return;
+        }
+        this.host.interrupt(this.hostSpeaking);
+        this.caption = { speaker: player.name, text, final: true };
+        this.broadcastScene();
+        this.host.notice(`${player.name}: ${text}`, WAKE_DELAY_MILLISECONDS.speech);
+    }
+
+    /**
      * Opens the player's next transcription session ahead of time, unless one is waiting.
      * @param player the player.
      */
     private prepareStandby(player: Player): void {
-        if (player.connected === false || player.standby !== null) {
+        if (TEXT_ONLY === true || player.connected === false || player.standby !== null) {
             return;
         }
         const session: TranscribeSession = this.openTranscribe(player, "PUSH_TO_TALK");

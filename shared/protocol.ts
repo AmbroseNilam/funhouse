@@ -14,7 +14,8 @@ export type PhoneMessage =
     | { type: "input"; input: ControlInput }
     | { type: "holdToTalk"; down: boolean }
     | { type: "rename"; name: string }
-    | { type: "leave" };
+    | { type: "leave" }
+    | { type: "textOnlySay"; text: string };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
@@ -55,6 +56,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "rename") {
         return typeof message.name === "string";
+    }
+    if (message.type === "textOnlySay") {
+        return typeof message.text === "string";
     }
     if (message.type === "input") {
         const input: { value?: unknown; controlIndex?: unknown } | null = typeof message.input === "object" ? message.input : null;
