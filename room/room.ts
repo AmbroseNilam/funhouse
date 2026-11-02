@@ -513,7 +513,8 @@ export class Room implements HostStage {
             if (this.hostThinking === false || this.voice.isBusy() === true) {
                 return;
             }
-            const fresh: number[] = this.acknowledgements.map((_pcm: Uint8Array, index: number) => index).filter((index: number) => this.recentAcknowledgements.includes(index) === false);
+            const indexes: number[] = this.acknowledgements.map((_pcm: Uint8Array, index: number) => index);
+            const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.includes(index) === false);
             const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
             const pcm: Uint8Array | undefined = index === undefined ? undefined : this.acknowledgements[index];
             if (index === undefined || pcm === undefined) {
