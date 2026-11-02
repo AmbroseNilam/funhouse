@@ -23,11 +23,17 @@ const SEAT_KEY: string = "gameroom.seat";
 /** Longest wait between reconnect attempts. */
 const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
 
+/** The seat as this page knows it, so a reconnect works even when storage is blocked. */
+let seatInMemory: SavedSeat | null = null;
+
 /**
- * Reads the saved seat, if storage allows and holds one.
+ * Reads the saved seat, if this page or storage holds one.
  * @returns the seat or null.
  */
 function readSeat(): SavedSeat | null {
+    if (seatInMemory !== null) {
+        return seatInMemory;
+    }
     try {
         const raw: string | null = localStorage.getItem(SEAT_KEY);
         if (raw === null) {
@@ -48,6 +54,7 @@ function readSeat(): SavedSeat | null {
  * @param seat the seat the room gave this phone.
  */
 function writeSeat(seat: SavedSeat): void {
+    seatInMemory = seat;
     try {
         localStorage.setItem(SEAT_KEY, JSON.stringify(seat));
     } catch {
@@ -57,6 +64,7 @@ function writeSeat(seat: SavedSeat): void {
 
 /** Forgets the seat, so this phone joins as someone new next time. */
 function clearSeat(): void {
+    seatInMemory = null;
     try {
         localStorage.removeItem(SEAT_KEY);
     } catch {
@@ -84,6 +92,9 @@ const LOCK_LIMIT_MILLISECONDS: number = 30000;
 
 /** How long the tick shows after letting go. */
 const SENT_TICK_MILLISECONDS: number = 900;
+
+/** Close code the room uses when this seat has been opened somewhere else. */
+const RESUMED_ELSEWHERE_CODE: number = 4000;
 
 /** Local phone state. */
 interface PhoneState {
@@ -191,6 +202,7 @@ export function App(): ReactElement {
     const pressedAtRef = useRef<number>(0);
     const swallowReleaseRef = useRef<boolean>(false);
     const [locked, setLocked] = useState<boolean>(false);
+    const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
 
@@ -247,9 +259,18 @@ export function App(): ReactElement {
                 }
                 dispatch({ type: "message", message });
             };
-            socket.onclose = (): void => {
+            socket.onclose = (event: CloseEvent): void => {
                 dispatch({ type: "connection", connected: false });
+                window.clearTimeout(silenceTimer);
                 if (stopped === true || socketRef.current !== socket) {
+                    return;
+                }
+                holdingRef.current = false;
+                setLocked(false);
+                dispatch({ type: "holding", holding: false });
+                if (event.code === RESUMED_ELSEWHERE_CODE) {
+                    stopped = true;
+                    setMovedAway(true);
                     return;
                 }
                 retryTimer = window.setTimeout(connect, retryDelay);
@@ -412,6 +433,16 @@ export function App(): ReactElement {
         }
         stopTalking();
     };
+
+    if (movedAway === true) {
+        return (
+            <main className="phone name">
+                <h1>You're playing somewhere else</h1>
+                <p>This seat is open in another tab or window.</p>
+                <button onClick={() => { location.reload(); }}>Use this tab instead</button>
+            </main>
+        );
+    }
 
     if (state.stage === "name") {
         return (
