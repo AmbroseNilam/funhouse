@@ -19,6 +19,8 @@ export interface GameStage {
     changed(): void;
     /** Asks the host's model for content the rules need; the result arrives as contentReady. */
     requestContent(prompt: string): void;
+    /** Draws a picture; the result arrives as drawingReady. */
+    requestDrawing(id: string, prompt: string): void;
     /** Records something that happened on the room's timeline. */
     record(event: RoomEvent): void;
 }
@@ -215,6 +217,9 @@ export class GameSession<State> implements RunningGame {
         }
         if (step.contentRequest !== undefined) {
             this.stage.requestContent(step.contentRequest);
+        }
+        for (const draw of step.draws ?? []) {
+            this.stage.requestDrawing(draw.id, draw.prompt);
         }
         if (previous !== step.state) {
             this.stage.changed();

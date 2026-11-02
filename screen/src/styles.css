@@ -23,6 +23,10 @@
 }
 
 @layer components {
+    .backdrop { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; opacity: 0.38; animation: backdrop-in 1200ms ease; pointer-events: none; }
+    .blocks, .join { position: relative; }
+    .blocks .image { margin: 0; }
+    .blocks .image img { max-height: 52vh; width: auto; border-radius: 20px; animation: reveal-in 900ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .stage { display: grid; grid-template-columns: 1fr minmax(240px, 22vw); gap: 4vw; padding: 4vw; height: 100%; box-sizing: border-box; transition: background 800ms ease; }
     .blocks { display: flex; flex-direction: column; gap: 2vw; justify-content: center; min-width: 0; }
     .kicker { color: var(--accent); text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.7em; margin: 0 0 0.5em; }
@@ -42,7 +46,11 @@
     .progress strong { font-family: var(--font-display); font-size: 1.6em; font-weight: 600; }
     .progress-track { grid-column: 1 / -1; height: 10px; border-radius: 999px; background: var(--panel); overflow: hidden; }
     .progress-fill { height: 100%; background: var(--accent); transition: width 400ms ease; }
-    .caption { color: var(--muted); border-left: 3px solid var(--accent); padding-left: 0.8em; }
+    .caption { color: var(--fg); background: color-mix(in srgb, var(--bg) 72%, transparent); border-left: 3px solid var(--accent); border-radius: 0 12px 12px 0; padding: 0.6em 0.9em; backdrop-filter: blur(4px); }
+    .caption strong { color: var(--accent); font-weight: 600; }
+    .stage:not(.mood-lobby) .join img { display: none; }
+    .stage:not(.mood-lobby) .join .code { order: 3; font-size: 1em; color: var(--muted); }
+    .stage:not(.mood-lobby) .join .orb { width: 68%; }
     .join { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1em; background: var(--panel); border-radius: 24px; padding: 2vw; }
     .join img { width: 100%; border-radius: 12px; background: white; padding: 4%; box-sizing: border-box; }
     .code { font-family: var(--font-display); font-size: 2.4em; letter-spacing: 0.3em; margin: 0; }
@@ -60,6 +68,16 @@
     .phone-gate-join { margin-top: 16px; padding: 0.9em 1.2em; border-radius: 14px; background: var(--accent); color: #111; font-weight: 600; text-align: center; text-decoration: none; }
     .phone-gate-continue { padding: 0.8em; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.9em; text-decoration: underline; }
     .stage[data-connected="false"] .join::after { content: "Reconnecting…"; color: var(--muted); font-size: 0.8em; }
+}
+
+@keyframes backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 0.38; }
+}
+
+@keyframes reveal-in {
+    from { opacity: 0; scale: 0.92; }
+    to { opacity: 1; scale: 1; }
 }
 
 @keyframes orb-breathe {

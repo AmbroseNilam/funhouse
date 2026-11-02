@@ -40,6 +40,8 @@ export interface WerewolfState {
     /** Who was voted out last, for narration. */
     lastLynched: string | null;
     winner: "werewolves" | "villagers" | null;
+    /** Pictures drawn for this game, by id; the game plays fine without them. */
+    art: Record<string, string>;
 }
 
 /** Group id shared by the werewolves, for group-scoped facts and controls. */
@@ -59,6 +61,18 @@ export const DAWN_SECONDS: number = 12;
 
 /** Seconds the vote stays open before counting what's in. */
 export const VOTE_SECONDS: number = 45;
+
+/** Shared look for every picture in a game, so they read as one village. */
+const ART_STYLE: string = "A painted storybook illustration of a small timber village in the woods, wide view, rich and moody, no people's faces, no text or letters.";
+
+/** The pictures a game draws at the start, before anything needs them. */
+const ART_PROMPTS: { id: string; prompt: string }[] = [
+    { id: "night", prompt: `${ART_STYLE} Deep blue night, full moon, every window dark, something moving between the trees.` },
+    { id: "dawn", prompt: `${ART_STYLE} Cold pink dawn, mist in the lanes, a single door hanging open.` },
+    { id: "day", prompt: `${ART_STYLE} Overcast afternoon, the village square, a long table with empty chairs, tension in the air.` },
+    { id: "villagers", prompt: `${ART_STYLE} Golden morning, lanterns and bunting across the square, a wolf's shadow fleeing into the distance.` },
+    { id: "werewolves", prompt: `${ART_STYLE} Blood-red moon, the village abandoned, wolf silhouettes howling on the rooftops.` },
+];
 
 /**
  * Deterministic shuffle so tests can replay a seating.
@@ -223,8 +237,8 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             const facts: ScopedFact[] = seats.map((seat) => ({ scope: { kind: "player", playerId: seat.playerId }, kind: "role-assigned", text: `You are a ${seat.role}.` }));
             facts.push({ scope: { kind: "group", groupId: WEREWOLF_GROUP }, kind: "pack", text: `The werewolves are ${seats.filter((seat) => seat.role === "werewolf").map((seat) => seat.name).join(" and ")}.` });
             facts.push(publicFact("setup", `${players.length} players. ${werewolfCount(players.length)} werewolf${werewolfCount(players.length) > 1 ? "s" : ""} among them.`));
-            const state: WerewolfState = { phase: "roles", round: 1, seats, variants, nightChoices: {}, seerTarget: null, dayVotes: {}, lastVictim: null, lastLynched: null, winner: null };
-            return { state, facts, nextPhaseId: "roles", timers: { roles: ROLES_SECONDS } };
+            const state: WerewolfState = { phase: "roles", round: 1, seats, variants, nightChoices: {}, seerTarget: null, dayVotes: {}, lastVictim: null, lastLynched: null, winner: null, art: {} };
+            return { state, facts, nextPhaseId: "roles", timers: { roles: ROLES_SECONDS }, draws: ART_PROMPTS };
         },
 
         phaseOf(state: WerewolfState): string {
@@ -293,6 +307,9 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         onEvent(state: WerewolfState, event: RoomEvent): Step<WerewolfState> {
+            if (event.type === "drawingReady") {
+                return { state: { ...state, art: { ...state.art, [event.id]: event.src } }, facts: [] };
+            }
             if (event.type === "phaseChanged" && event.phaseId === "advance") {
                 return advance(state);
             }
@@ -315,25 +332,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         publicScene(state: WerewolfState): Scene {
-            const roster = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: state.phase === "night", ...(seat.alive === false ? { badge: "out" } : {}) }));
-            if (state.phase === "night") {
-                return { mood: "night", transition: "dim", blocks: [{ type: "title", text: "Night falls", kicker: `Round ${state.round}` }, { type: "text", text: "Everyone, eyes closed.", emphasis: "whisper" }, { type: "roster", players: roster }] };
-            }
-            if (state.phase === "discussion") {
-                const blocks: Scene["blocks"] = [{ type: "title", text: "Who is the werewolf?", kicker: `Day ${state.round}` }, { type: "roster", players: roster }];
-                if (state.variants.dayTimer === true) {
-                    blocks.push({ type: "timer", seconds: DISCUSSION_SECONDS, label: "to decide", running: true });
-                }
-                return { mood: "tense", transition: "fade", blocks };
-            }
-            if (state.phase === "vote") {
-                const rows = alive(state).map((seat) => ({ label: seat.name, count: Object.values(state.dayVotes).filter((vote) => vote === seat.playerId).length }));
-                return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }] };
-            }
-            if (state.phase === "end") {
-                return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks: [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win" }, { type: "roster", players: roster }] };
-            }
-            return { mood: state.phase === "dawn" ? "dawn" : "neutral", transition: "fade", blocks: [{ type: "title", text: state.phase === "dawn" ? "Dawn" : "Look at your phone", kicker: `Round ${state.round}` }, { type: "roster", players: roster }] };
+            return withBackdrop(state, baseScene(state));
         },
 
         privateControls(state: WerewolfState, playerId: string): Control[] {
@@ -388,6 +387,45 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return state.winner === "villagers" ? "The village wins." : "The werewolves win.";
         },
     };
+
+    /**
+     * The scene for the current phase, before any picture.
+     * @param state the state.
+     * @returns the scene.
+     */
+    function baseScene(state: WerewolfState): Scene {
+        const roster = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: state.phase === "night", ...(seat.alive === false ? { badge: "out" } : {}) }));
+        if (state.phase === "night") {
+            return { mood: "night", transition: "dim", blocks: [{ type: "title", text: "Night falls", kicker: `Round ${state.round}` }, { type: "text", text: "Everyone, eyes closed.", emphasis: "whisper" }, { type: "roster", players: roster }] };
+        }
+        if (state.phase === "discussion") {
+            const blocks: Scene["blocks"] = [{ type: "title", text: "Who is the werewolf?", kicker: `Day ${state.round}` }, { type: "roster", players: roster }];
+            if (state.variants.dayTimer === true) {
+                blocks.push({ type: "timer", seconds: DISCUSSION_SECONDS, label: "to decide", running: true });
+            }
+            return { mood: "tense", transition: "fade", blocks };
+        }
+        if (state.phase === "vote") {
+            const rows = alive(state).map((seat) => ({ label: seat.name, count: Object.values(state.dayVotes).filter((vote) => vote === seat.playerId).length }));
+            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }] };
+        }
+        if (state.phase === "end") {
+            return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks: [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win" }, { type: "roster", players: roster }] };
+        }
+        return { mood: state.phase === "dawn" ? "dawn" : "neutral", transition: "fade", blocks: [{ type: "title", text: state.phase === "dawn" ? "Dawn" : "Look at your phone", kicker: `Round ${state.round}` }, { type: "roster", players: roster }] };
+    }
+
+    /**
+     * Adds the phase's picture behind a scene, once it's been drawn.
+     * @param state the state.
+     * @param scene the scene.
+     * @returns the scene with its backdrop.
+     */
+    function withBackdrop(state: WerewolfState, scene: Scene): Scene {
+        const artId: string = state.phase === "end" ? state.winner ?? "" : state.phase === "dawn" ? "dawn" : state.phase === "night" || state.phase === "roles" ? "night" : "day";
+        const backdrop: string | undefined = state.art[artId];
+        return backdrop === undefined ? scene : { ...scene, backdrop };
+    }
 
     /**
      * Whether every night actor has chosen.

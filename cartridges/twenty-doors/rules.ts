@@ -55,6 +55,8 @@ export interface TwentyDoorsState {
     heard: { playerId: string; text: string } | null;
     won: boolean;
     finder: string | null;
+    /** The picture of the secret, drawn in secret for the reveal. */
+    revealPicture: string | null;
 }
 
 /**
@@ -100,7 +102,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
 
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
             const category: { name: string; fallback: string } = CATEGORIES[Math.floor(random() * CATEGORIES.length)] ?? { name: "an animal", fallback: "platypus" };
-            const state: TwentyDoorsState = { phase: "choosing", players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], heard: null, won: false, finder: null };
+            const state: TwentyDoorsState = { phase: "choosing", players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], heard: null, won: false, finder: null, revealPicture: null };
             return {
                 state,
                 facts: [],
@@ -140,7 +142,15 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 const chosen: string = event.text.trim().replace(/[."'!]/g, "");
                 const secret: string = chosen === "" || chosen.length > SECRET_CHARACTER_LIMIT ? state.fallback : chosen;
                 const next: TwentyDoorsState = { ...state, phase: "asking", secret };
-                return { state: next, facts: [publicFact("ready", `The secret is chosen. Tell them it's ${state.category} and they have ${DOOR_COUNT} doors, and invite the first question.`)], nextPhaseId: "asking" };
+                return {
+                    state: next,
+                    facts: [publicFact("ready", `The secret is chosen. Tell them it's ${state.category} and they have ${DOOR_COUNT} doors, and invite the first question.`)],
+                    nextPhaseId: "asking",
+                    draws: [{ id: "reveal", prompt: `A warm storybook painting of ${secret}, seen through an open wooden door, glowing light, rich color, no text or letters.` }],
+                };
+            }
+            if (event.type === "drawingReady" && event.id === "reveal") {
+                return { state: { ...state, revealPicture: event.src }, facts: [] };
             }
             if (event.type === "speechEnded" && state.phase === "asking") {
                 return { state: { ...state, heard: { playerId: event.playerId, text: event.text } }, facts: [] };
@@ -167,7 +177,11 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors" }, { type: "text", text: "Choosing a secret…", emphasis: "whisper" }] };
             }
             if (state.phase === "end") {
-                const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT }];
+                const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
+                if (state.revealPicture !== null) {
+                    blocks.push({ type: "image", src: state.revealPicture });
+                }
+                blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };
             }
             const recent: SceneBlock[] = state.asked.slice(-SHOWN_QUESTIONS).map((entry: AskedQuestion) => ({ type: "text", text: `${entry.question} ${entry.answer}.` }));

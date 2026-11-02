@@ -70,6 +70,8 @@ export interface Step<State> {
     timers?: Record<string, number>;
     /** Asks the host's model to write content, such as a secret; it returns as contentReady. */
     contentRequest?: string;
+    /** Pictures to draw ahead of need; each returns as drawingReady, or never if drawing fails. */
+    draws?: { id: string; prompt: string }[];
 }
 
 /** The executable half of a cartridge. Pure functions over an immutable state. */

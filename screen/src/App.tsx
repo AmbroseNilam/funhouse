@@ -244,6 +244,7 @@ export function App(): ReactElement {
     const mood: string = state.scene?.mood ?? "neutral";
     return (
         <main className={`stage mood-${mood}`} data-connected={state.connected}>
+            {state.scene?.backdrop !== undefined ? <img key={state.scene.backdrop} className="backdrop" src={state.scene.backdrop} alt="" /> : null}
             <section className="blocks">{state.scene?.blocks.map(renderBlock)}</section>
             <aside className="join">
                 {state.qrDataUrl !== "" ? <img src={state.qrDataUrl} alt={`QR code to join room ${state.roomCode}`} /> : null}

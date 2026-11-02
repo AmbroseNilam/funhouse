@@ -44,6 +44,8 @@ export interface Scene {
     mood: Mood;
     transition: Transition;
     blocks: SceneBlock[];
+    /** A picture to show behind everything, dimmed. */
+    backdrop?: string;
 }
 
 /** The screen before any game starts. */

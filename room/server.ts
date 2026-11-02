@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
+import type { Drawing } from "../providers/meta/image.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
 import { RoomDirectory } from "./directory.ts";
 import type { Room } from "./room.ts";
@@ -57,6 +58,16 @@ function turnAway(socket: WebSocket, reason: RejectedReason): void {
  */
 async function serveStatic(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url: URL = new URL(request.url ?? "/", "http://room");
+    const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/(\d+)$/.exec(url.pathname);
+    if (drawing !== null) {
+        const found: Drawing | undefined = directory.find(drawing[1] ?? "")?.drawing(drawing[2] ?? "");
+        if (found === undefined) {
+            response.writeHead(404).end();
+            return;
+        }
+        response.writeHead(200, { "content-type": found.mediaType, "cache-control": "private, max-age=3600" }).end(found.bytes);
+        return;
+    }
     const [, stage, ...rest] = (url.pathname === "/" ? "/landing/" : url.pathname).split("/");
     const root: string | undefined = STAGE_ROOTS[stage ?? ""];
     if (root === undefined) {

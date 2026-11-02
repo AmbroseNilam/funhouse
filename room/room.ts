@@ -19,6 +19,7 @@ import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.t
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import { drawImage, type Drawing } from "../providers/meta/image.ts";
 import { streamSpark } from "../providers/meta/spark.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
@@ -93,6 +94,15 @@ const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
 
 /** Room for hidden reasoning plus a list of questions or a secret. */
 const CONTENT_TOKEN_LIMIT: number = 2000;
+
+/** Most pictures one room draws. Each costs about a cent and sits in memory until it closes. */
+const MAX_DRAWINGS: number = 24;
+
+/**
+ * True when pictures are drawn. The text-only test mode skips them to stay fast, unless asked
+ * with GAME_ROOM_DRAW=1.
+ */
+const DRAWING_ON: boolean = TEXT_ONLY === false || process.env.GAME_ROOM_DRAW === "1";
 
 /** Longest text a phone may send through a control. */
 const MAX_INPUT_CHARACTERS: number = 200;
@@ -170,6 +180,8 @@ export class Room implements HostStage {
     private readonly speech: OpenAiRealtimeSpeech | SilentSpeech = TEXT_ONLY === true ? new SilentSpeech() : new OpenAiRealtimeSpeech();
     private woken: boolean = false;
     private game: RunningGame | null = null;
+    private readonly drawings: Map<string, Drawing> = new Map();
+    private drawingsAsked: number = 0;
     /** Who spoke last, so a ruling can be credited to them. */
     private lastSpeakerId: string | null = null;
     private nextPlayerNumber: number = 1;
@@ -206,8 +218,19 @@ export class Room implements HostStage {
 
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
+        this.game?.stop();
         this.host.interrupt(false);
         this.speech.close();
+        this.drawings.clear();
+    }
+
+    /**
+     * Finds a picture this room has drawn.
+     * @param number the number in its address.
+     * @returns the picture, or undefined.
+     */
+    public drawing(number: string): Drawing | undefined {
+        return this.drawings.get(number);
     }
 
     /** Readies the voice on first real use, so a page load alone spends nothing. */
@@ -518,6 +541,7 @@ export class Room implements HostStage {
                 this.refreshPhones();
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
+            requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
             record: (event: RoomEvent): void => { this.record(event); },
         };
     }
@@ -547,6 +571,29 @@ export class Room implements HostStage {
                 game?.event({ type: "contentReady", at: Date.now(), text });
             }
         }).catch((error: unknown) => { log(this.scope(), `content not applied: ${error instanceof Error ? error.message : String(error)}`); });
+    }
+
+    /**
+     * Draws a picture for the running game and tells it where to find the result. A failed
+     * drawing is only logged; every game has to look fine without its pictures.
+     * @param id the game's name for the picture.
+     * @param prompt what to draw.
+     */
+    private draw(id: string, prompt: string): void {
+        if (DRAWING_ON === false || this.drawings.size >= MAX_DRAWINGS) {
+            return;
+        }
+        const game: RunningGame | null = this.game;
+        const number: number = this.drawingsAsked;
+        this.drawingsAsked += 1;
+        const startedAt: number = Date.now();
+        drawImage(prompt).then((drawing: Drawing) => {
+            this.drawings.set(String(number), drawing);
+            log(this.scope(), `drew ${id} in ${Date.now() - startedAt} ms`);
+            if (this.game === game) {
+                game?.event({ type: "drawingReady", at: Date.now(), id, src: `/drawings/${this.code}/${number}` });
+            }
+        }).catch((error: unknown) => { log(this.scope(), `couldn't draw ${id}: ${error instanceof Error ? error.message : String(error)}`); });
     }
 
     /** Sends every phone its current view. */
