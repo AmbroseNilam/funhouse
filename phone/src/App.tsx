@@ -63,6 +63,12 @@ function clearSeat(): void {
     }
 }
 
+/** How often the talk button follows the microphone's loudness. */
+const LEVEL_INTERVAL_MILLISECONDS: number = 50;
+
+/** How long the tick shows after letting go. */
+const SENT_TICK_MILLISECONDS: number = 900;
+
 /** Local phone state. */
 interface PhoneState {
     stage: "name" | "joining" | "joined";
@@ -151,6 +157,8 @@ export function App(): ReactElement {
     const socketRef = useRef<WebSocket | null>(null);
     const captureRef = useRef<MicrophoneCapture | null>(null);
     const holdingRef = useRef<boolean>(false);
+    const talkRef = useRef<HTMLButtonElement | null>(null);
+    const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
 
     useEffect(() => {
@@ -221,6 +229,27 @@ export function App(): ReactElement {
         return keepScreenOn();
     }, [joined]);
 
+    useEffect(() => {
+        if (state.holding === false) {
+            return;
+        }
+        const timer: number = window.setInterval(() => {
+            talkRef.current?.style.setProperty("--level", (captureRef.current?.level() ?? 0).toFixed(3));
+        }, LEVEL_INTERVAL_MILLISECONDS);
+        return (): void => {
+            window.clearInterval(timer);
+            talkRef.current?.style.setProperty("--level", "0");
+        };
+    }, [state.holding]);
+
+    useEffect(() => {
+        if (sent === false) {
+            return;
+        }
+        const timer: number = window.setTimeout(() => { setSent(false); }, SENT_TICK_MILLISECONDS);
+        return (): void => { window.clearTimeout(timer); };
+    }, [sent]);
+
     const send = (message: PhoneMessage): void => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(JSON.stringify(message));
@@ -249,6 +278,12 @@ export function App(): ReactElement {
     };
 
     const setHolding = (holding: boolean): void => {
+        if (holding === false && holdingRef.current === true) {
+            setSent(true);
+        }
+        if (holding === true) {
+            setSent(false);
+        }
         holdingRef.current = holding;
         dispatch({ type: "holding", holding });
         send({ type: "holdToTalk", down: holding });
@@ -300,14 +335,15 @@ export function App(): ReactElement {
             </header>
             <section className="controls">{view?.controls.map((control, index) => renderControl(control, index, send))}</section>
             <button
-                className={`talk ${state.holding === true ? "holding" : ""}`}
+                ref={talkRef}
+                className={`talk ${state.holding === true ? "holding" : ""} ${sent === true ? "sent" : ""}`}
                 disabled={canTalk === false}
                 onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); void ensureMicrophone(); setHolding(true); }}
                 onPointerUp={() => { setHolding(false); }}
                 onPointerCancel={() => { setHolding(false); }}
                 onContextMenu={(event) => { event.preventDefault(); }}
             >
-                {state.holding === true ? "Listening" : "Hold to talk"}
+                {state.holding === true ? "Listening" : sent === true ? "✓" : "Hold to talk"}
             </button>
             <p className="status" role="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : state.holding === true ? "Let go when you're done." : view?.status ?? ""}</p>
             {menu === "closed" ? null : (

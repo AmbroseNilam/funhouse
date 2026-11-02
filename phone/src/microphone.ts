@@ -3,10 +3,18 @@
 // iOS ends the track or suspends the audio context after a lock or a phone call, so the page
 // asks whether a capture is still live before relying on it.
 
+/** Samples the loudness reading looks at; about 40 ms at 48 kHz. */
+const LEVEL_WINDOW_SAMPLES: number = 2048;
+
+/** Scales raw loudness so ordinary speech fills most of the 0 to 1 range. */
+const LEVEL_GAIN: number = 5;
+
 /** A running capture that can be stopped. */
 export interface MicrophoneCapture {
     /** True while the track is live and the audio context is running. */
     isLive(): boolean;
+    /** How loud the microphone is right now, from 0 to about 1. */
+    level(): number;
     /** Tries to wake a suspended audio context; call from a user gesture. */
     resume(): Promise<void>;
     stop(): void;
@@ -27,9 +35,21 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     const worklet: AudioWorkletNode = new AudioWorkletNode(context, "pcm-downsampler");
     worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => { onFrame(event.data); };
     source.connect(worklet);
+    const analyser: AnalyserNode = context.createAnalyser();
+    analyser.fftSize = LEVEL_WINDOW_SAMPLES;
+    source.connect(analyser);
+    const window: Float32Array<ArrayBuffer> = new Float32Array(LEVEL_WINDOW_SAMPLES);
     return {
         isLive(): boolean {
             return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live") === true && context.state === "running";
+        },
+        level(): number {
+            analyser.getFloatTimeDomainData(window);
+            let sum: number = 0;
+            for (const sample of window) {
+                sum += sample * sample;
+            }
+            return Math.min(1, Math.sqrt(sum / window.length) * LEVEL_GAIN);
         },
         async resume(): Promise<void> {
             await context.resume();
