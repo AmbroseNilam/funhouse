@@ -1,10 +1,11 @@
 // The public stage: connects to the room, keeps the latest scene, and renders it block by
 // block. The screen is deliberately dumb; it draws what it is told and plays what it is sent.
 
-import { useEffect, useReducer, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, type ReactElement } from "react";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
-import { parseMessage, type RoomToScreenMessage } from "../../shared/protocol.ts";
+import { parseMessage, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
+import { HostSpeaker } from "./speaker.ts";
 
 /** Local state reduced from room messages. */
 interface ScreenState {
@@ -14,16 +15,19 @@ interface ScreenState {
     qrDataUrl: string;
     hostListening: boolean;
     hostSpeaking: boolean;
+    hostName: string;
     connected: boolean;
+    started: boolean;
 }
 
 /** Actions that change screen state. */
 type ScreenAction =
     | { type: "message"; message: RoomToScreenMessage }
     | { type: "qr"; dataUrl: string }
-    | { type: "connection"; connected: boolean };
+    | { type: "connection"; connected: boolean }
+    | { type: "started" };
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostListening: false, hostSpeaking: false, connected: false };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostListening: false, hostSpeaking: false, hostName: "Host", connected: false, started: false };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -35,6 +39,9 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     if (action.type === "connection") {
         return { ...state, connected: action.connected };
     }
+    if (action.type === "started") {
+        return { ...state, started: true };
+    }
     if (action.type === "qr") {
         return { ...state, qrDataUrl: action.dataUrl };
     }
@@ -43,7 +50,7 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
         return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode };
     }
     if (message.type === "hostState") {
-        return { ...state, hostListening: message.listening, hostSpeaking: message.speaking };
+        return { ...state, hostListening: message.listening, hostSpeaking: message.speaking, hostName: message.hostName };
     }
     return state;
 }
@@ -79,21 +86,46 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
 /** The screen application. */
 export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
+    const socketRef = useRef<WebSocket | null>(null);
+    const speakerRef = useRef<HostSpeaker | null>(null);
 
     useEffect(() => {
         const protocol: string = location.protocol === "https:" ? "wss" : "ws";
         const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/screen`);
+        socket.binaryType = "arraybuffer";
+        socketRef.current = socket;
         socket.onopen = (): void => { dispatch({ type: "connection", connected: true }); };
         socket.onclose = (): void => { dispatch({ type: "connection", connected: false }); };
-        socket.onmessage = (event: MessageEvent<string>): void => {
+        socket.onmessage = (event: MessageEvent<string | ArrayBuffer>): void => {
+            if (event.data instanceof ArrayBuffer) {
+                speakerRef.current?.play(event.data);
+                return;
+            }
             const message: RoomToScreenMessage | null = parseMessage<RoomToScreenMessage>(event.data);
             if (message === null) {
                 return;
             }
+            if (message.type === "audioCancel") {
+                speakerRef.current?.cancel();
+                return;
+            }
             dispatch({ type: "message", message });
         };
-        return (): void => { socket.close(); };
+        return (): void => {
+            socket.close();
+            socketRef.current = null;
+        };
     }, []);
+
+    /** Unlocks audio with the click browsers require, then tells the room the screen is live. */
+    const start = (): void => {
+        const speaker: HostSpeaker = new HostSpeaker();
+        speakerRef.current = speaker;
+        speaker.unlock().catch((error: unknown) => { console.error("audio unlock failed:", error); });
+        const ready: ScreenMessage = { type: "ready" };
+        socketRef.current?.send(JSON.stringify(ready));
+        dispatch({ type: "started" });
+    };
 
     useEffect(() => {
         if (state.joinUrl === "") {
@@ -115,8 +147,9 @@ export function App(): ReactElement {
             <aside className="join">
                 {state.qrDataUrl !== "" ? <img src={state.qrDataUrl} alt={`QR code to join room ${state.roomCode}`} /> : null}
                 <p className="code">{state.roomCode}</p>
-                <p className={`host ${state.hostListening === true ? "listening" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>Host</p>
+                <p className={`host ${state.hostListening === true ? "listening" : ""} ${state.hostSpeaking === true ? "speaking" : ""}`}>{state.hostName}</p>
             </aside>
+            {state.started === false ? <button className="start" disabled={state.connected === false} onClick={start}>Open the room</button> : null}
         </main>
     );
 }

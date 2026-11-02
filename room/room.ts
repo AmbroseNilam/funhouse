@@ -1,14 +1,17 @@
 // One room: its players, screens, timeline, and the per-phone transcription sessions.
 // The room is the single owner of all mutable state here. It generates each stage's view
 // from the timeline and the loaded cartridge, and it is the only thing that talks to the
-// providers. The host loop plugs in through onSpeech and onEvent once it exists.
+// providers. The host acts on the room only through the HostStage methods below.
 
 import type WebSocket from "ws";
 import type { ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
-import { parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage } from "../shared/protocol.ts";
+import { parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
+import { OpenAiSpeech, type TextToSpeech } from "../providers/openai/speech.ts";
+import { WEREWOLF_MANIFEST } from "../cartridges/werewolf/manifest.ts";
+import { Host, PLACEHOLDER_PERSONA, type HostStage, type Spotlight } from "./host.ts";
 
 /** A connected player and their phone. */
 interface Player {
@@ -20,6 +23,18 @@ interface Player {
     transcribe: TranscribeSession | null;
     holdingToTalk: boolean;
 }
+
+/** The last line spoken in the room, shown as a caption. */
+interface Caption {
+    speaker: string;
+    text: string;
+}
+
+/** Bytes per second of host speech: 24 kHz, 16-bit, mono. */
+const SPEECH_BYTES_PER_SECOND: number = 48000;
+
+/** Pause before the host reacts, so bursts of events land in one turn. */
+const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 250, join: 1200, leave: 1500, screen: 300 };
 
 /** Characters used for room codes; no vowels, so codes never spell words. */
 const CODE_ALPHABET: string = "BCDFGHJKLMNPQRSTVWXZ";
@@ -37,13 +52,18 @@ export function makeRoomCode(): string {
 }
 
 /** The room runtime. One instance per live room. */
-export class Room {
+export class Room implements HostStage {
     public readonly code: string;
     private readonly joinUrl: string;
     private readonly players: Map<string, Player> = new Map();
     private readonly screens: Set<WebSocket> = new Set();
     private readonly timeline: RoomEvent[] = [];
+    private readonly host: Host;
+    private readonly speech: TextToSpeech = new OpenAiSpeech();
     private nextPlayerNumber: number = 1;
+    private spotlight: Spotlight | null = null;
+    private caption: Caption | null = null;
+    private hostSpeaking: boolean = false;
 
     /**
      * Creates an empty room.
@@ -53,6 +73,8 @@ export class Room {
     public constructor(code: string, publicUrl: string) {
         this.code = code;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
+        const games: string[] = [WEREWOLF_MANIFEST].map((manifest) => `${manifest.name}, ${manifest.minPlayers} to ${manifest.maxPlayers} players`);
+        this.host = new Host(this, PLACEHOLDER_PERSONA, games);
     }
 
     /**
@@ -62,7 +84,16 @@ export class Room {
     public attachScreen(socket: WebSocket): void {
         this.screens.add(socket);
         socket.on("close", () => { this.screens.delete(socket); });
+        socket.on("message", (data: WebSocket.RawData) => {
+            const message: ScreenMessage | null = parseMessage<ScreenMessage>(rawDataToText(data));
+            if (message?.type !== "ready") {
+                return;
+            }
+            const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
+            this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
+        });
         this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code });
+        this.sendToScreen(socket, { type: "hostState", listening: false, speaking: this.hostSpeaking, hostName: this.host.persona.name });
     }
 
     /**
@@ -102,6 +133,7 @@ export class Room {
             player.transcribe?.abort();
             this.players.delete(player.playerId);
             this.record({ type: "playerLeft", at: Date.now(), playerId: player.playerId });
+            this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
             this.broadcastScene();
         });
     }
@@ -122,6 +154,7 @@ export class Room {
         this.sendToPhone(player, { type: "welcome", playerId, roomCode: this.code });
         this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
         this.broadcastScene();
+        this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
         return player;
     }
 
@@ -132,6 +165,9 @@ export class Room {
      */
     private onHoldToTalk(player: Player, down: boolean): void {
         player.holdingToTalk = down;
+        if (down === true) {
+            this.host.interrupt();
+        }
         if (down === true && player.transcribe === null) {
             this.openTranscribe(player, "PUSH_TO_TALK");
             return;
@@ -154,7 +190,6 @@ export class Room {
                 this.broadcastScene();
             },
             onTranscript: (text: string, isFinal: boolean): void => {
-                this.broadcastToScreens({ type: "hostState", listening: true, speaking: false });
                 if (isFinal === true && mode === "PUSH_TO_TALK") {
                     this.onSpeechEnded(player, text);
                 }
@@ -203,8 +238,94 @@ export class Room {
      */
     private onSpeechEnded(player: Player, text: string): void {
         player.speaking = false;
-        this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text });
-        this.broadcastToScreens({ type: "scene", scene: this.currentScene(text, player.name), joinUrl: this.joinUrl, roomCode: this.code });
+        const said: string = text.trim();
+        this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
+        if (said === "") {
+            this.broadcastScene();
+            return;
+        }
+        this.caption = { speaker: player.name, text: said };
+        this.broadcastScene();
+        this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
+    }
+
+    /**
+     * Names of the players present, for the host's briefing.
+     * @returns one name per connected player.
+     */
+    public playerNames(): string[] {
+        return [...this.players.values()].map((player) => player.name);
+    }
+
+    /**
+     * Puts the host's headline on the screen.
+     * @param spotlight the headline, detail and mood.
+     */
+    public show(spotlight: Spotlight): void {
+        this.spotlight = spotlight;
+        this.broadcastScene();
+    }
+
+    /**
+     * Streams one host line to every screen as PCM and resolves once it should have finished
+     * playing, so the next line does not talk over it. Cancelling stops the stream and tells
+     * the screens to drop what they have queued.
+     * @param text what the host says.
+     * @param style delivery direction for the voice.
+     * @param signal cancels the line when someone cuts in.
+     */
+    public async speak(text: string, style: string, signal: AbortSignal): Promise<void> {
+        this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
+        this.caption = { speaker: this.host.persona.name, text };
+        this.broadcastScene();
+        this.setHostSpeaking(true);
+        let firstChunkAt: number = 0;
+        let bytes: number = 0;
+        let carry: Uint8Array = new Uint8Array(0);
+        try {
+            this.broadcastToScreens({ type: "audioStart", mediaType: this.speech.mediaType });
+            for await (const chunk of this.speech.speak({ text, voice: this.host.persona.voice, style, signal })) {
+                const joined: Uint8Array = new Uint8Array(carry.length + chunk.length);
+                joined.set(carry);
+                joined.set(chunk, carry.length);
+                const even: number = joined.length - (joined.length % 2);
+                carry = joined.slice(even);
+                if (even === 0) {
+                    continue;
+                }
+                if (firstChunkAt === 0) {
+                    firstChunkAt = Date.now();
+                }
+                bytes += even;
+                this.broadcastAudio(joined.subarray(0, even));
+            }
+            this.broadcastToScreens({ type: "audioEnd" });
+            const remaining: number = firstChunkAt + (bytes / SPEECH_BYTES_PER_SECOND) * 1000 - Date.now();
+            await waitUnlessAborted(remaining, signal);
+        } catch (error: unknown) {
+            if (signal.aborted === false) {
+                console.error("host speech failed:", error instanceof Error ? error.message : String(error));
+            }
+        }
+        if (signal.aborted === true) {
+            this.broadcastToScreens({ type: "audioCancel" });
+        }
+        this.setHostSpeaking(false);
+    }
+
+    /**
+     * Tells screens and phones whether the host is talking.
+     * @param speaking true while host audio is playing.
+     */
+    private setHostSpeaking(speaking: boolean): void {
+        if (this.hostSpeaking === speaking) {
+            return;
+        }
+        this.hostSpeaking = speaking;
+        this.broadcastToScreens({ type: "hostState", listening: false, speaking, hostName: this.host.persona.name });
+        for (const player of this.players.values()) {
+            this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
+        }
     }
 
     /**
@@ -220,7 +341,7 @@ export class Room {
      * @returns the keyword list.
      */
     private keywords(): string[] {
-        return [...this.players.values()].map((player) => player.name);
+        return [this.host.persona.name, ...this.playerNames()];
     }
 
     /**
@@ -232,15 +353,21 @@ export class Room {
     }
 
     /**
-     * The scene for the current moment. Until a cartridge is loaded, this is the lobby.
-     * @param captionText an optional last utterance to show as a caption.
-     * @param captionSpeaker who said it.
+     * The scene for the current moment: the lobby, the host's spotlight, and the last line said.
+     * Until a cartridge is loaded, the base is always the lobby.
      * @returns the scene.
      */
-    private currentScene(captionText?: string, captionSpeaker?: string): Scene {
+    private currentScene(): Scene {
         const scene: Scene = lobbyScene(this.joinUrl, this.code, this.roster());
-        if (captionText !== undefined && captionSpeaker !== undefined) {
-            scene.blocks.push({ type: "caption", speaker: captionSpeaker, text: captionText, final: true });
+        if (this.spotlight !== null) {
+            scene.mood = this.spotlight.mood ?? scene.mood;
+            scene.blocks.splice(1, 0, { type: "text", text: this.spotlight.headline, emphasis: "large" });
+            if (this.spotlight.detail !== undefined) {
+                scene.blocks.splice(2, 0, { type: "text", text: this.spotlight.detail });
+            }
+        }
+        if (this.caption !== null) {
+            scene.blocks.push({ type: "caption", speaker: this.caption.speaker, text: this.caption.text, final: true });
         }
         return scene;
     }
@@ -254,7 +381,7 @@ export class Room {
         return {
             playerName: player.name,
             listening: player.listening,
-            status: "Hold the button to talk to the host.",
+            status: this.hostSpeaking === true ? `${this.host.persona.name} is talking. Hold to cut in.` : `Hold the button to talk to ${this.host.persona.name}.`,
             controls: [{ type: "waiting", text: `You are in room ${this.code}. Waiting for the host.` }],
         };
     }
@@ -276,6 +403,16 @@ export class Room {
     }
 
     /**
+     * Sends one chunk of host audio to every attached screen as a binary frame.
+     * @param chunk PCM bytes, always an even count.
+     */
+    private broadcastAudio(chunk: Uint8Array): void {
+        for (const screen of this.screens) {
+            screen.send(chunk);
+        }
+    }
+
+    /**
      * Sends a message to one screen.
      * @param socket the screen.
      * @param message the message.
@@ -292,4 +429,26 @@ export class Room {
     private sendToPhone(player: Player, message: RoomToPhoneMessage): void {
         player.socket.send(JSON.stringify(message));
     }
+}
+
+/**
+ * Waits the given time, returning early if the signal aborts.
+ * @param milliseconds how long to wait; zero or less returns at once.
+ * @param signal ends the wait early.
+ */
+function waitUnlessAborted(milliseconds: number, signal: AbortSignal): Promise<void> {
+    if (milliseconds <= 0 || signal.aborted === true) {
+        return Promise.resolve();
+    }
+    return new Promise((resolve: () => void) => {
+        const timer: NodeJS.Timeout = setTimeout(() => {
+            signal.removeEventListener("abort", stop);
+            resolve();
+        }, milliseconds);
+        const stop = (): void => {
+            clearTimeout(timer);
+            resolve();
+        };
+        signal.addEventListener("abort", stop, { once: true });
+    });
 }

@@ -26,12 +26,14 @@ export function readMetaKey(): string {
  * Sends a JSON body to a Meta Model API path and returns the raw response.
  * @param path path under the base URL, starting with a slash.
  * @param body JSON-serializable request body.
+ * @param signal aborts the request when the caller no longer wants the answer.
  * @returns the successful response, left unread so callers can stream it.
  * @throws Error with status and a short body excerpt when the API rejects the call.
  */
-export async function postJson(path: string, body: unknown): Promise<Response> {
+export async function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
     const response: Response = await fetch(`${META_BASE_URL}${path}`, {
         method: "POST",
+        signal: signal ?? null,
         headers: { authorization: `Bearer ${readMetaKey()}`, "content-type": "application/json" },
         body: JSON.stringify(body),
     });

@@ -19,14 +19,19 @@ export type RoomToPhoneMessage =
 
 /** Screen to room. */
 export type ScreenMessage =
-    | { type: "hello" };
+    | { type: "hello" }
+    | { type: "ready" };
 
-/** Room to screen. Host audio follows as binary frames after an audioStart. */
+/**
+ * Room to screen. Host audio follows as binary 24 kHz 16-bit mono PCM frames after an
+ * audioStart; audioCancel means drop anything still queued because someone cut in.
+ */
 export type RoomToScreenMessage =
     | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string }
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
-    | { type: "hostState"; listening: boolean; speaking: boolean };
+    | { type: "audioCancel" }
+    | { type: "hostState"; listening: boolean; speaking: boolean; hostName: string };
 
 /**
  * Parses a text frame into a message, or returns null when it is not valid JSON with a type.

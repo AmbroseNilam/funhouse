@@ -43,8 +43,15 @@
     .code { font-family: var(--font-display); font-size: 2.4em; letter-spacing: 0.3em; margin: 0; }
     .host { color: var(--muted); margin: 0; }
     .host.listening { color: var(--accent); }
-    .host.speaking { color: var(--fg); }
+    .host.speaking { color: var(--fg); animation: host-pulse 900ms ease-in-out infinite alternate; }
+    .start { position: fixed; inset: auto 0 6vh; margin: 0 auto; width: max-content; font: inherit; font-size: 1.1em; padding: 0.8em 2em; border-radius: 999px; border: 0; background: var(--accent); color: var(--bg); cursor: pointer; }
+    .start:disabled { opacity: 0.4; cursor: wait; }
     .stage[data-connected="false"] .join::after { content: "Reconnecting…"; color: var(--muted); font-size: 0.8em; }
+}
+
+@keyframes host-pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
 }
 
 @layer moods {
