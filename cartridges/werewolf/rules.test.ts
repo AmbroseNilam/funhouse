@@ -61,7 +61,7 @@ describe("werewolf night and day", () => {
 
         state = advance(game, state).state;
         assert.equal(state.phase, "night");
-        assert.deepEqual(game.privateControls(state, villagers[0] as string), [{ type: "waiting", text: "Eyes closed. Keep your phone dark." }]);
+        assert.deepEqual(game.privateControls(state, villagers[0] as string), [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }]);
         assert.equal(game.legalActions(state, villagers[0] as string).length, 0, "villagers have no night action");
 
         // An illegal action is ignored without changing state.
