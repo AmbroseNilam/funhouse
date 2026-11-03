@@ -5,8 +5,7 @@
 // VoiceOutput. A phone that drops keeps its seat for a grace period and can resume it.
 // Latency moves, measured and explained in the planning notes: partial transcripts show live
 // on the screen, each phone keeps a transcription session open ahead of its next press, and a
-// short pre-recorded acknowledgement plays when the host was addressed and its reply is not
-// audible soon after the final text arrives.
+// short pre-recorded filler plays when a reply is slow to start.
 
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
@@ -80,20 +79,13 @@ interface Caption {
 /** Pause before the host reacts, so bursts of events land in one turn. */
 const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 0, join: 900, leave: 1500, screen: 300 };
 
-/**
- * How long after the final text the host's reply may take before an acknowledgement plays.
- * Long enough that quick replies skip it: fillers help with medium and long waits, and heard
- * on every turn they sound mechanical (arXiv 2507.22352, 2508.11781).
- */
-const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
-
-/** The livelier host's filler only plays if the reply still hasn't started this long after a thumb lifts; people hear anything sooner as not listening. */
+/** A filler only plays if the reply still hasn't started this long after a thumb lifts; people hear anything sooner as not listening. */
 const FILLER_AFTER_RELEASE_MILLISECONDS: number = 600;
 
 /** A press shorter than this gets a real reply with nothing in front of it. */
 const FILLER_MINIMUM_WORDS: number = 3;
 
-/** Chance an eligible press gets a filler; repeated fillers soon grate (arXiv 2508.11781). */
+/** Chance an eligible press gets a filler, the one dial for how often the host reacts; 0 turns it off. Repeated fillers soon grate (arXiv 2508.11781). */
 const FILLER_CHANCE: number = 0.5;
 
 /** Fillers that can't disagree with what comes next, because the ruling isn't known yet. */
@@ -104,9 +96,6 @@ const QUESTION_REACTIONS: string[] = ["Hm.", "Let's see."];
 
 /** How a spoken question usually starts, for when the transcript has no question mark. */
 const QUESTION_START: RegExp = /^(who|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
-
-/** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
-const ACKNOWLEDGE_CHANCE: number = 0.6;
 
 /**
 /** The one game the livelier host is tried in, in rooms opened for it: moods, callbacks, quicker reactions and now and then speaking up. */
@@ -150,8 +139,8 @@ function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
     return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiSpeech()) : new OpenAiRealtimeSpeech();
 }
 
-/** Short, varied acknowledgements, rendered once per room and played sparingly. */
-const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
+/** Every filler, rendered once per room. */
+const ACKNOWLEDGEMENTS: string[] = [...new Set([...NEUTRAL_REACTIONS, ...QUESTION_REACTIONS])];
 
 /**
  * How long a standby session may wait before it is replaced. Measured: the provider closes a
@@ -369,8 +358,7 @@ export class Room implements HostStage {
     private readonly acknowledgements: Uint8Array[] = [];
     /** Indexes of the latest acknowledgements played, newest last. */
     private readonly recentAcknowledgements: number[] = [];
-    /** True when the previous addressed turn got an acknowledgement; two in a row never play. */
-    private acknowledgedLastTurn: boolean = false;
+    /** Waits to play a filler. */
     private acknowledgeTimer: NodeJS.Timeout | null = null;
 
     /**
@@ -1590,7 +1578,6 @@ export class Room implements HostStage {
         }
         this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
-        this.scheduleAcknowledgement(said);
         this.scheduleFiller(said);
     }
 
@@ -1625,49 +1612,6 @@ export class Room implements HostStage {
         this.caption = { speaker: player.name, text: partial, final: false };
         this.broadcastScene();
         this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
-    }
-
-    /**
-     * Sometimes plays a short acknowledgement if the host was clearly addressed and has not
-     * started replying shortly after the final text. Addressed means the host's name was said,
-     * or there is only one player, so side chat between players never gets an acknowledgement.
-     * Never on two addressed turns in a row, and never one of the last few played.
-     * @param said what the player said so far.
-     */
-    private scheduleAcknowledgement(said: string): void {
-        if (this.lively() === true) {
-            return;
-        }
-        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1;
-        if (addressed === false || this.acknowledgements.length === 0) {
-            return;
-        }
-        this.cancelAcknowledgement();
-        if (this.acknowledgedLastTurn === true || Math.random() >= ACKNOWLEDGE_CHANCE) {
-            this.acknowledgedLastTurn = false;
-            return;
-        }
-        this.acknowledgedLastTurn = false;
-        this.acknowledgeTimer = setTimeout(() => {
-            this.acknowledgeTimer = null;
-            if (this.hostThinking === false || this.voice.isBusy() === true) {
-                return;
-            }
-            const indexes: number[] = this.acknowledgements.map((_pcm: Uint8Array, index: number) => index);
-            const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.includes(index) === false);
-            const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
-            const pcm: Uint8Array | undefined = index === undefined ? undefined : this.acknowledgements[index];
-            if (index === undefined || pcm === undefined) {
-                return;
-            }
-            this.recentAcknowledgements.push(index);
-            if (this.recentAcknowledgements.length > ACKNOWLEDGE_NO_REPEAT) {
-                this.recentAcknowledgements.shift();
-            }
-            this.acknowledgedLastTurn = true;
-            log(this.scope(), `acknowledged with line ${index}`);
-            this.voice.sayRecorded(pcm);
-        }, ACKNOWLEDGE_AFTER_MILLISECONDS);
     }
 
     /**
@@ -1718,11 +1662,11 @@ export class Room implements HostStage {
     }
 
     /**
-     * Reacts as soon as someone's thumb lifts, in the livelier host only, unless the voice is already going.
+     * Starts the reply clock as soon as someone's thumb lifts; the TV nods in the livelier host only.
      * @param player who let go.
      */
     private onReleased(player: Player): void {
-        if (this.lively() === false || player.holdingToTalk === false || this.paused === true) {
+        if (player.holdingToTalk === false || this.paused === true) {
             return;
         }
         this.releasedAt = Date.now();
@@ -1730,17 +1674,16 @@ export class Room implements HostStage {
         this.lastLiftAt = this.releasedAt;
         this.logMoment(`release ${player.playerId}`);
         this.cancelAcknowledgement();
-        this.broadcastToScreens({ type: "heardYou", playerId: player.playerId });
+        if (this.lively() === true) {
+            this.broadcastToScreens({ type: "heardYou", playerId: player.playerId });
+        }
     }
 
     /**
-     * Sets up a filler in the livelier host for a press now heard, in case the reply runs late.
+     * Sets up a filler for a press now heard, in case the reply runs late.
      * @param said what they said.
      */
     private scheduleFiller(said: string): void {
-        if (this.lively() === false) {
-            return;
-        }
         const longEnough: boolean = said.split(/\s+/).length >= FILLER_MINIMUM_WORDS;
         const eligible: boolean = longEnough === true && this.filledLastTurn === false && Math.random() < FILLER_CHANCE;
         this.filledLastTurn = false;
