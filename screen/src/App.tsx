@@ -37,6 +37,9 @@ type ScreenAction =
     | { type: "started" }
     | { type: "turnedAway" };
 
+/** How long someone's arrival stays on the TV. */
+const ARRIVAL_MILLISECONDS: number = 3000;
+
 /** Longest wait between reconnect attempts. */
 const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
 
@@ -153,6 +156,8 @@ export function App(): ReactElement {
     const previousShellRef = useRef<ShellView | null>(null);
     const screenRef = useRef<string>("");
     const wasOverRef = useRef<boolean>(false);
+    const arrivalTimerRef = useRef<number>(0);
+    const [arrival, setArrival] = useState<Seat | null>(null);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
@@ -289,6 +294,13 @@ export function App(): ReactElement {
         if (previous === null || shell === null || sounds === null) {
             return;
         }
+        const newcomer: Seat | undefined = shell.seats.find((seat: Seat) => previous.seats.some((before: Seat) => before.playerId === seat.playerId) === false);
+        if (newcomer !== undefined) {
+            sounds.sitDown();
+            setArrival(newcomer);
+            window.clearTimeout(arrivalTimerRef.current);
+            arrivalTimerRef.current = window.setTimeout(() => { setArrival(null); }, ARRIVAL_MILLISECONDS);
+        }
         if (previous.screen !== shell.screen) {
             const backing: boolean = shell.screen === "home" || (previous.screen === "howTo" && shell.screen === "pause") || (previous.screen === "pause" && shell.screen === "play");
             if (backing === true) {
@@ -297,9 +309,6 @@ export function App(): ReactElement {
             }
             sounds.select();
             return;
-        }
-        if (shell.seats.length > previous.seats.length) {
-            sounds.sitDown();
         }
         if (previous.focus !== shell.focus) {
             sounds.tick(shell.focus);
@@ -371,7 +380,8 @@ export function App(): ReactElement {
                 <Lantern micRef={micRef} speakerRef={speakerRef} awake={state.started} thinking={state.hostThinking} speaking={state.hostSpeaking} look={look} />
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
-            {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} /> : null}
+            {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {arrival !== null && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Finding the table…</p> : null}
             {state.started === false ? (
                 <button className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

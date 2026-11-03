@@ -99,6 +99,18 @@ const SENT_TICK_MILLISECONDS: number = 900;
 /** Close code the room uses when this seat has been opened somewhere else. */
 const RESUMED_ELSEWHERE_CODE: number = 4000;
 
+/** True when opened from the home screen rather than a browser tab. */
+const INSTALLED: boolean = matchMedia("(display-mode: standalone)").matches === true || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+/** Letters in a room code. */
+const ROOM_CODE_LENGTH: number = 4;
+
+/** True when this phone has a share sheet. */
+const CAN_SHARE: boolean = "share" in navigator;
+
+/** What the credits say. */
+const CREDITS: string = `Paintings are AI-generated with Meta's Muse Image. The host's words and voice are AI too.`;
+
 /** Local phone state. */
 interface PhoneState {
     stage: "name" | "joining" | "joined";
@@ -212,6 +224,41 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
 }
 
 /**
+ * Where the installed app opens when it isn't already in a room: a place to type the code.
+ * @returns the element.
+ */
+function CodeScreen(): ReactElement {
+    const [code, setCode] = useState<string>("");
+    const search: URLSearchParams = new URLSearchParams(location.search);
+    const missing: string | null = search.get("missing");
+    const full: string | null = search.get("full");
+    return (
+        <main className="note-screen" data-scrolls>
+            <small className="room-tag">{PRODUCT_NAME}</small>
+            <form className="place-card" onSubmit={(event) => { event.preventDefault(); location.assign(`/phone/?room=${encodeURIComponent(code)}`); }}>
+                <label htmlFor="code-field">What's the code on the TV?</label>
+                {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
+                {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
+                <input
+                    id="code-field"
+                    className="code-field"
+                    value={code}
+                    onChange={(event) => { setCode(event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, ROOM_CODE_LENGTH)); }}
+                    placeholder="KPTR"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="go"
+                />
+                <button className="primary" type="submit" disabled={code.length !== ROOM_CODE_LENGTH}>Sit down</button>
+            </form>
+            <p className="fine">Hosting? Open this site on a TV or laptop.</p>
+        </main>
+    );
+}
+
+/**
  * A secret dealt face down. It shows only while pressed, so a phone left on the table gives
  * nothing away.
  * @param props the secret.
@@ -288,11 +335,11 @@ export function App(): ReactElement {
     const [learned, setLearned] = useState<Set<string>>(readLearned);
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sent, setSent] = useState<boolean>(false);
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits">("closed");
+    const [invited, setInvited] = useState<string>("");
 
     useEffect(() => {
         if (ROOM_CODE === "") {
-            location.replace("/");
             return;
         }
         let stopped: boolean = false;
@@ -334,7 +381,7 @@ export function App(): ReactElement {
                 if (message.type === "rejected") {
                     stopped = true;
                     clearSeat();
-                    location.assign(`/?${message.reason === "roomFull" ? "full" : "missing"}=${encodeURIComponent(ROOM_CODE)}`);
+                    location.assign(`${INSTALLED === true ? "/phone/" : "/"}?${message.reason === "roomFull" ? "full" : "missing"}=${encodeURIComponent(ROOM_CODE)}`);
                     return;
                 }
                 if (message.type === "welcome") {
@@ -563,6 +610,10 @@ export function App(): ReactElement {
         // The surface reads everything it needs through refs, and only remounts with the screen.
     }, [showingSurface]);
 
+    if (ROOM_CODE === "") {
+        return <CodeScreen />;
+    }
+
     if (movedAway === true) {
         return (
             <main className="note-screen">
@@ -595,10 +646,29 @@ export function App(): ReactElement {
         );
     }
 
+    /** Shares a link to this room, or copies it where a phone can't share. */
+    const invite = async (): Promise<void> => {
+        const url: string = `${location.origin}/phone/?room=${encodeURIComponent(state.roomCode)}`;
+        try {
+            if (CAN_SHARE === true) {
+                await navigator.share({ title: PRODUCT_NAME, text: "Pull up a chair.", url });
+                setMenu("closed");
+                return;
+            }
+            await navigator.clipboard.writeText(url);
+            setInvited("Link copied. Send it to whoever's coming.");
+        } catch (error: unknown) {
+            if (error instanceof DOMException && error.name === "AbortError") {
+                return;
+            }
+            setInvited(url);
+        }
+    };
+
     const leave = (): void => {
         send({ type: "leave" });
         clearSeat();
-        location.assign("/");
+        location.assign(INSTALLED === true ? "/phone/" : "/");
     };
 
     const rename = (event: FormEvent<HTMLFormElement>): void => {
@@ -628,7 +698,7 @@ export function App(): ReactElement {
             </header>
             {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
-                <div className="level-fill" aria-hidden="true" />
+                <div className="bands" aria-hidden="true"><i /><i /><i /></div>
                 <div className="thumb" aria-hidden="true" />
                 <div className="line" aria-live="polite">
                     {state.holding === true
@@ -644,9 +714,18 @@ export function App(): ReactElement {
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
                         {menu === "open" ? (
                             <>
+                                {invited !== "" ? <p className="invited">{invited}</p> : null}
+                                <button onClick={() => { void invite(); }}>Invite someone</button>
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
-                                <button className="quiet" onClick={() => { setMenu("closed"); }}>Close</button>
+                                <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
+                                <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
+                            </>
+                        ) : null}
+                        {menu === "credits" ? (
+                            <>
+                                <p>{CREDITS}</p>
+                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
                         ) : null}
                         {menu === "rename" ? (

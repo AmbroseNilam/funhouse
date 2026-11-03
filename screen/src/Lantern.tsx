@@ -73,7 +73,7 @@ export function Lantern(props: LanternProps): ReactElement {
                     <ellipse className="mouth" cx="100" cy="186" rx="17" ry="13" />
                     <path className="smile" d="M83 180 q17 15 35 -1" />
                 </g>
-                <path className="cage" d="M62 84 L40 118 L40 204 L60 234 M138 84 L160 118 L160 204 L140 234 M40 118 L160 118 M42 206 L158 206" />
+                <path className="cage" d="M62 84 L40 118 L40 204 L60 234 M138 84 L160 118 L160 204 L140 234 M42 206 L158 206" />
                 <path className="brass" d="M50 232 L150 232 L172 256 Q100 266 28 256 Z" />
                 <path className="brass-dark" d="M26 256 Q100 266 174 256 L178 272 Q100 284 22 272 Z" />
             </g>
