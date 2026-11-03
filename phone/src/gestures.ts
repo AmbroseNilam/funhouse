@@ -61,6 +61,10 @@ export function listenForGestures(surface: HTMLElement, handlers: GestureHandler
     let holdTimer: number = 0;
 
     const down = (event: PointerEvent): void => {
+        // A right or middle mouse button isn't a thumb; a finger always reports as the main button.
+        if (event.button !== 0) {
+            return;
+        }
         surface.setPointerCapture(event.pointerId);
         mode = "pending";
         startX = event.clientX;
