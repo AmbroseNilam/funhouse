@@ -691,6 +691,7 @@ export class Room implements HostStage {
         this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
         this.gameDecided = false;
         this.shell.gameStarted(installed.manifest.id);
+        this.host.notice(`(Game: ${installed.manifest.name} has just started, so this is addressed to you. Say something out loud now, and do what "This moment" says. Don't stay quiet.)`, WAKE_DELAY_MILLISECONDS.screen);
         this.broadcastScene();
     }
 
