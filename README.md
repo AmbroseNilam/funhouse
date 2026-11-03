@@ -1,8 +1,8 @@
-# Game Room
+# Funhouse
 
-An AI-hosted virtual game room. Friends scan a QR code with their phones and join a shared
+An AI-hosted game night at [funhouse.live](https://funhouse.live). Friends scan a QR code with their phones and join a shared
 room. An AI host runs the night: it listens to every player on their own stream, talks back,
-draws on the big screen, keeps secrets, and can play too. Game Room is the console; games
+draws on the big screen, keeps secrets, and can play too. Funhouse is the console; games
 are cartridges: Twenty Doors, Quizmaster and Werewolf so far.
 
 Built during the Meta Global AI Developer Hackathon, Oct 26 to Nov 4, 2026. Everything in

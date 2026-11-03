@@ -1,7 +1,7 @@
 {
     "id": "/phone/",
-    "name": "Game Room",
-    "short_name": "Game Room",
+    "name": "Funhouse",
+    "short_name": "Funhouse",
     "description": "Game night, and nobody has to host. Your phone is the controller.",
     "start_url": "/phone/",
     "scope": "/",

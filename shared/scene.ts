@@ -3,6 +3,8 @@
 // vocabulary is what lets an authoring agent use it reliably and lets Muse Spark emit it as
 // structured output.
 
+import { PRODUCT_NAME } from "./brand.ts";
+
 /** Named style intents the renderer maps to its own tokens. The host picks by name. */
 export type Mood = "neutral" | "lobby" | "night" | "dawn" | "tense" | "victory" | "defeat";
 
@@ -54,7 +56,7 @@ export function lobbyScene(joinUrl: string, roomCode: string, players: RosterEnt
         mood: "lobby",
         transition: "fade",
         blocks: [
-            { type: "title", text: "Game Room", kicker: `Room ${roomCode}` },
+            { type: "title", text: PRODUCT_NAME, kicker: `Room ${roomCode}` },
             { type: "text", text: `Scan to join, or open ${joinUrl}` },
             { type: "roster", players },
         ],

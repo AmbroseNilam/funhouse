@@ -1,4 +1,4 @@
-# Builds the Game Room image for linux/arm64 hosts. Multi-stage: build the two stages with
+# Builds the Funhouse image for linux/arm64 hosts. Multi-stage: build the two stages with
 # Vite, then run the room server on a slim Node 24 image as a non-root user. The server
 # runs TypeScript directly; there is no server build step.
 

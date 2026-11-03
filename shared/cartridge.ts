@@ -1,4 +1,4 @@
-// The cartridge contract: what a game is to Game Room. The rules core is code the room runs
+// The cartridge contract: what a game is to Funhouse. The rules core is code the room runs
 // in isolation. The manifest is declarative: the host's brief, per-phase listening modes and
 // controls, and variant options collected in the lobby. The room never lets the host override
 // the rules; the host narrates whatever the rules say is true.
