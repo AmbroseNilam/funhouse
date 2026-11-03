@@ -1,116 +1,128 @@
-// The structural rehearsal: plays a blueprint game in this process with scripted paper players
-// and no model, from a fixed seed, and checks what a simulation can check. The game ends within
-// a budget of steps; every phase is entered; no secret reaches a public fact or the public screen
-// before the end; every ruling used was one the phase allows; every fact names the decision
-// behind it. It never says a game is good. Twenty rehearsals run in well under a second.
+// The structural rehearsal: plays a kit game in this process with scripted paper players and no
+// model, from a fixed seed, on a virtual clock, and checks what a simulation can check. The game
+// ends within a move budget; every phase is entered; no hidden value reaches a viewer who may not
+// see it, on the TV, any phone or the host's brief, however it is spaced or reversed; every
+// ruling used was allowed and did something; every fact names its decision; the rules never
+// change state in place and never throw. It never says a game is good.
 
-import type { Cartridge, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
-import type { Scene, SceneBlock } from "../shared/scene.ts";
+import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
-import { BECAUSE_KIND, type BlueprintGame, type BlueprintState } from "./interpreter.ts";
+import { squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
+import { BECAUSE_KIND, deepFreeze } from "./kit/primitives.ts";
 
-/** Most steps a rehearsal may take before it is stopped as never ending. */
-export const STEP_BUDGET: number = 400;
+/** Most moves a rehearsal may take before it is stopped as never ending. */
+export const MOVE_BUDGET: number = 300;
+
+/** Seconds that pass on the virtual clock when a paper player says or presses something. */
+export const ACTION_SECONDS: number = 6;
 
 /** The paper players, named after things on the table so they can be nobody. */
-export const PAPER_PLAYERS: CartridgePlayer[] = ["Teacup", "Spoon", "Candle", "Saucer", "Matchbox"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
+export const PAPER_PLAYERS: readonly CartridgePlayer[] = ["Teacup", "Spoon", "Candle", "Saucer", "Matchbox"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
 
-/** What a paper player does on its turn. */
+/** What a paper player does next. */
 export type Move =
     | { kind: "say"; playerId: string; text: string; ruling: string | null }
     | { kind: "press"; playerId: string; actionId: string }
-    | { kind: "wait" };
+    | { kind: "leave"; playerId: string }
+    | { kind: "wait"; seconds: number };
 
-/** What a persona sees before it moves. */
-export interface Glimpse {
+/** What a persona sees before it moves. A persona also scripts the judge, so it may see the state. */
+export interface Glimpse<State> {
+    state: State;
     phase: string;
-    spent: number;
+    /** Moves made so far. */
     turn: number;
+    /** Seconds on the virtual clock. */
+    now: number;
+    /** Everyone still at the table. */
+    players: readonly CartridgePlayer[];
+    /** What a player may press right now. */
+    legal(playerId: string): LegalAction[];
+    /** Rulings the phase allows right now. */
+    rulings: string[];
 }
 
-/** A scripted way of playing: it also scripts the judge, since there is no model here. */
-export interface Persona {
+/** A scripted way of playing. */
+export interface Persona<State> {
     name: string;
-    move(glimpse: Glimpse): Move;
+    move(glimpse: Glimpse<State>): Move;
 }
+
+/** What caused a step. */
+export type TraceEvent = RoomEvent | { type: "input"; playerId: string; actionId: string };
 
 /** One moment of a rehearsal: the event in and the step out. */
-export interface TraceEntry {
-    event: RoomEvent | { type: "input"; playerId: string; actionId: string };
-    step: Step<BlueprintState>;
+export interface TraceEntry<State> {
+    event: TraceEvent;
+    step: Step<State>;
 }
 
 /** What one rehearsal found. */
-export interface Rehearsal {
+export interface Rehearsal<State> {
     persona: string;
     seed: number;
     ended: boolean;
-    won: boolean;
-    steps: number;
-    spent: number;
+    outcome: string | null;
+    moves: number;
     phases: string[];
     problems: string[];
-    trace: TraceEntry[];
-}
-
-/** The mutable state of one rehearsal, kept in one object so the step function can update it. */
-interface RunState {
-    state: BlueprintState | null;
-    pendingContent: boolean;
-    pendingTimers: string[];
+    trace: TraceEntry<State>[];
 }
 
 /** What a set of rehearsals found, as counts. */
 export interface Tally {
     rehearsals: number;
     ended: number;
-    won: number;
-    averageSpent: number;
+    /** How many rehearsals ended with each outcome. */
+    outcomes: Record<string, number>;
     phasesNeverReached: string[];
     problems: string[];
 }
 
-/**
- * A small deterministic random source, so a rehearsal can be replayed from its seed.
- * @param seed any integer.
- * @returns a function returning [0, 1).
- */
-export function seededRandom(seed: number): () => number {
-    let value: number = (seed >>> 0) || 1;
-    return (): number => {
-        value = (value * 1664525 + 1013904223) >>> 0;
-        return value / 4294967296;
-    };
+/** Options for a rehearsal. */
+export interface RehearsalOptions {
+    /** What the host's model writes when content is asked for; empty means it failed. */
+    content?: string;
+    players?: readonly CartridgePlayer[];
 }
 
 /**
- * Finds secrets that reached where they must not.
- * @param secrets strings that must stay private.
- * @param facts facts emitted by one step.
- * @param scene the public screen after the step.
- * @returns a problem per leak, in plain words.
+ * Every string inside a value, for searching what a viewer sees. Keys and image addresses are left out.
+ * @param value plain data.
+ * @returns the strings.
  */
-export function findLeaks(secrets: string[], facts: ScopedFact[], scene: Scene): string[] {
-    const problems: string[] = [];
-    const shown: string[] = scene.blocks.flatMap((block: SceneBlock) => {
-        if (block.type === "title") {
-            return [block.text, block.kicker ?? ""];
-        }
-        if (block.type === "text") {
-            return [block.text];
-        }
+export function stringsIn(value: unknown): string[] {
+    if (typeof value === "string") {
+        return [value];
+    }
+    if (typeof value !== "object" || value === null) {
         return [];
-    });
-    for (const secret of secrets.filter((candidate: string) => candidate.length >= 3)) {
-        const needle: string = secret.toLowerCase();
-        for (const fact of facts) {
-            if (fact.scope.kind !== "host" && fact.scope.kind !== "system" && fact.text.toLowerCase().includes(needle) === true) {
-                problems.push(`The secret reached a ${fact.scope.kind} fact (${fact.kind}) before the end.`);
-            }
+    }
+    return Object.entries(value).flatMap(([key, inner]: [string, unknown]) => (key === "src" || key === "backdrop" ? [] : stringsIn(inner)));
+}
+
+/**
+ * Finds hidden values a viewer sees but may not, spaced, punctuated or reversed.
+ * @param viewer who is looking: "screen", "host", or a player id.
+ * @param seen what they see, as strings.
+ * @param hidden what must stay hidden, and from whom.
+ * @returns a problem per leak.
+ */
+export function findLeaks(viewer: string, seen: readonly string[], hidden: readonly HiddenValue[]): string[] {
+    const problems: string[] = [];
+    const squashed: string[] = seen.map(squash);
+    for (const value of hidden) {
+        if (value.seenBy.includes(viewer) === true) {
+            continue;
         }
-        if (shown.some((text: string) => text.toLowerCase().includes(needle)) === true) {
-            problems.push("The secret was on the public screen before the end.");
+        const needle: string = squash(value.text);
+        if (needle.length < 3) {
+            continue;
+        }
+        const reversed: string = [...needle].reverse().join("");
+        if (squashed.some((text: string) => text.includes(needle) === true || text.includes(reversed) === true) === true) {
+            problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }
     }
     return problems;
@@ -121,115 +133,200 @@ export function findLeaks(secrets: string[], facts: ScopedFact[], scene: Scene):
  * @param facts the step's facts.
  * @returns a problem per unexplained fact.
  */
-export function findUnexplained(facts: ScopedFact[]): string[] {
+export function findUnexplained(facts: readonly ScopedFact[]): string[] {
     const problems: string[] = [];
-    for (let index = 0; index < facts.length; index += 1) {
-        const fact: ScopedFact | undefined = facts[index];
-        if (fact === undefined || fact.scope.kind === "system") {
-            continue;
-        }
-        if (facts[index + 1]?.kind !== BECAUSE_KIND) {
+    facts.forEach((fact: ScopedFact, index: number) => {
+        if (fact.scope.kind !== "system" && facts[index + 1]?.kind !== BECAUSE_KIND) {
             problems.push(`The fact "${fact.kind}" names no decision.`);
         }
-    }
+    });
     return problems;
+}
+
+/**
+ * What every viewer sees right now: the TV, each phone (which sees the TV too), and the host.
+ * Facts are what the step just emitted, routed the way the room routes them.
+ * @param cartridge the rules.
+ * @param state the state.
+ * @param players who is at the table.
+ * @param facts what the step emitted.
+ * @returns each viewer's strings, by viewer.
+ */
+export function viewsOf<State>(cartridge: Cartridge<State>, state: State, players: readonly CartridgePlayer[], facts: readonly ScopedFact[]): Map<string, string[]> {
+    const shown: (fact: ScopedFact) => boolean = (fact: ScopedFact) => fact.scope.kind === "public";
+    const announced: string[] = facts.filter(shown).map((fact: ScopedFact) => fact.text);
+    const screen: string[] = [...stringsIn(cartridge.publicScene(state)), ...stringsIn(cartridge.turn?.(state) ?? null), ...announced];
+    const views: Map<string, string[]> = new Map([["screen", screen]]);
+    const phase: PhaseSpec | undefined = cartridge.manifest.phases.find((candidate: PhaseSpec) => candidate.id === cartridge.phaseOf(state));
+    const hostFacts: string[] = facts.filter((fact: ScopedFact) => fact.scope.kind === "public" || fact.scope.kind === "host").map((fact: ScopedFact) => fact.text);
+    const briefed: string[] = cartridge.hostFacts(state, { kind: "host" }).map((fact: ScopedFact) => fact.text);
+    views.set("host", [cartridge.manifest.hostBrief, phase?.hostBrief ?? "", ...Object.values(phase?.hostRulings ?? {}), ...briefed, ...hostFacts]);
+    for (const player of players) {
+        const groups: ReadonlySet<string> = cartridge.groupsOf(state, player.playerId);
+        const whispered: string[] = facts.filter((fact: ScopedFact) => {
+            return (fact.scope.kind === "player" && fact.scope.playerId === player.playerId) || (fact.scope.kind === "group" && groups.has(fact.scope.groupId) === true);
+        }).map((fact: ScopedFact) => fact.text);
+        const phone: string[] = [...stringsIn(cartridge.privateControls(state, player.playerId)), ...stringsIn(cartridge.legalActions(state, player.playerId))];
+        views.set(player.playerId, [...screen, ...phone, ...whispered]);
+    }
+    return views;
+}
+
+/** The rehearsal's own running state, kept in one object so its step function can update it. */
+interface Run<State> {
+    state: State | null;
+    players: CartridgePlayer[];
+    pendingContent: boolean;
+    /** When each running timer is due, by id, in seconds on the virtual clock. */
+    timers: Map<string, number>;
+    now: number;
+    stopped: boolean;
 }
 
 /**
  * Plays one rehearsal.
  * @param game the game to rehearse.
  * @param persona how the paper players and the judge behave.
- * @param seed the random seed, so it can be replayed.
- * @param players the paper players at the table.
+ * @param seed the seed the game was built with, for the report.
+ * @param options content and players.
  * @returns what happened and what was wrong.
  */
-export function rehearse(game: BlueprintGame, persona: Persona, seed: number, players: CartridgePlayer[] = PAPER_PLAYERS): Rehearsal {
-    const cartridge: Cartridge<BlueprintState> = game.cartridge;
-    const trace: TraceEntry[] = [];
+export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, seed: number, options: RehearsalOptions = {}): Rehearsal<State> {
+    const cartridge: Cartridge<State> = game.cartridge;
+    const trace: TraceEntry<State>[] = [];
     const phases: Set<string> = new Set();
     const problems: string[] = [];
-    const run: RunState = { state: null, pendingContent: false, pendingTimers: [] };
-    let turn: number = 0;
+    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, timers: new Map(), now: 0, stopped: false };
 
     /**
-     * Takes a step: records it, checks it, remembers what it asked for.
-     * @param event what caused it.
-     * @param step the step.
-     * @returns the state after the step.
+     * Calls the rules safely: a throw, including one from changing frozen state, becomes a problem.
+     * @param what names the call for the report.
+     * @param call the call.
+     * @returns the step, or null when it threw.
      */
-    const take = (event: TraceEntry["event"], step: Step<BlueprintState>): BlueprintState => {
+    const guarded = (what: string, call: () => Step<State>): Step<State> | null => {
+        try {
+            return call();
+        } catch (error: unknown) {
+            problems.push(`The rules threw during ${what}: ${error instanceof Error ? error.message : String(error)}`);
+            run.stopped = true;
+            return null;
+        }
+    };
+
+    /**
+     * Takes a step: freezes, records and checks it, and remembers what it asked for.
+     * @param event what caused it.
+     * @param call the rules call that makes the step.
+     * @returns the step, or null when the rules threw.
+     */
+    const take = (event: TraceEvent, call: () => Step<State>): Step<State> | null => {
+        const step: Step<State> | null = guarded(event.type, call);
+        if (step === null) {
+            return null;
+        }
+        deepFreeze(step.state);
         trace.push({ event, step });
         run.state = step.state;
         phases.add(cartridge.phaseOf(step.state));
-        if (cartridge.outcome(step.state) === null) {
-            problems.push(...findLeaks(game.secrets(step.state), step.facts, cartridge.publicScene(step.state)));
-        }
         problems.push(...findUnexplained(step.facts));
+        try {
+            const hidden: HiddenValue[] = game.hidden(step.state);
+            for (const [viewer, seen] of viewsOf(cartridge, step.state, run.players, step.facts)) {
+                problems.push(...findLeaks(viewer, seen, hidden));
+            }
+        } catch (error: unknown) {
+            problems.push(`The rules threw while drawing a view after ${event.type}: ${error instanceof Error ? error.message : String(error)}`);
+            run.stopped = true;
+        }
         run.pendingContent = run.pendingContent === true || step.contentRequest !== undefined;
-        run.pendingTimers.push(...Object.keys(step.timers ?? {}));
-        return step.state;
+        for (const [timerId, seconds] of Object.entries(step.timers ?? {})) {
+            run.timers.set(timerId, run.now + seconds);
+        }
+        return step;
     };
 
-    /**
-     * The phase spec the game is in.
-     * @returns the spec, or undefined.
-     */
-    const phaseSpec = (state: BlueprintState): PhaseSpec | undefined => cartridge.manifest.phases.find((candidate: PhaseSpec) => candidate.id === cartridge.phaseOf(state));
+    /** Fires every timer that is due, earliest first, as the room would. */
+    const fireDue = (): void => {
+        const due: [string, number][] = [...run.timers.entries()].filter(([, at]: [string, number]) => at <= run.now).sort((first, second) => first[1] - second[1]);
+        for (const [timerId] of due) {
+            run.timers.delete(timerId);
+            const current: State | null = run.state;
+            if (current === null || run.stopped === true || cartridge.outcome(current) !== null) {
+                return;
+            }
+            const event: RoomEvent = { type: "timerFired", at: run.now, timerId };
+            take(event, () => cartridge.onEvent(current, event));
+        }
+    };
 
-    take({ type: "phaseChanged", at: 0, phaseId: "init" }, cartridge.init(players, {}));
-    while (run.state !== null && cartridge.outcome(run.state) === null && trace.length < STEP_BUDGET) {
-        const current: BlueprintState = run.state;
+    take({ type: "phaseChanged", at: 0, phaseId: "init" }, () => cartridge.init([...run.players], {}));
+    let moves: number = 0;
+    while (run.state !== null && run.stopped === false && cartridge.outcome(run.state) === null && moves < MOVE_BUDGET) {
+        const current: State = run.state;
         if (run.pendingContent === true) {
             run.pendingContent = false;
-            take({ type: "contentReady", at: turn, text: "" }, cartridge.onEvent(current, { type: "contentReady", at: turn, text: "" }));
+            const event: RoomEvent = { type: "contentReady", at: run.now, text: options.content ?? "" };
+            take(event, () => cartridge.onEvent(current, event));
             continue;
         }
-        const timerId: string | undefined = run.pendingTimers.shift();
-        if (timerId !== undefined) {
-            take({ type: "timerFired", at: turn, timerId }, cartridge.onEvent(current, { type: "timerFired", at: turn, timerId }));
-            continue;
-        }
-        turn += 1;
-        const move: Move = persona.move({ phase: cartridge.phaseOf(current), spent: current.spent, turn });
+        moves += 1;
+        const phase: PhaseSpec | undefined = cartridge.manifest.phases.find((candidate: PhaseSpec) => candidate.id === cartridge.phaseOf(current));
+        const move: Move = persona.move({
+            state: current,
+            phase: cartridge.phaseOf(current),
+            turn: moves,
+            now: run.now,
+            players: run.players,
+            legal: (playerId: string) => cartridge.legalActions(current, playerId),
+            rulings: Object.keys(phase?.hostRulings ?? {}),
+        });
         if (move.kind === "wait") {
-            problems.push(`${persona.name} had nothing to do in phase ${cartridge.phaseOf(current)}.`);
-            break;
+            run.now += Math.max(1, move.seconds);
+            fireDue();
+            continue;
+        }
+        run.now += ACTION_SECONDS;
+        if (move.kind === "leave") {
+            run.players = run.players.filter((player: CartridgePlayer) => player.playerId !== move.playerId);
+            const event: RoomEvent = { type: "playerLeft", at: run.now, playerId: move.playerId };
+            take(event, () => cartridge.onEvent(current, event));
+            fireDue();
+            continue;
         }
         if (move.kind === "press") {
-            if (cartridge.legalActions(current, move.playerId).some((action) => action.actionId === move.actionId) === false) {
+            if (cartridge.legalActions(current, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === false) {
                 problems.push(`${persona.name} pressed "${move.actionId}" when it was not offered.`);
             }
-            take({ type: "input", playerId: move.playerId, actionId: move.actionId }, cartridge.apply(current, move.playerId, move.actionId));
+            take({ type: "input", playerId: move.playerId, actionId: move.actionId }, () => cartridge.apply(current, move.playerId, move.actionId));
+            fireDue();
             continue;
         }
-        const said: RoomEvent = { type: "speechEnded", at: turn, playerId: move.playerId, text: move.text };
-        const heard: BlueprintState = take(said, cartridge.onEvent(current, said));
-        if (move.ruling === null) {
+        const said: RoomEvent = { type: "speechEnded", at: run.now, playerId: move.playerId, text: move.text };
+        const heard: Step<State> | null = take(said, () => cartridge.onEvent(current, said));
+        if (heard === null || move.ruling === null) {
+            fireDue();
             continue;
         }
-        if (phaseSpec(heard)?.hostRulings?.[move.ruling] === undefined) {
-            problems.push(`The judge ruled "${move.ruling}" in phase ${cartridge.phaseOf(heard)}, which does not allow it.`);
+        if (phase?.hostRulings?.[move.ruling] === undefined) {
+            problems.push(`The judge ruled "${move.ruling}" in phase ${cartridge.phaseOf(heard.state)}, which does not allow it.`);
+            fireDue();
             continue;
         }
-        take({ type: "hostRuled", at: turn, ruling: move.ruling, detail: "", playerId: move.playerId }, cartridge.onEvent(heard, { type: "hostRuled", at: turn, ruling: move.ruling, detail: "", playerId: move.playerId }));
+        const ruled: RoomEvent = { type: "hostRuled", at: run.now, ruling: move.ruling, detail: "", playerId: move.playerId };
+        const after: Step<State> | null = take(ruled, () => cartridge.onEvent(heard.state, ruled));
+        if (after !== null && after.state === heard.state && after.facts.length === 0) {
+            problems.push(`The ruling "${move.ruling}" was allowed but did nothing.`);
+        }
+        fireDue();
     }
 
-    const final: BlueprintState | null = run.state;
-    const ended: boolean = final !== null && cartridge.outcome(final) !== null;
-    if (ended === false) {
-        problems.push(`This never ended: stopped after ${trace.length} steps in phase ${final === null ? "none" : cartridge.phaseOf(final)}.`);
+    const final: State | null = run.state;
+    const outcome: string | null = final === null ? null : cartridge.outcome(final);
+    if (outcome === null && run.stopped === false) {
+        problems.push(`This never ended: stopped after ${moves} moves in phase ${final === null ? "none" : cartridge.phaseOf(final)}.`);
     }
-    return {
-        persona: persona.name,
-        seed,
-        ended,
-        won: final?.won === true,
-        steps: trace.length,
-        spent: final?.spent ?? 0,
-        phases: [...phases],
-        problems,
-        trace,
-    };
+    return { persona: persona.name, seed, ended: outcome !== null, outcome, moves, phases: [...phases], problems, trace };
 }
 
 /**
@@ -237,71 +334,87 @@ export function rehearse(game: BlueprintGame, persona: Persona, seed: number, pl
  * @param makeGame builds a fresh game from a seed, so each rehearsal has its own random source.
  * @param personas the ways of playing to try.
  * @param seeds the seeds to try each persona with.
+ * @param options content and players, the same for every rehearsal.
  * @returns the counts, and every problem found.
  */
-export function rehearseMany(makeGame: (seed: number) => BlueprintGame, personas: Persona[], seeds: number[]): Tally {
-    const rehearsals: Rehearsal[] = [];
+export function rehearseMany<State>(
+    makeGame: (seed: number) => KitGame<State>,
+    personas: readonly Persona<State>[],
+    seeds: readonly number[],
+    options: RehearsalOptions = {},
+): Tally {
+    const rehearsals: Rehearsal<State>[] = [];
     for (const persona of personas) {
         for (const seed of seeds) {
-            rehearsals.push(rehearse(makeGame(seed), persona, seed));
+            rehearsals.push(rehearse(makeGame(seed), persona, seed, options));
         }
     }
-    const first: BlueprintGame = makeGame(seeds[0] ?? 1);
-    const allPhases: string[] = first.cartridge.manifest.phases.map((phase: PhaseSpec) => phase.id);
-    const reached: Set<string> = new Set(rehearsals.flatMap((rehearsal: Rehearsal) => rehearsal.phases));
-    const spent: number = rehearsals.reduce((total: number, rehearsal: Rehearsal) => total + rehearsal.spent, 0);
+    const allPhases: string[] = makeGame(seeds[0] ?? 1).cartridge.manifest.phases.map((phase: PhaseSpec) => phase.id);
+    const reached: Set<string> = new Set(rehearsals.flatMap((rehearsal: Rehearsal<State>) => rehearsal.phases));
+    const outcomes: Record<string, number> = {};
+    for (const rehearsal of rehearsals) {
+        const key: string = rehearsal.outcome ?? "never ended";
+        outcomes[key] = (outcomes[key] ?? 0) + 1;
+    }
     return {
         rehearsals: rehearsals.length,
-        ended: rehearsals.filter((rehearsal: Rehearsal) => rehearsal.ended === true).length,
-        won: rehearsals.filter((rehearsal: Rehearsal) => rehearsal.won === true).length,
-        averageSpent: rehearsals.length === 0 ? 0 : spent / rehearsals.length,
+        ended: rehearsals.filter((rehearsal: Rehearsal<State>) => rehearsal.ended === true).length,
+        outcomes,
         phasesNeverReached: allPhases.filter((phase: string) => reached.has(phase) === false),
-        problems: rehearsals.flatMap((rehearsal: Rehearsal) => rehearsal.problems.map((problem: string) => `${rehearsal.persona}, seed ${rehearsal.seed}: ${problem}`)),
+        problems: rehearsals.flatMap((rehearsal: Rehearsal<State>) => rehearsal.problems.map((problem: string) => `${rehearsal.persona}, seed ${rehearsal.seed}: ${problem}`)),
     };
 }
 
 /**
- * The personas for the guessing family: one who finds it, one who gives up, one who never
- * guesses, and one who chats between questions.
- * @param players the paper players.
- * @returns the personas.
+ * Checks that who holds a hidden role changes nothing anyone else sees. Plays the same script on
+ * games that differ only in who was dealt the role, and compares the TV, the host's brief and
+ * every phone that held no role in either game, step by step until the reveal.
+ * @param games the same game dealt differently, with who holds the role in each.
+ * @param script the events to play, the same for every game.
+ * @param players who is at the table.
+ * @returns a problem per difference found.
  */
-export function guessingPersonas(players: CartridgePlayer[] = PAPER_PLAYERS): Persona[] {
-    const speaker = (turn: number): string => players[turn % players.length]?.playerId ?? "paper1";
-    const giveUpId: string = "giveup";
-    return [
-        {
-            name: "the finder",
-            move(glimpse: Glimpse): Move {
-                if (glimpse.turn >= 8) {
-                    return { kind: "say", playerId: speaker(glimpse.turn), text: "Is it the thing I think it is?", ruling: "correct" };
+export function roleBlindness<State>(
+    games: readonly { game: KitGame<State>; holderId: string }[],
+    script: readonly RoomEvent[],
+    players: readonly CartridgePlayer[] = PAPER_PLAYERS,
+): string[] {
+    const problems: string[] = [];
+    const runs: { holderId: string; views: Map<string, string[]>[] }[] = games.map(({ game, holderId }: { game: KitGame<State>; holderId: string }) => {
+        const cartridge: Cartridge<State> = game.cartridge;
+        let step: Step<State> = cartridge.init([...players], {});
+        const views: Map<string, string[]>[] = [viewsOf(cartridge, step.state, players, step.facts)];
+        for (const event of script) {
+            if (cartridge.outcome(step.state) !== null) {
+                break;
+            }
+            step = cartridge.onEvent(step.state, event);
+            if (cartridge.outcome(step.state) !== null) {
+                break;
+            }
+            views.push(viewsOf(cartridge, step.state, players, step.facts));
+        }
+        return { holderId, views };
+    });
+    const first: { holderId: string; views: Map<string, string[]>[] } | undefined = runs[0];
+    if (first === undefined) {
+        return problems;
+    }
+    for (const other of runs.slice(1)) {
+        const length: number = Math.min(first.views.length, other.views.length);
+        if (first.views.length !== other.views.length) {
+            problems.push(`The game ran a different number of steps when ${other.holderId} held the role.`);
+        }
+        for (let index = 0; index < length; index += 1) {
+            const viewers: string[] = ["screen", "host", ...players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== first.holderId && id !== other.holderId)];
+            for (const viewer of viewers) {
+                const seenFirst: string = JSON.stringify(first.views[index]?.get(viewer) ?? []);
+                const seenOther: string = JSON.stringify(other.views[index]?.get(viewer) ?? []);
+                if (seenFirst !== seenOther) {
+                    problems.push(`Step ${index}: ${viewer} could tell whether ${first.holderId} or ${other.holderId} held the role.`);
                 }
-                return { kind: "say", playerId: speaker(glimpse.turn), text: `Question ${glimpse.turn}?`, ruling: glimpse.turn % 2 === 0 ? "yes" : "no" };
-            },
-        },
-        {
-            name: "the giver-up",
-            move(glimpse: Glimpse): Move {
-                if (glimpse.turn >= 4) {
-                    return { kind: "press", playerId: speaker(glimpse.turn), actionId: giveUpId };
-                }
-                return { kind: "say", playerId: speaker(glimpse.turn), text: `Question ${glimpse.turn}?`, ruling: "no" };
-            },
-        },
-        {
-            name: "the stubborn one",
-            move(glimpse: Glimpse): Move {
-                return { kind: "say", playerId: speaker(glimpse.turn), text: `Is it a wrong thing number ${glimpse.turn}?`, ruling: glimpse.turn % 3 === 0 ? "wrong" : "no" };
-            },
-        },
-        {
-            name: "the chatterer",
-            move(glimpse: Glimpse): Move {
-                if (glimpse.turn % 2 === 1) {
-                    return { kind: "say", playerId: speaker(glimpse.turn), text: "Did anyone feed the cat?", ruling: null };
-                }
-                return { kind: "say", playerId: speaker(glimpse.turn), text: `Question ${glimpse.turn}?`, ruling: "sortof" };
-            },
-        },
-    ];
+            }
+        }
+    }
+    return problems;
 }

@@ -1,36 +1,44 @@
 // Puts blueprint games on a shelf. installBlueprint makes the InstalledGame the room expects
 // from a blueprint, and studioShelf swaps blueprint versions in for hand-written games with the
-// same id, which is how the existing scenarios prove a blueprint plays the same. Later phases
-// add games a creator kept; this is the one place the room learns about them.
+// same id and adds blueprint games with new ids after them. Each game started from a blueprint
+// logs one line naming the kit and id, so a run can prove which version played; it never logs
+// what anyone said, what the host replied, or a name.
 
-import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import type { InstalledGame } from "../cartridges/index.ts";
-import { blueprintProblems, type Blueprint } from "./blueprint.ts";
-import { createBlueprintGame } from "./interpreter.ts";
+import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
+import { log } from "../room/log.ts";
+import { blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
+import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
+import { frozenCopy } from "./kit/primitives.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: Blueprint[] = [TWENTY_DOORS_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT];
 
 /**
- * Makes an installable game from a blueprint.
- * @param blueprint a runnable blueprint.
+ * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
+ * afterwards changes neither the shelf entry nor any game started from it.
+ * @param given a runnable blueprint.
  * @returns the game, ready for a shelf.
  * @throws when the blueprint is not runnable, naming the problems.
  */
-export function installBlueprint(blueprint: Blueprint): InstalledGame {
+export function installBlueprint(given: Blueprint): InstalledGame {
+    const blueprint: Blueprint = frozenCopy(given);
     const problems: string[] = blueprintProblems(blueprint);
     if (problems.length > 0) {
-        throw new Error(`Blueprint ${blueprint.id} can't run: ${problems.join(" ")}`);
+        throw new Error(`Blueprint ${blueprint.box.id} can't run: ${problems.join(" ")}`);
     }
     return {
-        manifest: createBlueprintGame(blueprint).cartridge.manifest,
-        pitch: blueprint.pitch,
-        howToPlay: blueprint.howToPlay,
-        art: blueprint.art,
-        pauseActions: blueprint.giveUp === null ? [] : [{ id: blueprint.giveUp.actionId, label: blueprint.giveUp.label }],
-        remarks: blueprint.remarks,
-        create: (stage: GameStage): RunningGame => new GameSession(createBlueprintGame(blueprint).cartridge, stage),
+        manifest: createKitGame(blueprint).cartridge.manifest,
+        pitch: blueprint.box.pitch,
+        howToPlay: [...blueprint.box.howToPlay],
+        art: blueprint.box.art,
+        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || blueprint.decisions.giveUpButton === true),
+        remarks: [...blueprint.box.remarks],
+        create: (stage: GameStage): RunningGame => {
+            log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);
+            return new GameSession(createKitGame(blueprint).cartridge, stage);
+        },
     };
 }
 
