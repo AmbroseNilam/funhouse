@@ -80,6 +80,14 @@
     .bands i:nth-child(1) { background: color-mix(in srgb, var(--lamp) 28%, transparent); transform: scale(calc(0.16 + var(--level) * 0.3)); }
     .bands i:nth-child(2) { background: color-mix(in srgb, var(--lamp) 55%, transparent); transform: scale(calc(0.1 + var(--level) * 0.186)); }
     .bands i:nth-child(3) { background: var(--lamp); transform: scale(calc(0.05 + var(--level) * 0.096)); }
+    .pad-screen.tap-recording { background: var(--seat); }
+    .tap-recording .thumb, .tap-recording .bands { display: none; }
+    .sound-bar { position: absolute; left: 24px; right: 24px; bottom: 24px; height: 14px; background: var(--ink); }
+    .sound-bar i { display: block; height: 100%; width: calc(var(--level) * 100%); background: var(--paper); }
+    .tap-talk, .tap-stop { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
+    .tap-talk:active, .tap-stop:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
+    .tap-talk { left: 50%; bottom: 48px; width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
+    .tap-stop { left: 24px; right: 24px; bottom: 48px; padding: 28px; background: var(--wine); color: var(--paper); font-size: 32px; }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }

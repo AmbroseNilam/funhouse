@@ -43,7 +43,10 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 - **Gestures (starting values, tune on a real iPhone):** direction locks at 10pt. First step at
   30pt, then one per 70pt, and reversing steps back. No wrap. Tap: release under 300ms and under
   10pt. Hold: 300ms still, then movement is ignored while talking.
-- **Tap never locks the mic.** Tap always means select.
+- **Tap never locks the mic.** Tap always means select. The one exception, on trial in rooms opened with
+  `?tap=1` only: a separate Talk button starts recording and Stop ends it, with hold still working. It
+  shows a clear recording state, a live sound bar and live words, and stops itself on silence, at a time
+  limit, or when the page is hidden. The landing page and Privacy must change before this leaves the trial.
 - **Pre-roll:** the mic stays open from join and keeps the last 320ms. On hold, send that first, so
   first words survive. Send 300ms more after release.
 - **Corners:** back top-left and phone menu top-right, 60pt. Touches starting there never swipe.

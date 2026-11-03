@@ -6,7 +6,7 @@
 import type { PhoneTurn } from "../../shared/turn.ts";
 import { useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
-import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
+import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
@@ -82,6 +82,21 @@ function clearSeat(): void {
 
 /** Frames of audio kept from before a hold, so first words survive: 320 ms. */
 const PRE_ROLL_FRAMES: number = 4;
+
+/** How loud counts as speech for ending a tap-to-talk recording; a starting value to tune on real phones. */
+const TAP_SPEECH_LEVEL: number = 0.08;
+
+/** A tap-to-talk recording ends after this much quiet once someone has spoken. */
+const TAP_SILENCE_MILLISECONDS: number = 2000;
+
+/** A tap-to-talk recording ends if nobody has spoken after this long. */
+const TAP_FIRST_WORDS_MILLISECONDS: number = 8000;
+
+/** The most a tap-to-talk recording runs, just under the room's own limit on a press. */
+const TAP_LIMIT_MILLISECONDS: number = 28000;
+
+/** How often a tap-to-talk recording checks whether to stop. */
+const TAP_CHECK_MILLISECONDS: number = 100;
 
 /** How long a phone buzzes when its turn comes. */
 const TURN_BUZZ_MILLISECONDS: number = 40;
@@ -379,6 +394,8 @@ export function App(): ReactElement {
     micRef.current = state.mic;
     const pendingNameRef = useRef<string | null>(null);
     const holdingRef = useRef<boolean>(false);
+    const tappingRef = useRef<boolean>(false);
+    const [tapping, setTapping] = useState<boolean>(false);
     const preRollRef = useRef<ArrayBuffer[]>([]);
     const tailTimerRef = useRef<number>(0);
     const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -678,16 +695,67 @@ export function App(): ReactElement {
         learn("hold");
     };
 
-    /** Stops talking, keeping the microphone on a moment so the last word isn't cut. */
-    const stopTalking = (): void => {
+    /**
+     * Stops talking, keeping the microphone on a moment so the last word isn't cut.
+     * @param why why a tap-to-talk recording ended; absent for a hold.
+     */
+    const stopTalking = (why?: TapEnd): void => {
         dispatch({ type: "holding", holding: false });
         setSent(micSilentRef.current === "");
-        send({ type: "released" });
+        tappingRef.current = false;
+        setTapping(false);
+        send(why === undefined ? { type: "released" } : { type: "released", why });
         tailTimerRef.current = window.setTimeout(() => {
             holdingRef.current = false;
             send({ type: "holdToTalk", down: false });
         }, TAIL_MILLISECONDS);
     };
+
+    /** Starts a tap-to-talk recording. */
+    const startTapping = (): void => {
+        if (micRef.current !== "ok") {
+            setMenu("mic");
+            return;
+        }
+        tappingRef.current = true;
+        setTapping(true);
+        void ensureMicrophone();
+        startTalking();
+    };
+
+    // A recording nobody is holding has to end itself, so a forgotten one can't keep listening to the room.
+    useEffect(() => {
+        if (tapping === false) {
+            return;
+        }
+        const startedAt: number = Date.now();
+        let lastSpeechAt: number = 0;
+        const check: number = window.setInterval(() => {
+            const now: number = Date.now();
+            if ((captureRef.current?.level() ?? 0) >= TAP_SPEECH_LEVEL) {
+                lastSpeechAt = now;
+            }
+            if (now - startedAt >= TAP_LIMIT_MILLISECONDS) {
+                stopTalking("limit");
+                return;
+            }
+            const silentSince: number = lastSpeechAt === 0 ? startedAt + TAP_FIRST_WORDS_MILLISECONDS - TAP_SILENCE_MILLISECONDS : lastSpeechAt;
+            if (now - silentSince >= TAP_SILENCE_MILLISECONDS) {
+                stopTalking("silence");
+            }
+        }, TAP_CHECK_MILLISECONDS);
+        const hidden = (): void => {
+            if (document.visibilityState === "hidden") {
+                stopTalking("hidden");
+            }
+        };
+        document.addEventListener("visibilitychange", hidden);
+        return (): void => {
+            window.clearInterval(check);
+            document.removeEventListener("visibilitychange", hidden);
+        };
+        // Only starting or ending a recording should restart this watch.
+    }, [tapping]);
 
     const view: PhoneView | null = state.view;
     padRef.current = view?.pad ?? null;
@@ -755,6 +823,9 @@ export function App(): ReactElement {
                 }
             },
             tap: (): void => {
+                if (tappingRef.current === true) {
+                    return;
+                }
                 if (padRef.current?.canSelect === true) {
                     send({ type: "nav", action: { kind: "select" } });
                     learn("tap");
@@ -763,6 +834,9 @@ export function App(): ReactElement {
                 nudgeLine();
             },
             holdStart: (): void => {
+                if (tappingRef.current === true) {
+                    return;
+                }
                 if (canTalkRef.current === false) {
                     nudgeLine();
                 }
@@ -777,7 +851,7 @@ export function App(): ReactElement {
                 startTalking();
             },
             holdEnd: (): void => {
-                if (holdingRef.current === true) {
+                if (holdingRef.current === true && tappingRef.current === false) {
                     stopTalking();
                 }
             },
@@ -885,7 +959,7 @@ export function App(): ReactElement {
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${tapping === true ? "tap-recording" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -902,18 +976,21 @@ export function App(): ReactElement {
                 <div className="line" aria-live="polite">
                     {state.holding === true
                         ? micSilent === "stopped"
-                            ? <><strong>Can't hear your mic</strong><small>Let go and try again</small></>
+                            ? <><strong>Can't hear your mic</strong><small>{tapping === true ? "Stop and try again" : "Let go and try again"}</small></>
                             : micSilent === "quiet" && view?.hearing === ""
                                 ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
-                                : <strong>Listening</strong>
+                                : <strong>{tapping === true ? "Recording" : "Listening"}</strong>
                         : sent === true
                             ? <strong>Got it</strong>
                             : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}
                 </div>
                 {status !== "" && state.holding === false ? <p className="status" role="status">{status}</p> : null}
+                {tapping === true ? <div className="sound-bar" aria-hidden="true"><i /></div> : null}
             </div>
+            {tapping === true ? <button className="tap-stop" onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && canTalk === true ? <button className="tap-talk" onClick={startTapping}>Talk</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">

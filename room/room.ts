@@ -351,6 +351,7 @@ export class Room implements HostStage {
     private lastLullAt: number = 0;
     private lullsThisGame: number = 0;
     private readonly livelyRoom: boolean;
+    private readonly tapToTalk: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
     /** The words of the host's latest turn; a line still in the voice's queue keeps adding to its own turn. */
@@ -367,10 +368,12 @@ export class Room implements HostStage {
      * @param code the room code players type or scan.
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
      * @param livelyRoom true when the room was opened to try the livelier host.
+     * @param tapToTalk true when the room was opened to try tap-to-talk.
      */
-    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false) {
+    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false, tapToTalk: boolean = false) {
         this.code = code;
         this.livelyRoom = livelyRoom;
+        this.tapToTalk = tapToTalk;
         this.lullTimer = livelyRoom === true ? setInterval(() => { this.checkLull(); }, LULL_CHECK_MILLISECONDS).unref() : null;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
@@ -532,6 +535,9 @@ export class Room implements HostStage {
                 return;
             }
             if (message.type === "released") {
+                if (message.why !== undefined) {
+                    log(this.scope(), `${player.playerId} tap recording ended: ${message.why}`);
+                }
                 this.onReleased(player);
                 return;
             }
@@ -890,6 +896,7 @@ export class Room implements HostStage {
                 colour,
                 connected,
                 talking: holdingToTalk,
+                recording: holdingToTalk === true && this.tapToTalk === true,
                 phoneDown,
                 out: this.game?.outIds().includes(playerId) === true,
                 watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
@@ -1910,7 +1917,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, turn: this.phoneTurn(player) };
     }
 
     /**

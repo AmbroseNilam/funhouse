@@ -25,6 +25,7 @@ function cardState(seat: Seat, turn: Turn | null, touched: boolean): string {
         seat.out === true ? "out" : "",
         seat.connected === true && seat.phoneDown === true ? "phone-down" : "",
         seat.talking === true || touched === true ? "lifted" : "",
+        seat.recording === true ? "recording" : "",
         up === true ? "up" : "",
         done === true ? "done" : "",
         seat.driving === true ? "driving" : "",

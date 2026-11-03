@@ -22,7 +22,7 @@ export type PhoneMessage =
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
     | { type: "touched" }
-    | { type: "released" }
+    | { type: "released"; why?: TapEnd }
     | { type: "presence"; away: boolean };
 
 /** Room to phone. */
@@ -66,6 +66,12 @@ export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 70000;
  * @param message a message with some type.
  * @returns true when it is a well-formed phone message.
  */
+/** Why a tap-to-talk recording ended. */
+export type TapEnd = "stop" | "silence" | "limit" | "hidden";
+
+/** Every reason a phone may give, so nothing else from a phone reaches the logs. */
+const TAP_ENDS: TapEnd[] = ["stop", "silence", "limit", "hidden"];
+
 export function isPhoneMessage(message: { type: string } & Record<string, unknown>): boolean {
     if (message.type === "hello") {
         return typeof message.name === "string" && ["string", "undefined"].includes(typeof message.playerId) === true && ["string", "undefined"].includes(typeof message.resumeToken) === true && ["takeSeat", "newSeat", undefined].includes(message.sameName as string | undefined) === true;
@@ -76,7 +82,10 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     if (message.type === "presence") {
         return typeof message.away === "boolean";
     }
-    if (message.type === "touched" || message.type === "released") {
+    if (message.type === "released") {
+        return message.why === undefined || TAP_ENDS.includes(message.why as TapEnd) === true;
+    }
+    if (message.type === "touched") {
         return true;
     }
     if (message.type === "rename") {

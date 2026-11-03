@@ -149,6 +149,7 @@
     .place-cards { position: absolute; z-index: 3; left: calc(320 * var(--u)); right: calc(80 * var(--u)); bottom: calc(14 * var(--u)); display: flex; align-items: flex-end; justify-content: flex-start; gap: calc(12 * var(--u)); pointer-events: none; }
     .place-cards li { position: relative; flex: 0 1 auto; min-width: 0; padding: calc(8 * var(--u)) calc(18 * var(--u)); color: var(--paper); font-size: calc(30 * var(--u)); font-weight: 600; line-height: 1.15; white-space: nowrap; rotate: -1deg; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; transition: translate 140ms ease-out, opacity 200ms ease-out, box-shadow 140ms ease-out; }
     .place-cards li:nth-child(even) { rotate: 1deg; }
+    .place-cards li.recording { outline: calc(6 * var(--u)) solid var(--lamp); }
     .place-cards .short-name { display: block; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
     .place-cards.crowded li { padding: calc(8 * var(--u)) calc(10 * var(--u)); font-size: calc(28 * var(--u)); }
     .place-cards.crowded .short-name { max-width: 6ch; }
