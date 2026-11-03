@@ -1,6 +1,6 @@
 # Studio handoff
 
-For an agent continuing on branch `studio` with the repository only: no private notes, no
+For an agent continuing on branch `studio-on-master` with the repository only: no private notes, no
 hardware and no model keys. Written 2026-11-03. Read `DESIGN.md` and `CLAUDE.md` first; both
 are binding. Then read `studio/research/studio.md` for the design and `studio/research/plan.md`
 for the original phases, with the changes below.
@@ -153,7 +153,9 @@ beside the game.
   verified. Never backdate.
 - No employer references, no names of people who tested the game, no server or deployment
   details, anywhere.
-- Stay on branch `studio`. No merges, no pull requests, no deployment, and never touch `master`.
+- Stay on branch `studio-on-master`, which is the Studio work rebased onto `master`; the older
+  `studio` branch is frozen and will be removed. Plain pushes only, no merges, no pull requests,
+  no deployment, and never touch `master`. Every commit passes the checks on its own.
   Changes to `room/` and `shared/` stay small and additive; say so in the commit message when
   one is unavoidable.
 - Logs never contain what anyone said, what the host replied, or a player's name. Never read or
