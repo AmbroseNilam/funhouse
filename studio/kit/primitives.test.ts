@@ -83,6 +83,7 @@ describe("shared checks", () => {
         assert.match(boxProblems({ ...BOX, howToPlay: ["It's a whisk."] }, ["whisk"]).join(" "), /how to play gives away/);
         assert.match(boxProblems({ ...BOX, keywords: ["yes", "ox"] }, ["ox"]).join(" "), /keyword gives away/);
         assert.match(boxProblems({ ...BOX, name: "Whisk Off" }, ["whisk"]).join(" "), /name gives away/);
+        assert.match(boxProblems({ ...BOX, howToPlay: ["Col", "ander"] }, ["colander"]).join(" "), /how to play gives away/, "split across two lines");
         assert.equal(boxProblems({ ...BOX, remarks: ["One two three four five six seven eight nine."] }, []).length, 1);
         assert.equal(boxProblems({ ...BOX, remarks: ["Go!"] }, []).length, 1);
         assert.equal(boxProblems({ ...BOX, minPlayers: Number.NaN }, []).length, 1);

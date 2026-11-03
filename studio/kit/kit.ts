@@ -144,7 +144,7 @@ export function boxProblems(box: Box, hidden: readonly string[]): string[] {
     }
     const shown: [string, readonly string[]][] = [["name", [box.name]], ["pitch", [box.pitch]], ["how to play", box.howToPlay], ["remark", box.remarks], ["keyword", box.keywords]];
     for (const [field, texts] of shown) {
-        if (hidden.some((secret: string) => texts.some((text: string) => appears([text], secret) === true)) === true) {
+        if (hidden.some((secret: string) => appears(texts, secret) === true) === true) {
             problems.push(`A ${field} gives away a secret.`);
         }
     }
