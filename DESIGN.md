@@ -25,7 +25,9 @@ Product and host names live only in `shared/brand.ts`.
   logos, no named artists or brands. Never re-encode in a way that strips provenance data, so icons
   and share images are drawn in code instead. Credit in one place only: Credits in the phone menu,
   the README and the submission. Never present it as human-made.
-- **Copy:** the host's voice everywhere: plain, dry, warm, short. No "Welcome to", no exclamation
+- **Copy:** on the TV and phone, the host's voice: plain, dry, warm, short. The landing page is plain
+  description in the third person, and the host speaks only in its game demos. No slogans or jokes
+  there, and no "not X, but Y" or "No X. Just Y" anywhere. No "Welcome to", no exclamation
   marks on UI, no "Click here", no emoji. Sentence case. A person writing a note for a friend.
 
 ## Banned, because they read as AI defaults

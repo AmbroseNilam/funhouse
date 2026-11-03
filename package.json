@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "private": true,
     "license": "MIT",
-    "description": "Funhouse: game night, and nobody has to host. Phones join by QR code; the host listens, talks, draws, and keeps secrets.",
+    "description": "Funhouse: party games for your TV, with an AI host. Phones join by QR code; the host listens, talks and draws.",
     "type": "module",
     "engines": {
         "node": ">=24 <25",

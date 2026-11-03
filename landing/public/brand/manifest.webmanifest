@@ -2,7 +2,7 @@
     "id": "/phone/",
     "name": "Funhouse",
     "short_name": "Funhouse",
-    "description": "Game night, and nobody has to host. Your phone is the controller.",
+    "description": "Party games for your TV, with an AI host. Your phone is the controller.",
     "start_url": "/phone/",
     "scope": "/",
     "display": "standalone",

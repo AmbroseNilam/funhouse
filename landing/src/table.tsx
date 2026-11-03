@@ -1,4 +1,4 @@
-// The pieces of the table the page shows: the TV's lantern with a slip of what it just said, a
+// The pieces of the table the page shows: the TV's lantern with a slip of plain help, a
 // phone as it really looks mid-game, and the vote that really happens in Werewolf, played once
 // the visitor scrolls to it. Pictures below the first screen wait until they're nearly in view.
 
@@ -10,14 +10,14 @@ import type { HostSpeaker } from "../../screen/src/speaker.ts";
 /** What the visitor has just done. */
 export type Moment = "arrived" | "atStart" | "atCode" | "typing" | "codeReady" | "turnedAway";
 
-/** One line per moment, in the host's voice. */
+/** One line of help per moment. The host only speaks in the game demos. */
 const LINES: Record<Moment, string> = {
-    arrived: "Evening. I've got the rules and the timer. You've got the snacks.",
-    atStart: "Put me on the TV. I'll take it from there.",
-    atCode: "It's the four big letters on the TV.",
-    typing: "Keep going.",
-    codeReady: "That's a room. In you go.",
-    turnedAway: "That room's not open. Check the TV and try again.",
+    arrived: `This is ${HOST_NAME}, your host.`,
+    atStart: `${HOST_NAME} appears on the TV when you start a room.`,
+    atCode: "The code is the four letters on the TV.",
+    typing: "Enter all four letters.",
+    codeReady: "Select Join to enter the room.",
+    turnedAway: "That room can't be joined. Check the code on the TV.",
 };
 
 /** The names used in the demos, drawn from a list rather than made up on the spot. */
@@ -27,19 +27,18 @@ export const NAMES: { owner: string; speaker: string; accused: string; third: st
 const LOAD_AHEAD: string = "600px 0px";
 
 /**
- * The host on the page: the lantern, awake and looking where the visitor is, with a slip of what
- * it just said. The slip is a live region so screen readers hear the host too.
+ * The host on the page: the lantern, awake and looking where the visitor is, with a slip of plain
+ * help. The slip is a live region so screen readers hear it too.
  * @param props the moment, the typed code, and where to look (-1 left, 1 right).
  * @returns the element.
  */
 export function HostAtTable(props: { moment: Moment; code: string; look: number }): ReactElement {
     const micRef = useRef<{ level: number; at: number }>({ level: 0, at: 0 });
     const speakerRef = useRef<HostSpeaker | null>(null);
-    const line: string = props.moment === "typing" ? `${props.code}… keep going.` : LINES[props.moment];
     return (
         <div className="host-at-table">
             <Lantern micRef={micRef} speakerRef={speakerRef} awake={true} thinking={false} speaking={false} look={props.look} />
-            <p className="slip from-host" aria-live="polite"><strong>{HOST_NAME}</strong>{line}</p>
+            <p className="slip from-host" aria-live="polite">{LINES[props.moment]}</p>
         </div>
     );
 }

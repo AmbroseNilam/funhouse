@@ -65,7 +65,6 @@
     .start-card em { align-self: flex-start; margin-top: 6px; padding: 12px 20px; background: var(--lamp); color: var(--lamp-ink); font-style: normal; font-weight: 600; box-shadow: 4px 4px 0 #000; transition: transform 90ms ease-out; }
     .start-card:hover em { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; }
     .start-card:active em { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
-    .try-alone { font-size: 17px; line-height: 1.3; }
     .hosting-line { display: none; font-size: 17px; color: var(--muted); }
     .join-card { padding: 16px 20px; gap: 6px; rotate: 0.5deg; }
     .join-card strong { font-size: 22px; }
@@ -79,12 +78,11 @@
     .mic-note { margin-top: 4px; font-size: 16px; }
 
     /* The real TV and phone */
-    .product { grid-area: product; display: grid; grid-template-columns: minmax(0, 79fr) minmax(0, 21fr); grid-template-areas: "tv phone" "note note"; column-gap: 22px; row-gap: 14px; align-items: end; }
+    .product { grid-area: product; display: grid; grid-template-columns: minmax(0, 79fr) minmax(0, 21fr); grid-template-areas: "tv phone"; column-gap: 22px; align-items: end; }
     .shot-tv { grid-area: tv; box-shadow: 0 0 0 5px var(--wood-dark), 10px 11px 0 5px #000; }
     .shot-tv img { width: 100%; }
     .shot-phone { grid-area: phone; box-shadow: 0 0 0 3px #000, 6px 6px 0 3px #000; rotate: 1.5deg; }
     .shot-phone img { width: 100%; }
-    .product-note { grid-area: note; color: var(--paper); font-size: 16px; }
 
     /* The host at the table */
     .host-at-table { grid-area: host; display: flex; align-items: flex-end; gap: 18px; }
@@ -177,14 +175,12 @@
         .start-side { gap: 8px; }
         .start-side .start-card { display: none; }
         .hosting-line { display: block; }
-        .try-alone { font-size: 17px; color: var(--muted); }
         .host-at-table { min-width: 0; }
         .host-at-table .lantern { width: 62px; height: 90px; }
         .host-at-table .slip { min-width: 0; font-size: 17px; margin-bottom: 8px; }
         .shelf { grid-template-columns: 1fr; gap: 32px; padding: 0; }
         .tally-row { font-size: 20px; }
-        .product { grid-template-columns: minmax(0, 30fr) minmax(0, 70fr); grid-template-areas: "tv tv" "phone note"; align-items: center; row-gap: 20px; }
-        .product-note { font-size: 17px; }
+        .product { grid-template-columns: minmax(0, 70fr) minmax(0, 30fr); column-gap: 14px; align-items: center; }
     }
 
     @media (prefers-reduced-motion: reduce) {

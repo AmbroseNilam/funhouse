@@ -1,11 +1,11 @@
-// The games on the shelf, in the lobby's order, in the host's own words. Facts match each
+// The games on the shelf, in the lobby's order, described plainly. Facts match each
 // cartridge's manifest; the paintings are the TV's own, drawn once with Muse Image and served
 // from /screen/art.
 
 /** One box on the shelf. */
 export interface GameBox {
     name: string;
-    /** The genre in plain words, said by the host; never another product's name. */
+    /** What you do in plain words; never another product's name. */
     line: string;
     players: string;
     length: string;
@@ -17,7 +17,7 @@ export interface GameBox {
 export const GAMES: GameBox[] = [
     {
         name: "Twenty Doors",
-        line: "I think of something. You get twenty yes-or-no questions to find it, and I don't crack.",
+        line: "The host thinks of something. You get twenty yes-or-no questions to work out what it is.",
         players: "1 to 12 players",
         length: "About 5 minutes",
         art: "/screen/art/twenty-doors.webp",
@@ -25,7 +25,7 @@ export const GAMES: GameBox[] = [
     },
     {
         name: "Werewolf",
-        line: "A village, secret werewolves, and a vote each day. I narrate, and I never see who's who.",
+        line: "Some of you are secretly werewolves, and the village votes each day. The host narrates and is never told who has which role.",
         players: "4 to 10 players",
         length: "15 to 25 minutes",
         art: "/screen/art/werewolf.webp",
@@ -33,7 +33,7 @@ export const GAMES: GameBox[] = [
     },
     {
         name: "Quizmaster",
-        line: "Trivia on any topic you name, out loud. I write the questions and judge the answers.",
+        line: "Name any topic and answer out loud. The host writes the questions and judges the answers.",
         players: "1 to 12 players",
         length: "About 5 minutes",
         art: "/screen/art/quizmaster.webp",

@@ -1,8 +1,8 @@
 // The front door, drawn as the TV's own table: the painted room, the lantern, two paper cards to
 // start on a TV or join from a phone, and the real TV and phone beside them. Then the shelf of
 // games, the vote the host really runs, and what a phone holds. The QR code skips this page and
-// goes straight to the phone. Copy is in the host's first person and says only what the code
-// does. Follows docs/DESIGN.md and docs/LANDING-RESEARCH.md in the planning notes.
+// goes straight to the phone. Copy is plain description that says only what the code does; the
+// host speaks only in the game demos. Follows docs/DESIGN.md and docs/LANDING-RESEARCH.md in the planning notes.
 
 import { useState, type FormEvent, type ReactElement } from "react";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
@@ -18,8 +18,8 @@ const MISSING_ROOM: string | null = new URLSearchParams(location.search).get("mi
 /** The room code a phone was just turned away from for being full, if any. */
 const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full");
 
-/** What the mic does, in the host's words; the same line wherever it comes up. */
-const MIC_LINE: string = "Hold to talk. Until then, I hear nothing.";
+/** What the mic does; the same line wherever it comes up. */
+const MIC_LINE: string = "Your phone only sends sound when you hold to talk.";
 
 /** Where to watch a game and read the code. Empty until they exist; nothing shows until then. */
 const PROOF: { video: string; code: string } = { video: "", code: "" };
@@ -57,20 +57,19 @@ export function App(): ReactElement {
                 <div className="table-inner">
                     <header className="heading">
                         <p className="name">{PRODUCT_NAME}</p>
-                        <h1>Game night. Nobody has to host.</h1>
+                        <h1>Party games for your TV, with an AI host</h1>
                         <p className="plain">
-                            Party games with an AI host that hears you. The game's on the TV, your phone is the controller and the mic, and there's nothing to install.
+                            The game plays on your TV. Your phone is the controller and mic, and there's nothing to install.
                         </p>
                     </header>
                     <div className="cards">
                         <div className="start-side">
                             <a className="paper card start-card" href="/screen/" onMouseEnter={atStart} onFocus={atStart}>
                                 <strong>Start on a TV</strong>
-                                <span>Open this on the big screen. A code and a QR appear, and I say hello.</span>
+                                <span>Open this page on a TV or laptop to get a room code and QR code.</span>
                                 <em>Start a room</em>
                             </a>
                             <p className="hosting-line">Hosting? <a href="/screen/">Open this site on a TV or laptop.</a></p>
-                            <p className="try-alone">One person can try it: a laptop, a phone, five minutes of Twenty Doors.</p>
                         </div>
                         <form className="paper card join-card" onSubmit={join}>
                             <strong>Join from your phone</strong>
@@ -108,15 +107,13 @@ export function App(): ReactElement {
                         <figure className="shot-phone">
                             <img src="/landing/shots/phone.webp" alt={`${NAMES.owner}'s phone: a plain orange surface that says Slide your thumb, Watch the TV`} width="585" height="1190" />
                         </figure>
-                        <p className="product-note">The real TV and {NAMES.owner}'s phone. No app, just the browser.</p>
                     </div>
                     <HostAtTable moment={moment} code={code} look={look} />
                 </div>
             </section>
 
             <section className="shelf-section" aria-labelledby="games">
-                <h2 id="games">On the shelf tonight</h2>
-                <p className="plain">Pick one and play. Nobody sits out to run it, because that's my job.</p>
+                <h2 id="games">Games</h2>
                 <ul className="shelf">
                     {GAMES.map((game: GameBox) => (
                         <li key={game.name} className="box">
@@ -134,10 +131,9 @@ export function App(): ReactElement {
 
             <section className="hears" aria-labelledby="hears">
                 <div className="hears-copy">
-                    <h2 id="hears">I know who said what.</h2>
+                    <h2 id="hears">Talk to the host</h2>
                     <p className="plain">
-                        Every phone is its own mic. Accuse your friend, shout an answer, ask me a rule, and I answer you, by name if I have to.
-                        When the table's ready to vote, say so, and I call it.
+                        Each phone is a separate mic, so the host knows who's speaking. Answer out loud, ask about a rule, or say when you're ready to vote.
                     </p>
                     <p className="plain mic-big">{MIC_LINE}</p>
                 </div>
@@ -146,24 +142,23 @@ export function App(): ReactElement {
 
             <section className="secrets" aria-labelledby="secrets">
                 <div className="hears-copy">
-                    <h2 id="secrets">Your secrets stay in your hand.</h2>
+                    <h2 id="secrets">Secret roles stay on your phone</h2>
                     <p className="plain">
-                        The TV shows the room. Your phone shows you, and only while you press. A phone left on the table gives nothing away, and I never see
-                        who's who either.
+                        Your role only shows while you press and hold, so a phone left on the table gives nothing away.
                     </p>
                 </div>
                 <PhoneCard />
             </section>
 
             <footer className="foot">
-                <a className="paper card start-card" href="/screen/"><strong>Start on a TV</strong><span>It takes a second.</span><em>Start a room</em></a>
+                <a className="paper card start-card" href="/screen/"><strong>Start on a TV</strong><em>Start a room</em></a>
                 {PROOF.video !== "" || PROOF.code !== "" ? (
                     <p className="proof">
                         {PROOF.video !== "" ? <a href={PROOF.video}>Watch a game</a> : null}
                         {PROOF.code !== "" ? <a href={PROOF.code}>Read the code</a> : null}
                     </p>
                 ) : null}
-                <p className="fine">No accounts. Just a name and the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
+                <p className="fine">You don't need an account. Players enter a name and allow the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
             </footer>
         </main>
     );
