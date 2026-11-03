@@ -6,8 +6,8 @@
 // host only rules one question at a time from a closed list. Leading Questions is this kit.
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
-import type { Control } from "../../shared/controls.ts";
-import type { Scene, SceneBlock } from "../../shared/scene.ts";
+import type { Control, ControlOption } from "../../shared/controls.ts";
+import type { Scene, SceneBlock, TallyRow as SceneTallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
@@ -555,7 +555,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
             ];
             if (state.voters.length > 0) {
                 const counted: Tally = tally(state.votes, [...state.players.map((player: CartridgePlayer) => player.playerId)]);
-                const rows = counted.rows.filter((row: TallyRow) => row.votes > 0 || row.playerId === state.plantId).map((row: TallyRow) => ({
+                const rows: SceneTallyRow[] = counted.rows.filter((row: TallyRow) => row.votes > 0 || row.playerId === state.plantId).map((row: TallyRow): SceneTallyRow => ({
                     label: nameOf(state, row.playerId),
                     count: row.votes,
                     highlight: row.playerId === state.plantId,
@@ -579,7 +579,9 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 if (mayVote(state, playerId) === false) {
                     return [{ type: "waiting", text: state.voters.includes(playerId) === true ? "Voted." : "Watching the vote." }];
                 }
-                const options = candidatesFor(state, playerId).map((player: CartridgePlayer) => ({ id: `${VOTE_PREFIX}${player.playerId}`, label: player.name }));
+                const options: ControlOption[] = candidatesFor(state, playerId).map((player: CartridgePlayer): ControlOption => {
+                    return { id: `${VOTE_PREFIX}${player.playerId}`, label: player.name };
+                });
                 return [{ type: "choice", prompt: "Who knew it all along?", options, multiple: false }];
             }
             const plantLine: Record<PlantResult, string> = {

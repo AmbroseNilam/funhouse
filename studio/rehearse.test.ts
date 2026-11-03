@@ -18,12 +18,10 @@ import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
-import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { guessingPersonas, plantPersonas } from "./personas.ts";
-import { PAPER_PLAYERS, rehearse, rehearseMany, roleBlindness, type Persona, type Rehearsal, type Tally, type TraceEntry } from "./rehearse.ts";
-
-/** Seeds for a set of rehearsals. */
-const SEEDS: number[] = [1, 2, 3, 4, 5];
+import { createPlantGame, type PlantDecisions, type PlantState } from "./kits/plant.ts";
+import { checkBlueprint } from "./check.ts";
+import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { appears, PAPER_PLAYERS, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
 
 /**
  * Twenty Doors from a blueprint.
@@ -66,7 +64,7 @@ function twentyDoorsProblems(game: (seed: number) => KitGame<GuessingState>): st
 describe("rehearsing healthy games", () => {
     it("rehearses twenty doors: every rehearsal ends, reaches every phase, and finds nothing", () => {
         const startedAt: number = Date.now();
-        const tally: Tally = rehearseMany(twentyDoors, guessingPersonas(TWENTY_DOORS_BLUEPRINT.decisions), SEEDS);
+        const tally: Tally = checkBlueprint(TWENTY_DOORS_BLUEPRINT);
         assert.equal(tally.rehearsals, 20);
         assert.equal(tally.ended, 20);
         assert.deepEqual(tally.phasesNeverReached, []);
@@ -76,7 +74,7 @@ describe("rehearsing healthy games", () => {
 
     it("rehearses leading questions and reaches every ending it has, with the model failing and succeeding", () => {
         for (const content of ["", "teapot"]) {
-            const tally: Tally = rehearseMany(leadingQuestions, plantPersonas(), SEEDS, { content });
+            const tally: Tally = checkBlueprint(LEADING_QUESTIONS_BLUEPRINT, { content });
             assert.equal(tally.ended, tally.rehearsals);
             assert.deepEqual(tally.phasesNeverReached, []);
             assert.deepEqual(tally.problems, []);
@@ -90,7 +88,7 @@ describe("rehearsing healthy games", () => {
     it("rehearses leading questions at four and at eight", () => {
         const eight: CartridgePlayer[] = ["Teacup", "Spoon", "Candle", "Saucer", "Matchbox", "Kettle", "Napkin", "Fork"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
         for (const players of [PAPER_PLAYERS.slice(0, 4), eight]) {
-            assert.deepEqual(rehearseMany(leadingQuestions, plantPersonas(), SEEDS, { players }).problems, []);
+            assert.deepEqual(checkBlueprint(LEADING_QUESTIONS_BLUEPRINT, { players }).problems, []);
         }
     });
 
@@ -103,32 +101,7 @@ describe("rehearsing healthy games", () => {
         assert.equal(last.event.type, "hostRuled");
         assert.equal(last.step.facts[1]?.text, "answers.correct");
     });
-
-    it("finds that who is the Plant changes nothing the TV, the host or anyone else can see", () => {
-        const players: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
-        const games: { game: KitGame<PlantState>; holderId: string }[] = players.map((player: CartridgePlayer, seat: number) => {
-            const values: number[] = [0, (seat + 0.5) / players.length];
-            return { game: createPlantGame(LEADING_QUESTIONS_BLUEPRINT.box, LEADING_QUESTIONS_BLUEPRINT.decisions, () => values.shift() ?? 0), holderId: player.playerId };
-        });
-        assert.deepEqual(roleBlindness(games, blindScript(), players), []);
-    });
 });
-
-/**
- * A script played the same way whoever is the Plant: the word comes, reading ends, two questions,
- * a find, and two votes.
- * @returns the events.
- */
-function blindScript(): RoomEvent[] {
-    return [
-        { type: "contentReady", at: 0, text: "teapot" },
-        { type: "timerFired", at: 10, timerId: "read" },
-        { type: "speechEnded", at: 12, playerId: "paper1", text: "Is it metal?" },
-        { type: "hostRuled", at: 13, ruling: "no", detail: "", playerId: "paper1" },
-        { type: "speechEnded", at: 15, playerId: "paper2", text: "Is it in a kitchen?" },
-        { type: "hostRuled", at: 16, ruling: "yes", detail: "", playerId: "paper2" },
-    ];
-}
 
 describe("rehearsal catches planted faults", () => {
     it("a secret in a roster badge, a tally label, or on every phone", () => {
@@ -208,15 +181,52 @@ describe("rehearsal catches planted faults", () => {
         const problems: string = rehearseMany(cards, plantPersonas(), [1]).problems.join("\n");
         assert.match(problems, /the word reached phone/);
         assert.match(problems, /the Plant's card reached phone/);
-        const players: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
-        const told: { game: KitGame<PlantState>; holderId: string }[] = players.map((player: CartridgePlayer, seat: number) => {
-            const values: number[] = [0, (seat + 0.5) / players.length];
-            const game: KitGame<PlantState> = createPlantGame(LEADING_QUESTIONS_BLUEPRINT.box, LEADING_QUESTIONS_BLUEPRINT.decisions, () => values.shift() ?? 0);
-            const leaky: KitGame<PlantState> = faulty(game, (healthy: Cartridge<PlantState>) => ({
-                hostFacts: (state: PlantState, scope: Scope): ScopedFact[] => [...healthy.hostFacts(state, scope), { scope: { kind: "host" }, kind: "plant", text: `The Plant is ${state.plantId}.` }],
-            }));
-            return { game: leaky, holderId: player.playerId };
-        });
-        assert.match(roleBlindness(told, blindScript(), players).join("\n"), /host could tell/);
+        const healthy: RoleCheck<PlantState> = plantRoleCheck(LEADING_QUESTIONS_BLUEPRINT);
+        const told: RoleCheck<PlantState> = {
+            script: healthy.script,
+            deal: (seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> => faulty(healthy.deal(seat, players), (rules: Cartridge<PlantState>) => ({
+                hostFacts: (state: PlantState, scope: Scope): ScopedFact[] => [...rules.hostFacts(state, scope), { scope: { kind: "host" }, kind: "plant", text: `The Plant is ${state.plantId}.` }],
+            })),
+        };
+        assert.match(rehearseMany(leadingQuestions, plantPersonas(), [1], { roleCheck: told }).problems.join("\n"), /role check: .*host could tell/);
+        const marked: RoleCheck<PlantState> = {
+            script: healthy.script,
+            deal: (seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> => faulty(healthy.deal(seat, players), (rules: Cartridge<PlantState>) => ({
+                publicScene: (state: PlantState): Scene => ({
+                    ...rules.publicScene(state),
+                    blocks: [...rules.publicScene(state).blocks, { type: "tally", title: "Seats", rows: state.players.map((player: CartridgePlayer) => ({ label: player.name, count: 0, highlight: player.playerId === state.plantId })) }],
+                }),
+            })),
+        };
+        assert.match(rehearseMany(leadingQuestions, plantPersonas(), [1], { roleCheck: marked }).problems.join("\n"), /screen could tell/);
+    });
+
+    it("a word split across two strings, and a short word, without mistaking it inside another", () => {
+        assert.equal(appears(["Col", "ander"], "Colander"), true);
+        assert.equal(appears(["We found an ox."], "ox"), true);
+        assert.equal(appears(["It fits in a box."], "ox"), false);
+        assert.equal(appears(["xo"], "ox"), false, "short words are matched whole, not reversed");
+    });
+
+    it("a timer that is due fires before the next thing a player does", () => {
+        const decisions: PlantDecisions = { ...LEADING_QUESTIONS_BLUEPRINT.decisions, askingSeconds: 60 };
+        const fast = (seed: number): KitGame<PlantState> => createPlantGame(LEADING_QUESTIONS_BLUEPRINT.box, decisions, seededRandom(seed));
+        let openedAt: number = -1;
+        const late: Persona<PlantState> = {
+            name: "the late guesser",
+            move(glimpse: Glimpse<PlantState>): Move {
+                if (glimpse.phase === "choosing") {
+                    return { kind: "wait", seconds: 5 };
+                }
+                openedAt = openedAt === -1 ? glimpse.now : openedAt;
+                if (glimpse.now < openedAt + 57) {
+                    return { kind: "wait", seconds: openedAt + 57 - glimpse.now };
+                }
+                return { kind: "say", playerId: "paper1", text: `Is it a ${glimpse.state.word}?`, ruling: "correct" };
+            },
+        };
+        const rehearsal: Rehearsal<PlantState> = rehearse(fast(1), late, 1);
+        assert.deepEqual(rehearsal.problems, []);
+        assert.match(rehearsal.outcome ?? "", /The word was/, "the clock ran out before the late guess was heard");
     });
 });

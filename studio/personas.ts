@@ -4,9 +4,12 @@
 // rehearses. Between them they reach every ending a kit has.
 
 import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
+import type { RoomEvent } from "../shared/timeline.ts";
+import type { PlantBlueprint } from "./blueprint.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
-import { VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
-import type { Glimpse, Move, Persona } from "./rehearse.ts";
+import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
+import type { KitGame } from "./kit/kit.ts";
+import type { Glimpse, Move, Persona, RoleCheck } from "./rehearse.ts";
 
 /** Seconds a quiet table lets pass at a time. */
 const QUIET_SECONDS: number = 30;
@@ -204,4 +207,29 @@ export function plantPersonas(): Persona<PlantState>[] {
             },
         },
     ];
+}
+
+/**
+ * The plant kit's role check: the same game with the Plant dealt to each seat in turn, and a
+ * script played the same way whoever it is: the word comes, reading ends, two questions are
+ * asked and ruled. Every view but the Plant's must stay the same.
+ * @param blueprint the game.
+ * @returns the check.
+ */
+export function plantRoleCheck(blueprint: PlantBlueprint): RoleCheck<PlantState> {
+    const script: RoomEvent[] = [
+        { type: "contentReady", at: 0, text: "teapot" },
+        { type: "timerFired", at: 10, timerId: "read" },
+        { type: "speechEnded", at: 12, playerId: "paper1", text: "Is it metal?" },
+        { type: "hostRuled", at: 13, ruling: "no", detail: "", playerId: "paper1" },
+        { type: "speechEnded", at: 15, playerId: "paper2", text: "Is it in a kitchen?" },
+        { type: "hostRuled", at: 16, ruling: "yes", detail: "", playerId: "paper2" },
+    ];
+    return {
+        deal(seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> {
+            const draws: number[] = [0, (seat + 0.5) / players.length];
+            return createPlantGame(blueprint.box, blueprint.decisions, () => draws.shift() ?? 0);
+        },
+        script,
+    };
 }

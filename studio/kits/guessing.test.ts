@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { InstalledGame } from "../../cartridges/index.ts";
-import type { Step } from "../../shared/cartridge.ts";
+import type { PhaseSpec, Step } from "../../shared/cartridge.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
 import { canSee, hostMaySee, type ScopedFact } from "../../shared/visibility.ts";
 import { blueprintProblems, type GuessingBlueprint } from "../blueprint.ts";
@@ -57,7 +57,7 @@ describe("the twenty doors blueprint", () => {
         assert.deepEqual(blueprintProblems(TWENTY_DOORS_BLUEPRINT), []);
         const game: KitGame<GuessingState> = twentyDoors();
         assert.equal(game.cartridge.manifest.id, "twentyDoors");
-        assert.deepEqual(game.cartridge.manifest.phases.map((phase) => phase.id), ["choosing", "asking", "end"]);
+        assert.deepEqual(game.cartridge.manifest.phases.map((phase: PhaseSpec) => phase.id), ["choosing", "asking", "end"]);
         assert.deepEqual(Object.keys(game.cartridge.manifest.phases[1]?.hostRulings ?? {}), ["yes", "no", "sortof", "wrong", "correct", "giveup"]);
         assert.match(game.cartridge.manifest.phases[1]?.hostBrief ?? "", /uses no door\. Don't count doors/);
     });

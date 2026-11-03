@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CartridgePlayer, Step } from "../../shared/cartridge.ts";
-import type { Control } from "../../shared/controls.ts";
-import type { SceneBlock } from "../../shared/scene.ts";
+import type { Control, ControlOption } from "../../shared/controls.ts";
+import type { SceneBlock, TallyRow as SceneTallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { ScopedFact } from "../../shared/visibility.ts";
 import { blueprintProblems, type PlantBlueprint } from "../blueprint.ts";
@@ -217,14 +217,14 @@ describe("leading questions: the vote", () => {
         assert.ok(askingClock !== -1 && voteClock !== -1 && askingClock !== voteClock, "the vote clock can't inherit the asking clock's countdown");
         const ballot: Control | undefined = game.cartridge.privateControls(found.state, "paper1")[0];
         assert.ok(ballot !== undefined && ballot.type === "choice");
-        assert.deepEqual(ballot.options.map((option) => option.label), ["Spoon", "Candle", "Saucer"], "nobody votes for themselves");
+        assert.deepEqual(ballot.options.map((option: ControlOption) => option.label), ["Spoon", "Candle", "Saucer"], "nobody votes for themselves");
         assert.equal(game.cartridge.apply(found.state, "paper1", `${VOTE_PREFIX}paper1`).state, found.state);
         const ended: Step<PlantState> = voteAll(game, found.state, { paper1: "paper3", paper2: "paper3", paper3: "paper1", paper4: "paper3" });
         assert.equal(ended.state.result, "caught");
         assert.equal(game.cartridge.outcome(ended.state), "The room caught Candle.");
         const tallyBlock: SceneBlock | undefined = game.cartridge.publicScene(ended.state).blocks.find((block: SceneBlock) => block.type === "tally");
         assert.ok(tallyBlock?.type === "tally");
-        assert.deepEqual(tallyBlock.rows.find((row) => row.highlight === true), { label: "Candle", count: 3, highlight: true });
+        assert.deepEqual(tallyBlock.rows.find((row: SceneTallyRow) => row.highlight === true), { label: "Candle", count: 3, highlight: true });
     });
 
     it("lets the Plant get away with a tie, or with the most votes on someone else", () => {

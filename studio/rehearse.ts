@@ -87,6 +87,14 @@ export interface RehearsalOptions {
     players?: readonly CartridgePlayer[];
 }
 
+/** How to check that a game's hidden role is invisible to everyone who doesn't hold it. */
+export interface RoleCheck<State> {
+    /** The same game, with the role dealt to the player in this seat. */
+    deal(seat: number, players: readonly CartridgePlayer[]): KitGame<State>;
+    /** Events to play, the same whoever holds the role. */
+    script: readonly RoomEvent[];
+}
+
 /**
  * Every string inside a value, for searching what a viewer sees. Keys and image addresses are left out.
  * @param value plain data.
@@ -103,7 +111,28 @@ export function stringsIn(value: unknown): string[] {
 }
 
 /**
- * Finds hidden values a viewer sees but may not, spaced, punctuated or reversed.
+ * Whether a hidden value appears in what a viewer sees. Values of three letters or more are found
+ * spaced, punctuated, reversed, or split across two strings; shorter ones only as whole words, so
+ * "ox" is caught but "box" is not taken for it.
+ * @param seen the viewer's strings.
+ * @param text the hidden value.
+ * @returns true when it appears.
+ */
+export function appears(seen: readonly string[], text: string): boolean {
+    const needle: string = squash(text);
+    if (needle === "") {
+        return false;
+    }
+    if (needle.length < 3) {
+        const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${needle}($|[^\\p{L}\\p{N}])`, "iu");
+        return [...seen, seen.join(" ")].some((candidate: string) => whole.test(candidate) === true);
+    }
+    const reversed: string = [...needle].reverse().join("");
+    return [...seen.map(squash), squash(seen.join(""))].some((candidate: string) => candidate.includes(needle) === true || candidate.includes(reversed) === true);
+}
+
+/**
+ * Finds hidden values a viewer sees but may not.
  * @param viewer who is looking: "screen", "host", or a player id.
  * @param seen what they see, as strings.
  * @param hidden what must stay hidden, and from whom.
@@ -111,17 +140,8 @@ export function stringsIn(value: unknown): string[] {
  */
 export function findLeaks(viewer: string, seen: readonly string[], hidden: readonly HiddenValue[]): string[] {
     const problems: string[] = [];
-    const squashed: string[] = seen.map(squash);
     for (const value of hidden) {
-        if (value.seenBy.includes(viewer) === true) {
-            continue;
-        }
-        const needle: string = squash(value.text);
-        if (needle.length < 3) {
-            continue;
-        }
-        const reversed: string = [...needle].reverse().join("");
-        if (squashed.some((text: string) => text.includes(needle) === true || text.includes(reversed) === true) === true) {
+        if (value.seenBy.includes(viewer) === false && appears(seen, value.text) === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }
     }
@@ -144,30 +164,27 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
 }
 
 /**
- * What every viewer sees right now: the TV, each phone (which sees the TV too), and the host.
- * Facts are what the step just emitted, routed the way the room routes them.
+ * What every viewer sees right now, whole: the TV, each phone (which sees the TV too), and the
+ * host. Facts are what the step just emitted, routed the way the room routes them. Kept as the
+ * data itself, not just its words, so a difference in a number or a highlight counts.
  * @param cartridge the rules.
  * @param state the state.
  * @param players who is at the table.
  * @param facts what the step emitted.
- * @returns each viewer's strings, by viewer.
+ * @returns each viewer's view, by viewer.
  */
-export function viewsOf<State>(cartridge: Cartridge<State>, state: State, players: readonly CartridgePlayer[], facts: readonly ScopedFact[]): Map<string, string[]> {
-    const shown: (fact: ScopedFact) => boolean = (fact: ScopedFact) => fact.scope.kind === "public";
-    const announced: string[] = facts.filter(shown).map((fact: ScopedFact) => fact.text);
-    const screen: string[] = [...stringsIn(cartridge.publicScene(state)), ...stringsIn(cartridge.turn?.(state) ?? null), ...announced];
-    const views: Map<string, string[]> = new Map([["screen", screen]]);
+export function viewsOf<State>(cartridge: Cartridge<State>, state: State, players: readonly CartridgePlayer[], facts: readonly ScopedFact[]): Map<string, unknown[]> {
+    const screen: unknown[] = [cartridge.publicScene(state), cartridge.turn?.(state) ?? null, facts.filter((fact: ScopedFact) => fact.scope.kind === "public")];
+    const views: Map<string, unknown[]> = new Map([["screen", screen]]);
     const phase: PhaseSpec | undefined = cartridge.manifest.phases.find((candidate: PhaseSpec) => candidate.id === cartridge.phaseOf(state));
-    const hostFacts: string[] = facts.filter((fact: ScopedFact) => fact.scope.kind === "public" || fact.scope.kind === "host").map((fact: ScopedFact) => fact.text);
-    const briefed: string[] = cartridge.hostFacts(state, { kind: "host" }).map((fact: ScopedFact) => fact.text);
-    views.set("host", [cartridge.manifest.hostBrief, phase?.hostBrief ?? "", ...Object.values(phase?.hostRulings ?? {}), ...briefed, ...hostFacts]);
+    const told: ScopedFact[] = facts.filter((fact: ScopedFact) => fact.scope.kind === "public" || fact.scope.kind === "host");
+    views.set("host", [cartridge.manifest.hostBrief, phase ?? null, cartridge.hostFacts(state, { kind: "host" }), told]);
     for (const player of players) {
         const groups: ReadonlySet<string> = cartridge.groupsOf(state, player.playerId);
-        const whispered: string[] = facts.filter((fact: ScopedFact) => {
+        const whispered: ScopedFact[] = facts.filter((fact: ScopedFact) => {
             return (fact.scope.kind === "player" && fact.scope.playerId === player.playerId) || (fact.scope.kind === "group" && groups.has(fact.scope.groupId) === true);
-        }).map((fact: ScopedFact) => fact.text);
-        const phone: string[] = [...stringsIn(cartridge.privateControls(state, player.playerId)), ...stringsIn(cartridge.legalActions(state, player.playerId))];
-        views.set(player.playerId, [...screen, ...phone, ...whispered]);
+        });
+        views.set(player.playerId, [...screen, cartridge.privateControls(state, player.playerId), cartridge.legalActions(state, player.playerId), whispered]);
     }
     return views;
 }
@@ -233,7 +250,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         try {
             const hidden: HiddenValue[] = game.hidden(step.state);
             for (const [viewer, seen] of viewsOf(cartridge, step.state, run.players, step.facts)) {
-                problems.push(...findLeaks(viewer, seen, hidden));
+                problems.push(...findLeaks(viewer, stringsIn(seen), hidden));
             }
         } catch (error: unknown) {
             problems.push(`The rules threw while drawing a view after ${event.type}: ${error instanceof Error ? error.message : String(error)}`);
@@ -248,7 +265,9 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
 
     /** Fires every timer that is due, earliest first, as the room would. */
     const fireDue = (): void => {
-        const due: [string, number][] = [...run.timers.entries()].filter(([, at]: [string, number]) => at <= run.now).sort((first, second) => first[1] - second[1]);
+        const due: [string, number][] = [...run.timers.entries()]
+            .filter(([, at]: [string, number]) => at <= run.now)
+            .sort((first: [string, number], second: [string, number]) => first[1] - second[1]);
         for (const [timerId] of due) {
             run.timers.delete(timerId);
             const current: State | null = run.state;
@@ -287,6 +306,10 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             continue;
         }
         run.now += ACTION_SECONDS;
+        fireDue();
+        if (run.state !== current) {
+            continue;
+        }
         if (move.kind === "leave") {
             run.players = run.players.filter((player: CartridgePlayer) => player.playerId !== move.playerId);
             const event: RoomEvent = { type: "playerLeft", at: run.now, playerId: move.playerId };
@@ -341,7 +364,7 @@ export function rehearseMany<State>(
     makeGame: (seed: number) => KitGame<State>,
     personas: readonly Persona<State>[],
     seeds: readonly number[],
-    options: RehearsalOptions = {},
+    options: RehearsalOptions & { roleCheck?: RoleCheck<State> } = {},
 ): Tally {
     const rehearsals: Rehearsal<State>[] = [];
     for (const persona of personas) {
@@ -361,8 +384,27 @@ export function rehearseMany<State>(
         ended: rehearsals.filter((rehearsal: Rehearsal<State>) => rehearsal.ended === true).length,
         outcomes,
         phasesNeverReached: allPhases.filter((phase: string) => reached.has(phase) === false),
-        problems: rehearsals.flatMap((rehearsal: Rehearsal<State>) => rehearsal.problems.map((problem: string) => `${rehearsal.persona}, seed ${rehearsal.seed}: ${problem}`)),
+        problems: [
+            ...rehearsals.flatMap((rehearsal: Rehearsal<State>) => rehearsal.problems.map((problem: string) => `${rehearsal.persona}, seed ${rehearsal.seed}: ${problem}`)),
+            ...roleProblems(options.roleCheck, options.players ?? PAPER_PLAYERS),
+        ],
     };
+}
+
+/**
+ * Runs a role check, if the game has one, with the role dealt to every seat in turn.
+ * @param check the check, or undefined.
+ * @param players who is at the table.
+ * @returns the problems found.
+ */
+function roleProblems<State>(check: RoleCheck<State> | undefined, players: readonly CartridgePlayer[]): string[] {
+    if (check === undefined) {
+        return [];
+    }
+    const games: { game: KitGame<State>; holderId: string }[] = players.map((player: CartridgePlayer, seat: number) => {
+        return { game: check.deal(seat, players), holderId: player.playerId };
+    });
+    return roleBlindness(games, check.script, players).map((problem: string) => `role check: ${problem}`);
 }
 
 /**
@@ -380,10 +422,10 @@ export function roleBlindness<State>(
     players: readonly CartridgePlayer[] = PAPER_PLAYERS,
 ): string[] {
     const problems: string[] = [];
-    const runs: { holderId: string; views: Map<string, string[]>[] }[] = games.map(({ game, holderId }: { game: KitGame<State>; holderId: string }) => {
+    const runs: { holderId: string; views: Map<string, unknown[]>[] }[] = games.map(({ game, holderId }: { game: KitGame<State>; holderId: string }) => {
         const cartridge: Cartridge<State> = game.cartridge;
         let step: Step<State> = cartridge.init([...players], {});
-        const views: Map<string, string[]>[] = [viewsOf(cartridge, step.state, players, step.facts)];
+        const views: Map<string, unknown[]>[] = [viewsOf(cartridge, step.state, players, step.facts)];
         for (const event of script) {
             if (cartridge.outcome(step.state) !== null) {
                 break;
@@ -396,7 +438,7 @@ export function roleBlindness<State>(
         }
         return { holderId, views };
     });
-    const first: { holderId: string; views: Map<string, string[]>[] } | undefined = runs[0];
+    const first: { holderId: string; views: Map<string, unknown[]>[] } | undefined = runs[0];
     if (first === undefined) {
         return problems;
     }
