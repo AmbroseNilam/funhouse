@@ -40,7 +40,7 @@ export async function waitFor(condition: () => boolean, label: string): Promise<
  * @returns the query, possibly empty.
  */
 function screenQuery(): string {
-    const query: URLSearchParams = new URLSearchParams();
+    const query: URLSearchParams = new URLSearchParams(process.env.ROOM_CODE === undefined ? process.env.ROOM_SWITCHES ?? "" : "");
     if (process.env.ROOM_CODE !== undefined) {
         query.set("room", process.env.ROOM_CODE);
     }

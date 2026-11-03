@@ -14,7 +14,7 @@ describe("room directory shelves", () => {
     it("gives the Studio shelf only to a room opened for Studio", () => {
         const directory: InstanceType<typeof RoomDirectory> = new RoomDirectory("http://localhost:8740", GAMES, studioShelf(GAMES));
         const plain = directory.create();
-        const studio = directory.create(false, true);
+        const studio = directory.create(false, false, false, true);
         assert.ok(plain !== null && studio !== null);
         assert.equal(plain.brief().includes("leadingQuestions"), false);
         assert.equal(studio.brief().includes("leadingQuestions"), true);
@@ -25,7 +25,7 @@ describe("room directory shelves", () => {
 
     it("gives every room the plain shelf when no Studio shelf is given", () => {
         const directory: InstanceType<typeof RoomDirectory> = new RoomDirectory("http://localhost:8740", GAMES);
-        const room = directory.create(false, true);
+        const room = directory.create(false, false, false, true);
         assert.ok(room !== null);
         assert.equal(room.brief().includes("leadingQuestions"), false);
         room.close();

@@ -31,6 +31,10 @@ const SCREEN_CUSHION_MILLISECONDS: number = 120;
 class FetchedLine {
     private readonly chunks: Uint8Array[] = [];
     private done: boolean = false;
+    /** Called when this line's first audio should start playing. */
+    public onFirstAudio: (() => void) | null = null;
+    /** Called when this line reaches the front of the queue, with how long the audio ahead has left to play. */
+    public onReached: ((aheadMilliseconds: number) => void) | null = null;
     private wake: (() => void) | null = null;
 
     /**
@@ -91,9 +95,14 @@ export class HostVoice {
      * @param text the words.
      * @param voice which voice to use.
      * @param style delivery direction.
+     * @param onFirstAudio called when its first audio should start playing on the screens.
+     * @param onReached called when it reaches the front of the queue, with how long the audio ahead has left to play.
      */
-    public say(text: string, voice: SpeechVoice, style: string): void {
-        this.enqueue(this.download(text, voice, style));
+    public say(text: string, voice: SpeechVoice, style: string, onFirstAudio?: () => void, onReached?: (aheadMilliseconds: number) => void): void {
+        const line: FetchedLine = this.download(text, voice, style);
+        line.onFirstAudio = onFirstAudio ?? null;
+        line.onReached = onReached ?? null;
+        this.enqueue(line);
     }
 
     /**
@@ -161,6 +170,7 @@ export class HostVoice {
             if (generation !== this.generation) {
                 return;
             }
+            line.onReached?.(Math.max(0, this.playbackEndsAt - Date.now()));
             await this.send(line, generation);
             if (generation !== this.generation) {
                 return;
@@ -252,6 +262,12 @@ export class HostVoice {
             this.playbackEndsAt = startsAt + (even / BYTES_PER_SECOND) * 1000;
             this.setSpeaking(true);
             this.output.chunk(joined.subarray(0, even));
+            // Audio is sent ahead of playing, so the cue waits until this line can actually be heard.
+            const onFirstAudio: (() => void) | null = line.onFirstAudio;
+            if (onFirstAudio !== null) {
+                setTimeout(onFirstAudio, startsAt - now).unref();
+            }
+            line.onFirstAudio = null;
         }
         this.output.lineEnded();
     }

@@ -65,6 +65,7 @@ export class GameSession<State> implements RunningGame {
     private readonly timers: Map<string, NodeJS.Timeout> = new Map();
     private readonly timerEnds: Map<string, number> = new Map();
     private readonly heldTimers: Map<string, number> = new Map();
+    private paused: boolean = false;
     private readonly whispers: Map<string, string[]> = new Map();
     private players: CartridgePlayer[] = [];
     private state: State | null = null;
@@ -237,6 +238,7 @@ export class GameSession<State> implements RunningGame {
 
     /** Holds every timer with the time it has left. */
     public pause(): void {
+        this.paused = true;
         for (const [timerId, timer] of this.timers) {
             clearTimeout(timer);
             this.heldTimers.set(timerId, Math.max(0, (this.timerEnds.get(timerId) ?? Date.now()) - Date.now()) / 1000);
@@ -246,6 +248,7 @@ export class GameSession<State> implements RunningGame {
 
     /** Starts held timers again with the time they had left. */
     public resume(): void {
+        this.paused = false;
         for (const [timerId, seconds] of this.heldTimers) {
             this.startTimer(timerId, seconds);
         }
@@ -338,6 +341,11 @@ export class GameSession<State> implements RunningGame {
      * @param seconds how long.
      */
     private startTimer(timerId: string, seconds: number): void {
+        // Someone leaving can move a game on during a pause; its new countdown waits with the rest.
+        if (this.paused === true) {
+            this.heldTimers.set(timerId, seconds);
+            return;
+        }
         const running: NodeJS.Timeout | undefined = this.timers.get(timerId);
         if (running !== undefined) {
             clearTimeout(running);

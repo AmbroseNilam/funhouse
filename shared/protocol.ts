@@ -22,7 +22,8 @@ export type PhoneMessage =
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
     | { type: "touched" }
-    | { type: "released" }
+    | { type: "released"; why?: TapEnd }
+    | { type: "micSettings"; echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean }
     | { type: "presence"; away: boolean };
 
 /** Room to phone. */
@@ -45,6 +46,7 @@ export type ScreenMessage =
 export type RoomToScreenMessage =
     | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string; turn: Turn | null }
     | { type: "seatTouched"; playerId: string }
+    | { type: "heardYou"; playerId: string }
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
@@ -58,6 +60,12 @@ export type RoomToScreenMessage =
 
 /** How long a stage waits with nothing from the server before it assumes the connection died. */
 export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 70000;
+
+/** Why a tap-to-talk recording ended. */
+export type TapEnd = "stop" | "silence" | "limit" | "hidden";
+
+/** Every reason a phone may give, so nothing else from a phone reaches the logs. */
+const TAP_ENDS: TapEnd[] = ["stop", "silence", "limit", "hidden"];
 
 /**
  * Checks a parsed message from a phone has the fields the room will read. Phones are outside
@@ -75,7 +83,13 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     if (message.type === "presence") {
         return typeof message.away === "boolean";
     }
-    if (message.type === "touched" || message.type === "released") {
+    if (message.type === "micSettings") {
+        return typeof message.echoCancellation === "boolean" && typeof message.noiseSuppression === "boolean" && typeof message.autoGainControl === "boolean";
+    }
+    if (message.type === "released") {
+        return message.why === undefined || TAP_ENDS.includes(message.why as TapEnd) === true;
+    }
+    if (message.type === "touched") {
         return true;
     }
     if (message.type === "rename") {

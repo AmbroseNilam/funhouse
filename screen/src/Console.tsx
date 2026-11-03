@@ -172,6 +172,23 @@ export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; 
 }
 
 /**
+ * What the TV shows while a game waits for everyone to come back.
+ * @param props the join image, the room code and the address to join at.
+ * @returns the element.
+ */
+export function SteppedOutPanel(props: { qr: string; code: string; joinHost: string }): ReactElement {
+    return (
+        <div className="pause-backing">
+            <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
+            <section className="pause-card">
+                <h2>Everyone's stepped out</h2>
+                <p>Seats are held for a few minutes. Open your phone, or scan the code, to come back.</p>
+            </section>
+        </div>
+    );
+}
+
+/**
  * The menu over a finished game.
  * @param props the console.
  * @returns the element.

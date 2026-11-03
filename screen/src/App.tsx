@@ -10,7 +10,7 @@ import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessa
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
-import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
+import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
 import { PlaceCards } from "./PlaceCards.tsx";
@@ -264,6 +264,15 @@ export function App(): ReactElement {
                     leanRef.current = message;
                     return;
                 }
+                if (message.type === "heardYou") {
+                    setTouchedId(message.playerId);
+                    window.clearTimeout(touchTimerRef.current);
+                    touchTimerRef.current = window.setTimeout(() => { setTouchedId(null); }, TOUCH_SHOWN_MILLISECONDS);
+                    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches === false) {
+                        document.querySelector(".host-spot .lantern-body")?.animate([{ translate: "0 0" }, { translate: "0 10px" }, { translate: "0 0" }], { duration: 260, easing: "ease-out" });
+                    }
+                    return;
+                }
                 if (message.type === "seatTouched") {
                     setTouchedId(message.playerId);
                     window.clearTimeout(touchTimerRef.current);
@@ -408,7 +417,12 @@ export function App(): ReactElement {
     if (state.roomClosed === true) {
         return (
             <main className="tv on-home">
-                <button className="sound-gate" onClick={() => { const kept: string = new URLSearchParams([...new URLSearchParams(location.search)].filter(([name, value]: [string, string]) => (name === "lively" || name === "studio") && value === "1")).toString(); location.assign(kept === "" ? "/screen/" : `/screen/?${kept}`); }} autoFocus>
+                <button className="sound-gate" onClick={() => {
+                    // A new room keeps whatever this one was opened to try, but not its code.
+                    const search: URLSearchParams = new URLSearchParams(location.search);
+                    search.delete("room");
+                    location.assign(`/screen/?${search.toString()}`);
+                }} autoFocus>
                     <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
                     <span className="gate-title">This room has closed</span>
                     <span className="gate-detail">A new room gets a new code, so everyone will need to join again.</span>
@@ -459,7 +473,8 @@ export function App(): ReactElement {
                 />
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
-            {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

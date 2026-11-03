@@ -31,6 +31,8 @@ export interface Seat {
     driving: boolean;
     /** True while they're holding to talk. */
     talking: boolean;
+    /** True while a tap-to-talk recording is running, so the TV can show whose mic is live. */
+    recording: boolean;
     /** True when the game has them out, though they're still at the table. */
     out: boolean;
     /** True when their phone has left the app or locked, though it may still be connected. */
@@ -53,6 +55,8 @@ export interface ShellView {
     seats: Seat[];
     /** True once a game has been decided and is showing its result. */
     gameOver: boolean;
+    /** True when every seat in a running game has dropped, so the game waits for them. */
+    steppedOut: boolean;
 }
 
 /** What a phone needs to know to behave as a controller. */

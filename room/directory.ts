@@ -12,6 +12,9 @@ const MAX_ROOMS: number = 32;
 /** How long a room may sit with nobody in it before it closes. */
 const EMPTY_ROOM_MILLISECONDS: number = 300000;
 
+/** How long a screen may sit with no players before the room closes anyway; a TV left on mustn't hold one forever. */
+const NO_PLAYERS_MILLISECONDS: number = 900000;
+
 /** How often empty rooms are looked for. */
 const SWEEP_MILLISECONDS: number = 30000;
 
@@ -22,6 +25,7 @@ export class RoomDirectory {
     private readonly studioGames: InstalledGame[];
     private readonly rooms: Map<string, Room> = new Map();
     private readonly emptySince: Map<string, number> = new Map();
+    private readonly noPlayersSince: Map<string, number> = new Map();
 
     /**
      * Creates an empty directory and starts closing abandoned rooms.
@@ -48,10 +52,12 @@ export class RoomDirectory {
     /**
      * Opens a new room with an unused code.
      * @param lively true to try the livelier host in this room.
+     * @param tapToTalk true to try tap-to-talk in this room.
+     * @param fastReplies true to try the faster reply model in this room.
      * @param studio true to give this room the Studio shelf: blueprint games beside the hand-written ones.
      * @returns the room, or null when the server is at its limit.
      */
-    public create(lively: boolean = false, studio: boolean = false): Room | null {
+    public create(lively: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, studio: boolean = false): Room | null {
         if (this.rooms.size >= MAX_ROOMS) {
             return null;
         }
@@ -59,7 +65,7 @@ export class RoomDirectory {
         while (this.rooms.has(code) === true) {
             code = makeRoomCode();
         }
-        const room: Room = new Room(code, this.publicUrl, studio === true ? this.studioGames : this.games, lively);
+        const room: Room = new Room(code, this.publicUrl, studio === true ? this.studioGames : this.games, lively, tapToTalk, fastReplies);
         this.rooms.set(code, room);
         log(`room ${code}`, `opened (${this.rooms.size} open)`);
         return room;
@@ -69,18 +75,28 @@ export class RoomDirectory {
     private closeEmptyRooms(): void {
         const now: number = Date.now();
         for (const [code, room] of this.rooms) {
+            if (room.hasPlayers() === true) {
+                this.emptySince.delete(code);
+                this.noPlayersSince.delete(code);
+                continue;
+            }
+            const noPlayersSince: number = this.noPlayersSince.get(code) ?? now;
+            this.noPlayersSince.set(code, noPlayersSince);
             if (room.isEmpty() === false) {
                 this.emptySince.delete(code);
+            }
+            if (room.isEmpty() === true) {
+                this.emptySince.set(code, this.emptySince.get(code) ?? now);
+            }
+            const emptyLongEnough: boolean = now - (this.emptySince.get(code) ?? now) >= EMPTY_ROOM_MILLISECONDS;
+            if (emptyLongEnough === false && now - noPlayersSince < NO_PLAYERS_MILLISECONDS) {
                 continue;
             }
-            const since: number = this.emptySince.get(code) ?? now;
-            this.emptySince.set(code, since);
-            if (now - since < EMPTY_ROOM_MILLISECONDS) {
-                continue;
-            }
+            room.turnEveryoneAway();
             room.close();
             this.rooms.delete(code);
             this.emptySince.delete(code);
+            this.noPlayersSince.delete(code);
             log(`room ${code}`, `closed (${this.rooms.size} open)`);
         }
     }

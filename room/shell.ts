@@ -29,6 +29,8 @@ export interface ShellStage {
     refused(reason: string): void;
     /** The driver changed because the last one left. */
     driverChanged(name: string): void;
+    /** Whether every seat in the running game has dropped. */
+    steppedOut(): boolean;
     /** The game was paused or resumed. */
     paused(paused: boolean): void;
     /** Someone chose an action from the pause menu that the game offers. */
@@ -139,7 +141,17 @@ export class Shell {
      */
     public view(): ShellView {
         const seats: Seat[] = this.stage.seats().map((seat) => ({ ...seat, driving: seat.playerId === this.driverId }));
-        return { screen: this.screen, axis: this.axis(), focus: this.focus, games: this.stage.games(), gameId: this.gameId, menu: this.menu(), seats, gameOver: this.isDecided() };
+        return {
+            screen: this.screen,
+            axis: this.axis(),
+            focus: this.focus,
+            games: this.stage.games(),
+            gameId: this.gameId,
+            menu: this.menu(),
+            seats,
+            gameOver: this.isDecided(),
+            steppedOut: this.stage.steppedOut(),
+        };
     }
 
     /**

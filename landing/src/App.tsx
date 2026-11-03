@@ -92,6 +92,7 @@ export function App(): ReactElement {
                                 />
                                 <button type="submit" disabled={ready === false}>Join</button>
                             </div>
+                            <a className="scan-link" href="/phone/?scan=1">Scan the code</a>
                             <small className="mic-note">{MIC_LINE}</small>
                         </form>
                     </div>

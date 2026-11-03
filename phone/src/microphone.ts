@@ -13,6 +13,14 @@ const LEVEL_GAIN: number = 5;
 export interface MicrophoneCapture {
     /** True while the track is live and the audio context is running. */
     isLive(): boolean;
+    /** How long since the microphone sent any real sound, in milliseconds. Noise suppression sends pure silence in a quiet room, so this alone doesn't mean it's broken. */
+    silentFor(): number;
+    /** Which of the browser's voice clean-ups are really on, as it reports them. */
+    applied(): { echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean };
+    /** How long this capture has been open, in milliseconds. */
+    openFor(): number;
+    /** How long since the microphone delivered any audio at all, in milliseconds. A long gap means it has stopped. */
+    stalledFor(): number;
     /** How loud the microphone is right now, from 0 to about 1. */
     level(): number;
     /** Tries to wake a suspended audio context; call from a user gesture. */
@@ -48,7 +56,16 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     await context.audioWorklet.addModule("/phone/pcm-worklet.js");
     const source: MediaStreamAudioSourceNode = context.createMediaStreamSource(stream);
     const worklet: AudioWorkletNode = new AudioWorkletNode(context, "pcm-downsampler");
-    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => { onFrame(event.data); };
+    let lastSoundAt: number = Date.now();
+    let lastFrameAt: number = Date.now();
+    const openedAt: number = Date.now();
+    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => {
+        lastFrameAt = Date.now();
+        if (new Int16Array(event.data).some((sample: number) => sample !== 0) === true) {
+            lastSoundAt = Date.now();
+        }
+        onFrame(event.data);
+    };
     source.connect(worklet);
     const analyser: AnalyserNode = context.createAnalyser();
     analyser.fftSize = LEVEL_WINDOW_SAMPLES;
@@ -56,7 +73,20 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     const window: Float32Array<ArrayBuffer> = new Float32Array(LEVEL_WINDOW_SAMPLES);
     return {
         isLive(): boolean {
-            return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live") === true && context.state === "running";
+            return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live" && track.muted === false) === true && context.state === "running";
+        },
+        silentFor(): number {
+            return Date.now() - lastSoundAt;
+        },
+        applied(): { echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean } {
+            const settings: MediaTrackSettings = stream.getAudioTracks()[0]?.getSettings() ?? {};
+            return { echoCancellation: settings.echoCancellation === true, noiseSuppression: settings.noiseSuppression === true, autoGainControl: settings.autoGainControl === true };
+        },
+        openFor(): number {
+            return Date.now() - openedAt;
+        },
+        stalledFor(): number {
+            return Date.now() - lastFrameAt;
         },
         level(): number {
             analyser.getFloatTimeDomainData(window);

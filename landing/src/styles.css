@@ -70,6 +70,7 @@
     .join-card strong { font-size: 22px; }
     .join-card label { font-size: 17px; }
     .turned-away { background: var(--wine); color: var(--paper); padding: 6px 12px; }
+    .scan-link { align-self: flex-start; color: inherit; text-decoration: underline; padding: 6px 0; }
     .code-row { display: flex; gap: 10px; margin-top: 2px; }
     .code-row input { flex: 1; width: 100%; min-width: 0; box-sizing: border-box; height: 52px; padding: 0 12px; border: 3px solid var(--paper-ink); border-radius: 0; background: var(--paper); color: var(--paper-ink); font-size: 28px; font-weight: 600; letter-spacing: 0.3em; text-transform: uppercase; text-align: center; }
     .code-row input:focus { outline: none; border-color: var(--lamp); background: #fff8e6; }

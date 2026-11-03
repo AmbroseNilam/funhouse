@@ -1,8 +1,8 @@
-// Twenty Doors' rules core. The host's model chooses the secret, which only the host is told.
+// Twenty Doors' rules core. The secret comes from a list here, which only the host is told: asked
+// to choose one, the model said garlic press 6 times in 8, so a second game would repeat the first.
 // Every yes, no, sort-of or wrong guess opens a door. Twenty doors without the answer loses.
 
 import type { Turn } from "../../shared/turn.ts";
-import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
@@ -22,19 +22,21 @@ const SHOWN_QUESTIONS: number = 4;
 /** Doors left at which the host is told to warn them. */
 const WARNING_DOORS: number[] = [5, 1];
 
-/** Longest secret accepted from the model; anything longer isn't one thing. */
-const SECRET_CHARACTER_LIMIT: number = 40;
+/** Longest question the screen shows before trimming it; speech can run on. */
+const SHOWN_QUESTION_CHARACTERS: number = 90;
 
-/** Categories to choose from, each with a secret to use if the model can't supply one. */
-const CATEGORIES: { name: string; fallback: string }[] = [
-    { name: "an animal", fallback: "platypus" },
-    { name: "something in a kitchen", fallback: "whisk" },
-    { name: "a famous landmark", fallback: "Eiffel Tower" },
-    { name: "a food", fallback: "pineapple" },
-    { name: "a job", fallback: "lighthouse keeper" },
-    { name: "something you'd find at the beach", fallback: "sandcastle" },
-    { name: "a musical instrument", fallback: "accordion" },
-    { name: "a vehicle", fallback: "hot air balloon" },
+/** Categories, each with secrets most adults know, safe for a family table and easy to paint. */
+const CATEGORIES: { name: string; secrets: string[] }[] = [
+    { name: "an animal", secrets: ["Platypus", "Giraffe", "Penguin", "Hedgehog", "Octopus", "Armadillo", "Flamingo", "Sloth", "Chameleon", "Walrus", "Beaver", "Seahorse", "Porcupine", "Toucan", "Otter", "Camel", "Skunk", "Jellyfish", "Moose", "Goat"] },
+    { name: "something in a kitchen", secrets: ["Whisk", "Colander", "Rolling pin", "Toaster", "Oven mitt", "Corkscrew", "Ladle", "Cheese grater", "Spatula", "Kettle", "Tin opener", "Egg timer", "Tongs", "Blender", "Cutting board", "Measuring cup", "Pepper grinder", "Teapot", "Frying pan", "Ice cube tray"] },
+    { name: "a famous landmark", secrets: ["Eiffel Tower", "Great Wall of China", "Statue of Liberty", "Big Ben", "Taj Mahal", "Colosseum", "Stonehenge", "Golden Gate Bridge", "Leaning Tower of Pisa", "Pyramids of Giza", "Mount Rushmore", "Sydney Opera House", "Machu Picchu", "Niagara Falls", "Christ the Redeemer", "Grand Canyon", "Acropolis", "CN Tower", "Mount Fuji", "Hollywood Sign"] },
+    { name: "a food", secrets: ["Pineapple", "Pretzel", "Lasagna", "Pancake", "Watermelon", "Popcorn", "Sushi", "Coconut", "Croissant", "Marshmallow", "Avocado", "Waffle", "Peanut butter", "Taco", "Artichoke", "Doughnut", "Cucumber", "Meatball", "Mushroom", "Honey"] },
+    { name: "a job", secrets: ["Lighthouse keeper", "Beekeeper", "Firefighter", "Dentist", "Astronaut", "Librarian", "Baker", "Pilot", "Plumber", "Zookeeper", "Lifeguard", "Tailor", "Chef", "Farmer", "Barber", "Train conductor", "Vet", "Mail carrier", "Carpenter", "Magician"] },
+    { name: "something you'd find at the beach", secrets: ["Sandcastle", "Seashell", "Beach umbrella", "Lifeguard tower", "Flip-flops", "Crab", "Surfboard", "Seagull", "Sunscreen", "Starfish", "Bucket and spade", "Towel", "Driftwood", "Seaweed", "Volleyball net", "Sunglasses", "Ice cream cone", "Pier", "Snorkel", "Kite"] },
+    { name: "a musical instrument", secrets: ["Accordion", "Trombone", "Harp", "Bagpipes", "Ukulele", "Tambourine", "Saxophone", "Xylophone", "Violin", "Harmonica", "Banjo", "Flute", "Cello", "Triangle", "Tuba", "Bongos", "Trumpet", "Piano", "Clarinet", "Recorder"] },
+    { name: "a vehicle", secrets: ["Hot air balloon", "Submarine", "Tractor", "Gondola", "Snowplow", "Unicycle", "Helicopter", "Ambulance", "Tandem bicycle", "Canoe", "Double-decker bus", "Forklift", "Rickshaw", "Steam train", "Skateboard", "Ice cream truck", "Sailboat", "Bulldozer", "Fire engine", "Cable car"] },
+    { name: "something in a garden", secrets: ["Wheelbarrow", "Watering can", "Scarecrow", "Sunflower", "Garden gnome", "Bird bath", "Compost heap", "Hose", "Rake", "Snail", "Greenhouse", "Lawn mower", "Tomato plant", "Ladybug", "Shed", "Hedge trimmer", "Tulip", "Trowel", "Hammock", "Worm"] },
+    { name: "something at a birthday party", secrets: ["Balloon", "Piñata", "Candle", "Party hat", "Cupcake", "Wrapping paper", "Confetti", "Goody bag", "Streamer", "Ice cream cake", "Sparkler", "Musical chairs", "Bow", "Clown", "Party blower", "Gift card", "Bouncy castle", "Birthday card", "Face paint", "Paper plate"] },
 ];
 
 /** Answers that open a door, with how the screen shows each. */
@@ -49,12 +51,11 @@ export interface AskedQuestion {
 
 /** The whole game, immutable between steps. */
 export interface TwentyDoorsState {
-    phase: "choosing" | "asking" | "end";
+    phase: "asking" | "end";
     /** True once a picture has taken too long; a drawing may never arrive. */
     stoppedWaitingForPicture: boolean;
     players: CartridgePlayer[];
     category: string;
-    fallback: string;
     secret: string;
     doorsOpened: number;
     asked: AskedQuestion[];
@@ -64,6 +65,29 @@ export interface TwentyDoorsState {
     finder: string | null;
     /** The picture of the secret, drawn in secret for the reveal. */
     revealPicture: string | null;
+}
+
+/**
+ * Picks one item from a list.
+ * @param items the list.
+ * @param random a function returning [0, 1).
+ * @returns the item.
+ */
+function pick<Item>(items: Item[], random: () => number): Item | undefined {
+    return items[Math.floor(random() * items.length)];
+}
+
+/**
+ * Tidies a spoken question for the screen, so its answer doesn't run on from it.
+ * @param question what was said.
+ * @returns the question, trimmed to length and ending in punctuation.
+ */
+function shownQuestion(question: string): string {
+    const text: string = question.trim();
+    if (text.length > SHOWN_QUESTION_CHARACTERS) {
+        return `${text.slice(0, SHOWN_QUESTION_CHARACTERS).trimEnd()}…`;
+    }
+    return /[.?!,]$/.test(text) === true ? text : `${text}?`;
 }
 
 /**
@@ -110,16 +134,14 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
         manifest: TWENTY_DOORS_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
-            const category: { name: string; fallback: string } = CATEGORIES[Math.floor(random() * CATEGORIES.length)] ?? { name: "an animal", fallback: "platypus" };
-            const state: TwentyDoorsState = { phase: "choosing", stoppedWaitingForPicture: false, players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
+            const category: { name: string; secrets: string[] } = pick(CATEGORIES, random) ?? { name: "an animal", secrets: ["Platypus"] };
+            const secret: string = pick(category.secrets, random) ?? "Platypus";
+            const state: TwentyDoorsState = { phase: "asking", stoppedWaitingForPicture: false, players, category: category.name, secret, doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
             return {
                 state,
-                facts: [],
-                nextPhaseId: "choosing",
-                contentRequest: [
-                    `Choose one specific thing for a game of twenty questions. It must be ${category.name}, known to most adults,`,
-                    "and a little surprising rather than the first thing anyone would say. Reply with only its name, in at most three words, with no punctuation.",
-                ].join(" "),
+                facts: [publicFact("ready", `The secret is chosen. Tell them it's ${category.name} and they have ${DOOR_COUNT} doors, and invite the first question.`)],
+                nextPhaseId: "asking",
+                draws: [{ id: "reveal", prompt: `A warm storybook painting of ${secret}, seen through an open wooden door, glowing light, rich color, no faces, no text or letters.` }],
             };
         },
 
@@ -147,18 +169,6 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
         },
 
         onEvent(state: TwentyDoorsState, event: RoomEvent): Step<TwentyDoorsState> {
-            if (event.type === "contentReady" && state.phase === "choosing") {
-                const chosen: string = event.text.trim().replace(/[."'!]/g, "");
-                const usable: string = chosen === "" || chosen.length > SECRET_CHARACTER_LIMIT ? state.fallback : chosen;
-                const secret: string = `${usable.charAt(0).toUpperCase()}${usable.slice(1)}`;
-                const next: TwentyDoorsState = { ...state, phase: "asking", secret };
-                return {
-                    state: next,
-                    facts: [publicFact("ready", `The secret is chosen. Tell them it's ${state.category} and they have ${DOOR_COUNT} doors, and invite the first question.`)],
-                    nextPhaseId: "asking",
-                    draws: [{ id: "reveal", prompt: `A warm storybook painting of ${secret}, seen through an open wooden door, glowing light, rich color, no text or letters.` }],
-                };
-            }
             if (event.type === "timerFired" && event.timerId === "painting") {
                 return { state: { ...state, stoppedWaitingForPicture: true }, facts: [] };
             }
@@ -191,9 +201,6 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
         },
 
         publicScene(state: TwentyDoorsState): Scene {
-            if (state.phase === "choosing") {
-                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors" }, { type: "text", text: "Choosing a secret…", emphasis: "whisper" }] };
-            }
             if (state.phase === "end") {
                 const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
                 if (state.revealPicture !== null) {
@@ -205,14 +212,11 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };
             }
-            const recent: SceneBlock[] = state.asked.slice(-SHOWN_QUESTIONS).map((entry: AskedQuestion) => ({ type: "text", text: `${entry.question} ${entry.answer}.` }));
+            const recent: SceneBlock[] = state.asked.slice(-SHOWN_QUESTIONS).map((entry: AskedQuestion) => ({ type: "text", text: `${shownQuestion(entry.question)} ${entry.answer}.` }));
             return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `It's ${state.category}`, kicker: "Twenty Doors" }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" }, ...recent] };
         },
 
         privateControls(state: TwentyDoorsState): Control[] {
-            if (state.phase === "choosing") {
-                return [{ type: "waiting", text: `${HOST_NAME} is choosing a secret.` }];
-            }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: state.won === true ? "You found it." : "Better luck next time." }];
             }

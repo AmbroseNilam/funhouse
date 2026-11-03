@@ -12,10 +12,9 @@ export const TWENTY_DOORS_MANIFEST: CartridgeManifest = {
     keywords: ["door", "doors", "yes", "no", "give up", "is it"],
     variants: [],
     phases: [
-        { id: "choosing", hostBrief: "You are choosing the secret. Say nothing about it yet; one short teasing line at most.", listening: { "*": "holdToTalk" }, hostMayInterject: false, silenceSeconds: 0 },
         {
             id: "asking",
-            hostBrief: "Answer each question with a ruling, then a few words. Chat that isn't a question or a guess gets no ruling and uses no door. Don't count doors out loud unless few are left.",
+            hostBrief: "Answer each yes-or-no question with a ruling, then a few words that add no clue beyond the answer. A question that can't be answered yes or no, like what colour it is, gets no ruling and uses no door: ask them to put it as yes or no. Chat that isn't a question or a guess gets no ruling either. If two people asked, answer with one ruling before each answer. Don't count doors out loud unless few are left.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,
             silenceSeconds: 0,

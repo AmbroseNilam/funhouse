@@ -5,8 +5,7 @@
 // VoiceOutput. A phone that drops keeps its seat for a grace period and can resume it.
 // Latency moves, measured and explained in the planning notes: partial transcripts show live
 // on the screen, each phone keeps a transcription session open ahead of its next press, and a
-// short pre-recorded acknowledgement plays when the host was addressed and its reply is not
-// audible soon after the final text arrives.
+// short pre-recorded filler plays when a reply is slow to start.
 
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
@@ -15,6 +14,7 @@ import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
+import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -56,6 +56,8 @@ interface Player {
     /** When this seat last pressed to talk, or zero if it never has. */
     lastPressAt: number;
     talkMilliseconds: number;
+    /** How much of this press came in while the TV's voice could be heard. */
+    overlapMilliseconds: number;
     phoneDown: boolean;
     phoneDownTimer: NodeJS.Timeout | null;
     /** The seat's colour, on the TV and as the phone's background. */
@@ -78,21 +80,23 @@ interface Caption {
 /** Pause before the host reacts, so bursts of events land in one turn. */
 const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", number> = { speech: 0, join: 900, leave: 1500, screen: 300 };
 
-/**
- * How long after the final text the host's reply may take before an acknowledgement plays.
- * Long enough that quick replies skip it: fillers help with medium and long waits, and heard
- * on every turn they sound mechanical (arXiv 2507.22352, 2508.11781).
- */
-const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
+/** A filler only plays if the reply still hasn't started this long after a thumb lifts; people hear anything sooner as not listening. */
+const FILLER_AFTER_RELEASE_MILLISECONDS: number = 600;
 
-/** How soon after a thumb lifts the livelier host reacts, for it to feel like being heard. */
-const REACTION_AFTER_RELEASE_MILLISECONDS: number = 100;
+/** A press shorter than this gets a real reply with nothing in front of it. */
+const FILLER_MINIMUM_WORDS: number = 3;
 
-/** Reactions that can't disagree with what comes next, because the ruling isn't known yet. */
-const NEUTRAL_REACTIONS: string[] = ["Hm.", "Okay.", "Mm-hm.", "Let's see.", "Alright."];
+/** Chance an eligible press gets a filler, the one dial for how often the host reacts; 0 turns it off. Repeated fillers soon grate (arXiv 2508.11781). */
+const FILLER_CHANCE: number = 0.5;
 
-/** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
-const ACKNOWLEDGE_CHANCE: number = 0.6;
+/** Fillers that can't disagree with what comes next, because the ruling isn't known yet. */
+const NEUTRAL_REACTIONS: string[] = ["Hm.", "Let's see.", "Okay."];
+
+/** After a question, only thinking sounds; anything else sounds like an answer. */
+const QUESTION_REACTIONS: string[] = ["Hm.", "Let's see."];
+
+/** How a spoken question usually starts, for when the transcript has no question mark. */
+const QUESTION_START: RegExp = /^(who|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
 
 /**
 /** The one game the livelier host is tried in, in rooms opened for it: moods, callbacks, quicker reactions and now and then speaking up. */
@@ -119,6 +123,9 @@ const PHONE_DOWN_AFTER_MILLISECONDS: number = 3000;
 /** Least time between the host being told someone joined, so it doesn't greet every arrival. */
 const JOIN_NOTICE_GAP_MILLISECONDS: number = 30000;
 
+/** Longest a host line's words wait for its voice before appearing anyway. */
+const CAPTION_WAIT_MILLISECONDS: number = 2500;
+
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
 
@@ -133,8 +140,8 @@ function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
     return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiSpeech()) : new OpenAiRealtimeSpeech();
 }
 
-/** Short, varied acknowledgements, rendered once per room and played sparingly. */
-const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
+/** Every filler, rendered once per room. */
+const ACKNOWLEDGEMENTS: string[] = [...new Set([...NEUTRAL_REACTIONS, ...QUESTION_REACTIONS])];
 
 /**
  * How long a standby session may wait before it is replaced. Measured: the provider closes a
@@ -230,6 +237,15 @@ const REJOIN_GRACE_MILLISECONDS: number = 120000;
 /** The same during a game: a locked phone mustn't lose its seat, and every phase has a timer. */
 const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
 
+/** How long every seat must be gone before the game waits, so one person's reload isn't a pause. */
+const STEP_OUT_AFTER_MILLISECONDS: number = 10000;
+
+/** How long after the host's voice ends the TV may still be heard: its last word, and what the phone kept from just before a press. */
+const HOST_AUDIO_GUARD_MILLISECONDS: number = 300;
+
+/** Bytes per millisecond of phone audio: 24 kHz, 16-bit, mono. */
+const PHONE_AUDIO_BYTES_PER_MILLISECOND: number = 48;
+
 /** Bytes between the samples measured for loudness; every fourth sample is plenty. */
 const LEVEL_SAMPLE_STRIDE_BYTES: number = 8;
 
@@ -299,6 +315,13 @@ export class Room implements HostStage {
     private lastRemarkAt: number = 0;
     private gameDecided: boolean = false;
     private paused: boolean = false;
+    /** Paused from the phone menu; only someone at the menu undoes this. */
+    private menuPaused: boolean = false;
+    /** Every seat in the running game has dropped, and the game waits for them. */
+    private steppedOut: boolean = false;
+    private stepOutTimer: NodeJS.Timeout | null = null;
+    /** Every phone connected, seated or still typing a name. */
+    private readonly phones: Set<WebSocket> = new Set();
     /** Who was seated when the game began; anyone later watches and can't drive. */
     private gamePlayerIds: Set<string> = new Set();
     private readonly drawings: Map<string, Drawing> = new Map();
@@ -312,8 +335,13 @@ export class Room implements HostStage {
     private hostThinking: boolean = false;
     private hostMood: HostMood | null = null;
     private lastJoinNoticeAt: number = 0;
+    private captionGeneration: number = 0;
     private lastOutKey: string = "";
     private releasedAt: number = 0;
+    /** The last thumb lift, which the timeline log counts from. */
+    private lastLiftAt: number = 0;
+    /** True when the previous heard press got a filler; two in a row never play. */
+    private filledLastTurn: boolean = false;
     private replyClockAt: number = 0;
     private lastLullPlayerId: string | null = null;
     private moodTimer: NodeJS.Timeout | null = null;
@@ -321,14 +349,18 @@ export class Room implements HostStage {
     private lastLullAt: number = 0;
     private lullsThisGame: number = 0;
     private readonly livelyRoom: boolean;
+    private readonly tapToTalk: boolean;
+    private readonly fastReplies: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
-    private hostTurnText: string = "";
+    /** When the TV's voice may last have been heard, from its last stop and the guard after it. */
+    private hostAudioEndsAt: number = 0;
+    /** The words of the host's latest turn; a line still in the voice's queue keeps adding to its own turn. */
+    private hostTurn: { text: string } = { text: "" };
     private readonly acknowledgements: Uint8Array[] = [];
     /** Indexes of the latest acknowledgements played, newest last. */
     private readonly recentAcknowledgements: number[] = [];
-    /** True when the previous addressed turn got an acknowledgement; two in a row never play. */
-    private acknowledgedLastTurn: boolean = false;
+    /** Waits to play a filler. */
     private acknowledgeTimer: NodeJS.Timeout | null = null;
     /** What is on this room's shelf; a room may gain games while it is open. */
     private readonly games: InstalledGame[];
@@ -341,11 +373,15 @@ export class Room implements HostStage {
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
      * @param games what is on the shelf to begin with, in shelf order.
      * @param livelyRoom true when the room was opened to try the livelier host.
+     * @param tapToTalk true when the room was opened to try tap-to-talk.
+     * @param fastReplies true when the room was opened to try the faster reply model.
      */
-    public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false) {
+    public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false) {
         this.code = code;
         this.games = [...games];
         this.livelyRoom = livelyRoom;
+        this.tapToTalk = tapToTalk;
+        this.fastReplies = fastReplies;
         this.lullTimer = livelyRoom === true ? setInterval(() => { this.checkLull(); }, LULL_CHECK_MILLISECONDS).unref() : null;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
@@ -382,6 +418,27 @@ export class Room implements HostStage {
         return this.screens.size === 0 && this.players.size === 0;
     }
 
+    /**
+     * True when anyone holds a seat, connected or not.
+     * @returns whether the room has players.
+     */
+    public hasPlayers(): boolean {
+        return this.players.size > 0;
+    }
+
+    /** Tells every screen and phone the room is gone, so none of them waits on it or tries to come back. */
+    public turnEveryoneAway(): void {
+        for (const screen of this.screens) {
+            this.sendToScreen(screen, { type: "rejected", reason: "roomClosed" });
+            screen.close(4004, "roomClosed");
+        }
+        const rejected: RoomToPhoneMessage = { type: "rejected", reason: "unknownRoom" };
+        for (const phone of this.phones) {
+            phone.send(JSON.stringify(rejected));
+            phone.close(4004, "unknownRoom");
+        }
+    }
+
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
@@ -389,6 +446,9 @@ export class Room implements HostStage {
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();
+        if (this.stepOutTimer !== null) {
+            clearTimeout(this.stepOutTimer);
+        }
         for (const player of this.players.values()) {
             if (player.phoneDownTimer !== null) {
                 clearTimeout(player.phoneDownTimer);
@@ -452,7 +512,7 @@ export class Room implements HostStage {
                 return;
             }
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
-            this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
+            this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen);
         });
         this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
         this.sendToScreen(socket, this.hostStateMessage());
@@ -464,6 +524,8 @@ export class Room implements HostStage {
      * @param socket the phone's WebSocket.
      */
     public attachPhone(socket: WebSocket): void {
+        this.phones.add(socket);
+        socket.on("close", () => { this.phones.delete(socket); });
         let player: Player | null = null;
         let lastRenameAt: number = 0;
         const textRate: RateWindow = new RateWindow(TEXT_MESSAGES_PER_SECOND, 1000);
@@ -501,7 +563,14 @@ export class Room implements HostStage {
                 }
                 return;
             }
+            if (message.type === "micSettings") {
+                log(this.scope(), `${player.playerId} mic settings: echo ${message.echoCancellation}, noise ${message.noiseSuppression}, gain ${message.autoGainControl}`);
+                return;
+            }
             if (message.type === "released") {
+                if (message.why !== undefined) {
+                    log(this.scope(), `${player.playerId} tap recording ended: ${message.why}`);
+                }
                 this.onReleased(player);
                 return;
             }
@@ -613,12 +682,13 @@ export class Room implements HostStage {
      */
     public setThinking(thinking: boolean): void {
         if (thinking === true) {
-            this.hostTurnText = "";
+            this.hostTurn = { text: "" };
         }
         if (this.hostThinking === thinking) {
             return;
         }
         this.hostThinking = thinking;
+        this.logMoment(thinking === true ? "thinking on" : "thinking off");
         this.broadcastHostState();
     }
 
@@ -633,13 +703,33 @@ export class Room implements HostStage {
             this.replyClockAt = 0;
         }
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
-        this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
-        this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
-        this.broadcastScene();
+        this.logMoment("line queued");
+        const generation: number = this.captionGeneration;
+        const turn: { text: string } = this.hostTurn;
+        let shown: boolean = false;
+        let captionTimer: NodeJS.Timeout | null = null;
+        // The words appear as the voice starts, or after a short wait from its turn if the voice never does.
+        const showCaption = (): void => {
+            if (shown === true || generation !== this.captionGeneration) {
+                return;
+            }
+            shown = true;
+            if (captionTimer !== null) {
+                clearTimeout(captionTimer);
+            }
+            this.logMoment("caption");
+            turn.text = `${turn.text} ${text}`.trim();
+            this.caption = { speaker: this.host.persona.name, text: turn.text, final: true };
+            this.broadcastScene();
+        };
         if (BUDGET.spend("voice") === false) {
+            showCaption();
             return;
         }
-        this.voice.say(text, this.host.persona.voice, style);
+        this.voice.say(text, this.host.persona.voice, style, showCaption, (aheadMilliseconds: number): void => {
+            captionTimer = setTimeout(showCaption, aheadMilliseconds + CAPTION_WAIT_MILLISECONDS);
+            captionTimer.unref();
+        });
     }
 
     /**
@@ -648,6 +738,26 @@ export class Room implements HostStage {
      */
     public lively(): boolean {
         return this.livelyRoom === true && this.game?.manifest.id === LIVELY_GAME;
+    }
+
+    /**
+     * The model this room's replies come from.
+     * @returns the model's name.
+     */
+    public replyModel(): string {
+        return this.fastReplies === true ? FAST_SPARK_MODEL : SPARK_MODEL;
+    }
+
+    /**
+     * Logs one moment of a turn in a room opened for the livelier host, timed from the last thumb
+     * lift, so one game can be read as a single timeline. Never carries anyone's words.
+     * @param moment what just happened.
+     */
+    private logMoment(moment: string): void {
+        if (this.livelyRoom === false) {
+            return;
+        }
+        log(this.scope(), `timeline ${moment}${this.lastLiftAt === 0 ? "" : ` +${Date.now() - this.lastLiftAt} ms`}`);
     }
 
     /**
@@ -660,11 +770,14 @@ export class Room implements HostStage {
             this.moodTimer = null;
         }
         this.hostMood = mood;
+        this.logMoment(`mood ${mood}`);
         this.broadcastHostState();
     }
 
     /** Silences the host at once. */
     public stopSpeaking(): void {
+        this.logMoment("host cut off");
+        this.captionGeneration += 1;
         this.voice.stop();
     }
 
@@ -714,7 +827,7 @@ export class Room implements HostStage {
         const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -765,6 +878,7 @@ export class Room implements HostStage {
             previous.close(4000, "resumed elsewhere");
         }
         log(this.scope(), `${player.playerId} rejoined`);
+        this.checkSteppedOut();
         this.welcome(player);
         this.broadcastScene();
         this.broadcastShell();
@@ -823,6 +937,7 @@ export class Room implements HostStage {
                 colour,
                 connected,
                 talking: holdingToTalk,
+                recording: holdingToTalk === true && this.tapToTalk === true,
                 phoneDown,
                 out: this.game?.outIds().includes(playerId) === true,
                 watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
@@ -832,7 +947,8 @@ export class Room implements HostStage {
             gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
             focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
             refused: (reason: string): void => { this.host.notice(`(Game: ${reason} Say so in a few words.)`, WAKE_DELAY_MILLISECONDS.screen); },
-            driverChanged: (name: string): void => { this.host.notice(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            driverChanged: (name: string): void => { this.noticeIfAnyoneIsThere(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            steppedOut: (): boolean => this.steppedOut,
             paused: (paused: boolean): void => { this.setPaused(paused); },
             gameAction: (playerId: string, actionId: string): void => { this.game?.input(playerId, actionId); },
             edge: (): void => { this.broadcastToScreens({ type: "edge" }); },
@@ -844,10 +960,64 @@ export class Room implements HostStage {
     }
 
     /**
-     * Pauses or resumes for real: the host stops, timers hold, and phones go quiet.
+     * Records a pause or resume from the phone menu.
      * @param paused true to pause.
      */
     private setPaused(paused: boolean): void {
+        this.menuPaused = paused;
+        this.applyPause();
+    }
+
+    /**
+     * Passes something to the host, unless the game is waiting for an empty table.
+     * @param line the note.
+     * @param delayMilliseconds how long the host waits before acting on it.
+     */
+    private noticeIfAnyoneIsThere(line: string, delayMilliseconds: number): void {
+        if (this.steppedOut === true) {
+            return;
+        }
+        this.host.notice(line, delayMilliseconds);
+    }
+
+    /** Makes the game wait once every seat has been gone a moment, and carries on as soon as one is back. */
+    private checkSteppedOut(): void {
+        const seats: Player[] = [...this.gamePlayerIds].flatMap((playerId: string) => this.players.get(playerId) ?? []);
+        const allGone: boolean = this.game !== null && this.game.outcome() === null && seats.length > 0 && seats.every((seat: Player) => seat.connected === false);
+        if (allGone === true) {
+            if (this.steppedOut === false && this.stepOutTimer === null) {
+                this.stepOutTimer = setTimeout(() => {
+                    this.stepOutTimer = null;
+                    this.setSteppedOut(true);
+                }, STEP_OUT_AFTER_MILLISECONDS);
+            }
+            return;
+        }
+        if (this.stepOutTimer !== null) {
+            clearTimeout(this.stepOutTimer);
+            this.stepOutTimer = null;
+        }
+        this.setSteppedOut(false);
+    }
+
+    /**
+     * Records whether the table is empty and tells the room.
+     * @param steppedOut true when every seat is gone.
+     */
+    private setSteppedOut(steppedOut: boolean): void {
+        if (this.steppedOut === steppedOut) {
+            return;
+        }
+        this.steppedOut = steppedOut;
+        log(this.scope(), steppedOut === true ? "everyone stepped out" : "the game has stopped waiting");
+        this.applyPause();
+        this.broadcastShell();
+        this.refreshPhones();
+    }
+
+    /** Pauses or resumes for real: the host stops, timers hold, and phones go quiet. */
+    private applyPause(): void {
+        const paused: boolean = this.menuPaused === true || this.steppedOut === true;
         if (this.paused === paused) {
             return;
         }
@@ -993,6 +1163,7 @@ export class Room implements HostStage {
         if (waiting !== null) {
             this.install(waiting);
         }
+        this.checkSteppedOut();
         this.broadcastScene();
     }
 
@@ -1002,18 +1173,24 @@ export class Room implements HostStage {
      */
     private gameStage(): GameStage {
         return {
-            tellHost: (line: string): void => { this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen); },
+            tellHost: (line: string): void => { this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen); },
             changed: (): void => {
                 this.broadcastScene();
                 if (this.gameDecided === false && this.game?.outcome() !== null) {
                     this.gameDecided = true;
                     this.shell.gameDecided();
+                    this.checkSteppedOut();
                 }
                 this.refreshPhones();
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
-            record: (event: RoomEvent): void => { this.record(event); },
+            record: (event: RoomEvent): void => {
+                this.record(event);
+                if (event.type === "phaseChanged") {
+                    this.logMoment(`phase ${event.phaseId}`);
+                }
+            },
         };
     }
 
@@ -1098,6 +1275,7 @@ export class Room implements HostStage {
         this.broadcastShell();
         this.refreshPhones();
         player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, grace);
+        this.checkSteppedOut();
     }
 
     /**
@@ -1124,8 +1302,13 @@ export class Room implements HostStage {
         this.record(left);
         this.game?.event(left);
         log(this.scope(), `${player.playerId} left`);
+        // With no seats left nobody could ever play on, because seats are fixed when a game starts.
+        if ([...this.gamePlayerIds].some((playerId: string) => this.players.has(playerId)) === false) {
+            this.endGame();
+        }
+        this.checkSteppedOut();
         if (this.players.size > 0) {
-            this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+            this.noticeIfAnyoneIsThere(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
         }
         this.shell.seatsChanged();
         this.broadcastScene();
@@ -1178,6 +1361,14 @@ export class Room implements HostStage {
     }
 
     /**
+     * Whether the TV's voice could be in a phone's mic right now.
+     * @returns true while the host speaks and for a moment after.
+     */
+    private hostAudible(): boolean {
+        return this.hostSpeaking === true || Date.now() < this.hostAudioEndsAt;
+    }
+
+    /**
      * Whether this player's microphone is allowed to open right now.
      * @param player the player.
      * @returns false when the game has phones quiet.
@@ -1195,8 +1386,12 @@ export class Room implements HostStage {
      * @param player the player.
      */
     private startPress(player: Player): void {
+        player.overlapMilliseconds = 0;
+        this.logMoment(`press ${player.playerId}`);
         this.lastActivityAt = Date.now();
         player.partial = "";
+        // The phone still has the last press's words until it's told otherwise.
+        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
         this.setHint(player, "");
         this.cancelAcknowledgement();
         if (this.hostSpeaking === true || this.hostThinking === true) {
@@ -1230,6 +1425,9 @@ export class Room implements HostStage {
         }
         player.transcribe = null;
         player.releasedAt = Date.now();
+        if (player.overlapMilliseconds > 0) {
+            log(this.scope(), `${player.playerId} press overlapped host audio by ${Math.round(player.overlapMilliseconds)} ms${this.tapToTalk === true ? ", dropped" : ""}`);
+        }
         player.talkMilliseconds += Math.max(0, player.releasedAt - player.lastPressAt);
         session.end();
         setTimeout(() => {
@@ -1390,6 +1588,13 @@ export class Room implements HostStage {
         if (player.transcribe === null) {
             return;
         }
+        if (this.hostAudible() === true) {
+            player.overlapMilliseconds += frame.length / PHONE_AUDIO_BYTES_PER_MILLISECOND;
+            // Tap rooms keep the TV's voice out of what's transcribed; the transcript has no word timings to trim later.
+            if (this.tapToTalk === true) {
+                return;
+            }
+        }
         player.transcribe.sendFrame(new Uint8Array(frame));
         if (Date.now() - this.lastMicLevelAt >= MIC_LEVEL_GAP_MILLISECONDS) {
             this.lastMicLevelAt = Date.now();
@@ -1416,8 +1621,9 @@ export class Room implements HostStage {
             this.onNotHeard(player);
             return;
         }
+        this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
-        this.scheduleAcknowledgement(said);
+        this.scheduleFiller(said);
     }
 
     /**
@@ -1450,49 +1656,7 @@ export class Room implements HostStage {
         player.partial = partial;
         this.caption = { speaker: player.name, text: partial, final: false };
         this.broadcastScene();
-    }
-
-    /**
-     * Sometimes plays a short acknowledgement if the host was clearly addressed and has not
-     * started replying shortly after the final text. Addressed means the host's name was said,
-     * or there is only one player, so side chat between players never gets an acknowledgement.
-     * Never on two addressed turns in a row, and never one of the last few played.
-     * @param said what the player said so far.
-     */
-    private scheduleAcknowledgement(said: string): void {
-        if (this.lively() === true) {
-            return;
-        }
-        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1;
-        if (addressed === false || this.acknowledgements.length === 0) {
-            return;
-        }
-        this.cancelAcknowledgement();
-        if (this.acknowledgedLastTurn === true || Math.random() >= ACKNOWLEDGE_CHANCE) {
-            this.acknowledgedLastTurn = false;
-            return;
-        }
-        this.acknowledgedLastTurn = false;
-        this.acknowledgeTimer = setTimeout(() => {
-            this.acknowledgeTimer = null;
-            if (this.hostThinking === false || this.voice.isBusy() === true) {
-                return;
-            }
-            const indexes: number[] = this.acknowledgements.map((_pcm: Uint8Array, index: number) => index);
-            const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.includes(index) === false);
-            const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
-            const pcm: Uint8Array | undefined = index === undefined ? undefined : this.acknowledgements[index];
-            if (index === undefined || pcm === undefined) {
-                return;
-            }
-            this.recentAcknowledgements.push(index);
-            if (this.recentAcknowledgements.length > ACKNOWLEDGE_NO_REPEAT) {
-                this.recentAcknowledgements.shift();
-            }
-            this.acknowledgedLastTurn = true;
-            log(this.scope(), `acknowledged with line ${index}`);
-            this.voice.sayRecorded(pcm);
-        }, ACKNOWLEDGE_AFTER_MILLISECONDS);
+        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
     }
 
     /**
@@ -1506,6 +1670,7 @@ export class Room implements HostStage {
         this.moodTimer = setTimeout(() => {
             this.moodTimer = null;
             this.hostMood = null;
+            this.logMoment("mood cleared");
             this.broadcastHostState();
         }, MOOD_LINGER_MILLISECONDS);
     }
@@ -1542,28 +1707,52 @@ export class Room implements HostStage {
     }
 
     /**
-     * Reacts as soon as someone's thumb lifts, in the livelier host only, unless the voice is already going.
+     * Starts the reply clock as soon as someone's thumb lifts; the TV nods in the livelier host only.
      * @param player who let go.
      */
     private onReleased(player: Player): void {
-        if (this.lively() === false || player.holdingToTalk === false || this.paused === true) {
+        if (player.holdingToTalk === false || this.paused === true) {
             return;
         }
         this.releasedAt = Date.now();
         this.replyClockAt = this.releasedAt;
+        this.lastLiftAt = this.releasedAt;
+        this.logMoment(`release ${player.playerId}`);
+        this.cancelAcknowledgement();
+        if (this.lively() === true) {
+            this.broadcastToScreens({ type: "heardYou", playerId: player.playerId });
+        }
+    }
+
+    /**
+     * Sets up a filler for a press now heard, in case the reply runs late.
+     * @param said what they said.
+     */
+    private scheduleFiller(said: string): void {
+        const longEnough: boolean = said.split(/\s+/).length >= FILLER_MINIMUM_WORDS;
+        const eligible: boolean = longEnough === true && this.filledLastTurn === false && Math.random() < FILLER_CHANCE;
+        this.filledLastTurn = false;
+        if (eligible === false) {
+            return;
+        }
+        const question: boolean = said.endsWith("?") === true || QUESTION_START.test(said) === true;
         this.cancelAcknowledgement();
         this.acknowledgeTimer = setTimeout(() => {
             this.acknowledgeTimer = null;
-            this.playReaction();
-        }, REACTION_AFTER_RELEASE_MILLISECONDS);
+            this.playReaction(question);
+        }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
     }
 
-    /** Plays one neutral recorded reaction that hasn't been heard lately. */
-    private playReaction(): void {
-        if (this.voice.isBusy() === true) {
+    /**
+     * Plays one recorded filler, not the same as the last, if the host is working on a reply it hasn't started.
+     * @param question true when the press was a question.
+     */
+    private playReaction(question: boolean): void {
+        if (this.hostThinking === false || this.voice.isBusy() === true) {
             return;
         }
-        const usable = (text: string, index: number): boolean => NEUTRAL_REACTIONS.includes(text) === true && this.acknowledgements[index] !== undefined;
+        const pool: string[] = question === true ? QUESTION_REACTIONS : NEUTRAL_REACTIONS;
+        const usable = (text: string, index: number): boolean => pool.includes(text) === true && this.acknowledgements[index] !== undefined;
         const indexes: number[] = ACKNOWLEDGEMENTS.flatMap((text: string, index: number) => (usable(text, index) === true ? [index] : []));
         const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.at(-1) !== index);
         const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
@@ -1573,6 +1762,8 @@ export class Room implements HostStage {
         }
         this.recentAcknowledgements.push(index);
         this.recentAcknowledgements.splice(0, Math.max(0, this.recentAcknowledgements.length - ACKNOWLEDGE_NO_REPEAT));
+        this.filledLastTurn = true;
+        this.logMoment("filler");
         this.voice.sayRecorded(pcm);
     }
 
@@ -1666,7 +1857,12 @@ export class Room implements HostStage {
             lineEnded: (): void => { this.broadcastToScreens({ type: "audioEnd" }); },
             cancelled: (): void => { this.broadcastToScreens({ type: "audioCancel" }); },
             speakingChanged: (speaking: boolean): void => {
+                this.logMoment(speaking === true ? "voice on" : "voice off");
                 this.hostSpeaking = speaking;
+                if (speaking === false) {
+                    this.hostAudioEndsAt = Date.now() + HOST_AUDIO_GUARD_MILLISECONDS;
+                    setTimeout(() => { this.refreshPhones(); }, HOST_AUDIO_GUARD_MILLISECONDS).unref();
+                }
                 this.lastActivityAt = Date.now();
                 this.broadcastHostState();
                 this.letMoodFade(speaking);
@@ -1746,7 +1942,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player) };
     }
 
     /**
@@ -1756,17 +1952,20 @@ export class Room implements HostStage {
      */
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
+        if (turn?.kind === "anyone") {
+            return { yours: false, open: true, line: turn.label };
+        }
         if (turn?.kind === "one") {
-            return turn.playerId === player.playerId ? { yours: true, line: "Your turn" } : { yours: false, line: this.waitingLine(turn.playerId) };
+            return turn.playerId === player.playerId ? { yours: true, open: false, line: "Your turn" } : { yours: false, open: false, line: this.waitingLine(turn.playerId) };
         }
         if (turn?.kind !== "everyone" || turn.playerIds.includes(player.playerId) === false) {
             return null;
         }
         if (turn.doneIds.includes(player.playerId) === false) {
-            return { yours: true, line: "Your turn" };
+            return { yours: true, open: false, line: "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
-        return left.length === 1 ? { yours: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, line: `Waiting for ${left.length} people` };
+        return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: `Waiting for ${left.length} people` };
     }
 
     /**

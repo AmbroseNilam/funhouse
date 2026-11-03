@@ -17,6 +17,8 @@ export type Turn =
 export interface PhoneTurn {
     /** True when this phone is the one being waited for. */
     yours: boolean;
+    /** True when anyone may go, so nobody is being waited for. */
+    open: boolean;
     /** What to show, such as "Your turn" or "Waiting for Priya". */
     line: string;
 }
