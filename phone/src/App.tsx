@@ -780,6 +780,16 @@ export function App(): ReactElement {
         // Only a change in whether talking is allowed should end a turn.
     }, [canTalk]);
 
+    // Tells the room which voice clean-ups this phone really applied, once it's seated with a working mic.
+    useEffect(() => {
+        const capture: MicrophoneCapture | null = captureRef.current;
+        if (state.mic !== "ok" || joined === false || capture === null) {
+            return;
+        }
+        send({ type: "micSettings", ...capture.applied() });
+        // Only a change in the microphone or being seated should report again.
+    }, [state.mic, joined]);
+
     // Explains a microphone problem as soon as someone is seated, and clears the card once it's fixed.
     useEffect(() => {
         if (state.mic === "ok") {
@@ -1005,7 +1015,7 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && canTalk === true ? <button className="tap-talk" onClick={startTapping}>Talk</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">

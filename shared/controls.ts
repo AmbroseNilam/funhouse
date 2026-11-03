@@ -37,6 +37,8 @@ export interface PhoneView {
     hearing: string;
     /** True when this room is trying tap-to-talk. */
     tapToTalk: boolean;
+    /** True while the Talk button waits for the host's voice to finish. */
+    talkWaiting: boolean;
     /** What the game's turn means for this phone, if anything. */
     turn: PhoneTurn | null;
 }

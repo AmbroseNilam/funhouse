@@ -15,6 +15,8 @@ export interface MicrophoneCapture {
     isLive(): boolean;
     /** How long since the microphone sent any real sound, in milliseconds. Noise suppression sends pure silence in a quiet room, so this alone doesn't mean it's broken. */
     silentFor(): number;
+    /** Which of the browser's voice clean-ups are really on, as it reports them. */
+    applied(): { echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean };
     /** How long this capture has been open, in milliseconds. */
     openFor(): number;
     /** How long since the microphone delivered any audio at all, in milliseconds. A long gap means it has stopped. */
@@ -75,6 +77,10 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
         },
         silentFor(): number {
             return Date.now() - lastSoundAt;
+        },
+        applied(): { echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean } {
+            const settings: MediaTrackSettings = stream.getAudioTracks()[0]?.getSettings() ?? {};
+            return { echoCancellation: settings.echoCancellation === true, noiseSuppression: settings.noiseSuppression === true, autoGainControl: settings.autoGainControl === true };
         },
         openFor(): number {
             return Date.now() - openedAt;

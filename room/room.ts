@@ -56,6 +56,8 @@ interface Player {
     /** When this seat last pressed to talk, or zero if it never has. */
     lastPressAt: number;
     talkMilliseconds: number;
+    /** How much of this press came in while the TV's voice could be heard. */
+    overlapMilliseconds: number;
     phoneDown: boolean;
     phoneDownTimer: NodeJS.Timeout | null;
     /** The seat's colour, on the TV and as the phone's background. */
@@ -248,6 +250,12 @@ const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
 /** How long every seat must be gone before the game waits, so one person's reload isn't a pause. */
 const STEP_OUT_AFTER_MILLISECONDS: number = 10000;
 
+/** How long after the host's voice ends the TV may still be heard: its last word, and what the phone kept from just before a press. */
+const HOST_AUDIO_GUARD_MILLISECONDS: number = 300;
+
+/** Bytes per millisecond of phone audio: 24 kHz, 16-bit, mono. */
+const PHONE_AUDIO_BYTES_PER_MILLISECOND: number = 48;
+
 /** Bytes between the samples measured for loudness; every fourth sample is plenty. */
 const LEVEL_SAMPLE_STRIDE_BYTES: number = 8;
 
@@ -354,6 +362,8 @@ export class Room implements HostStage {
     private readonly tapToTalk: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
+    /** When the TV's voice may last have been heard, from its last stop and the guard after it. */
+    private hostAudioEndsAt: number = 0;
     /** The words of the host's latest turn; a line still in the voice's queue keeps adding to its own turn. */
     private hostTurn: { text: string } = { text: "" };
     private readonly acknowledgements: Uint8Array[] = [];
@@ -532,6 +542,10 @@ export class Room implements HostStage {
                 if (player.socket === socket) {
                     this.onPresence(player, message.away);
                 }
+                return;
+            }
+            if (message.type === "micSettings") {
+                log(this.scope(), `${player.playerId} mic settings: echo ${message.echoCancellation}, noise ${message.noiseSuppression}, gain ${message.autoGainControl}`);
                 return;
             }
             if (message.type === "released") {
@@ -786,7 +800,7 @@ export class Room implements HostStage {
         const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -1314,6 +1328,14 @@ export class Room implements HostStage {
     }
 
     /**
+     * Whether the TV's voice could be in a phone's mic right now.
+     * @returns true while the host speaks and for a moment after.
+     */
+    private hostAudible(): boolean {
+        return this.hostSpeaking === true || Date.now() < this.hostAudioEndsAt;
+    }
+
+    /**
      * Whether this player's microphone is allowed to open right now.
      * @param player the player.
      * @returns false when the game has phones quiet.
@@ -1331,6 +1353,7 @@ export class Room implements HostStage {
      * @param player the player.
      */
     private startPress(player: Player): void {
+        player.overlapMilliseconds = 0;
         this.logMoment(`press ${player.playerId}`);
         this.lastActivityAt = Date.now();
         player.partial = "";
@@ -1369,6 +1392,9 @@ export class Room implements HostStage {
         }
         player.transcribe = null;
         player.releasedAt = Date.now();
+        if (player.overlapMilliseconds > 0) {
+            log(this.scope(), `${player.playerId} press overlapped host audio by ${Math.round(player.overlapMilliseconds)} ms${this.tapToTalk === true ? ", dropped" : ""}`);
+        }
         player.talkMilliseconds += Math.max(0, player.releasedAt - player.lastPressAt);
         session.end();
         setTimeout(() => {
@@ -1528,6 +1554,13 @@ export class Room implements HostStage {
         }
         if (player.transcribe === null) {
             return;
+        }
+        if (this.hostAudible() === true) {
+            player.overlapMilliseconds += frame.length / PHONE_AUDIO_BYTES_PER_MILLISECOND;
+            // Tap rooms keep the TV's voice out of what's transcribed; the transcript has no word timings to trim later.
+            if (this.tapToTalk === true) {
+                return;
+            }
         }
         player.transcribe.sendFrame(new Uint8Array(frame));
         if (Date.now() - this.lastMicLevelAt >= MIC_LEVEL_GAP_MILLISECONDS) {
@@ -1838,6 +1871,10 @@ export class Room implements HostStage {
             speakingChanged: (speaking: boolean): void => {
                 this.logMoment(speaking === true ? "voice on" : "voice off");
                 this.hostSpeaking = speaking;
+                if (speaking === false) {
+                    this.hostAudioEndsAt = Date.now() + HOST_AUDIO_GUARD_MILLISECONDS;
+                    setTimeout(() => { this.refreshPhones(); }, HOST_AUDIO_GUARD_MILLISECONDS).unref();
+                }
                 this.lastActivityAt = Date.now();
                 this.broadcastHostState();
                 this.letMoodFade(speaking);
@@ -1917,7 +1954,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player) };
     }
 
     /**
