@@ -181,8 +181,8 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
 /**
  * A turn as the TV and phones show it. A turn for one player singles them out: the TV highlights
  * their place card and other phones say "Waiting for" them, so their name is shown on one line
- * with the label. A turn for everyone singles nobody out, so its names are shown each on their own,
- * never beside the label.
+ * with the label. A turn for everyone singles out the last player not done, in the same way, when
+ * exactly one is left; otherwise its names are shown each on their own, never beside the label.
  * @param turn the turn, or null.
  * @param players who is at the table.
  * @returns the lines, empty when there is no turn.
@@ -196,7 +196,10 @@ export function turnAsShown(turn: Turn | null, players: readonly CartridgePlayer
         return [`${turn.label} ${nameOf(turn.playerId)}`];
     }
     if (turn.kind === "everyone") {
-        return [turn.label, ...[...turn.playerIds, ...turn.doneIds].map(nameOf)];
+        const waiting: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
+        const last: string | undefined = waiting.length === 1 ? waiting[0] : undefined;
+        const lines: string[] = [turn.label, ...[...turn.playerIds, ...turn.doneIds].map(nameOf)];
+        return last === undefined ? lines : [`${turn.label} ${nameOf(last)}`, ...lines];
     }
     return [turn.label];
 }

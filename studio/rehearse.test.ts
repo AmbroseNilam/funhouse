@@ -253,6 +253,14 @@ describe("rehearsal catches planted faults", () => {
             },
         }));
         assert.deepEqual(rehearseMany(everyone, plantPersonas(), [1]).problems, [], "a turn for everyone, labelled with the word Plant, singles nobody out");
+        const lastOne = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({
+            turn: (state: PlantState): Turn | null => {
+                const playerIds: string[] = state.players.map((player: CartridgePlayer) => player.playerId);
+                const doneIds: string[] = playerIds.filter((playerId: string) => playerId !== state.plantId);
+                return state.phase === "asking" ? { kind: "everyone", playerIds, doneIds, label: "Plant turn" } : rules.turn?.(state) ?? null;
+            },
+        }));
+        assert.match(rehearseMany(lastOne, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a turn for everyone with only the Plant left to go singles them out");
     });
 
     it("no word made by gluing a block's kind to its text", () => {
