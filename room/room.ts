@@ -20,6 +20,7 @@ import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
+import { recordedLine } from "./lineBank.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
 import { streamSpark } from "../providers/meta/spark.ts";
 import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
@@ -839,10 +840,12 @@ export class Room implements HostStage {
         for (const game of GAMES) {
             const lines: { text: string; pcm: Uint8Array }[] = [];
             for (const text of game.remarks) {
-                if (BUDGET.spend("bank") === false) {
+                const style: string = `${persona.style} Muttered aside, half to yourself.`;
+                const pcm: Uint8Array | null = await recordedLine(`${persona.voice}|${style}|${text}`, () => this.voice.render(text, persona.voice, style));
+                if (pcm === null) {
                     return;
                 }
-                lines.push({ text, pcm: await this.voice.render(text, persona.voice, `${persona.style} Muttered aside, half to yourself.`) });
+                lines.push({ text, pcm });
             }
             this.remarks.set(game.manifest.id, lines);
         }
@@ -1445,10 +1448,12 @@ export class Room implements HostStage {
     private async renderAcknowledgements(): Promise<void> {
         const persona: HostPersona = this.host.persona;
         for (const text of ACKNOWLEDGEMENTS) {
-            if (BUDGET.spend("bank") === false) {
+            const style: string = `${persona.style} A quick, quiet acknowledgement, as if thinking.`;
+            const pcm: Uint8Array | null = await recordedLine(`${persona.voice}|${style}|${text}`, () => this.voice.render(text, persona.voice, style));
+            if (pcm === null) {
                 return;
             }
-            this.acknowledgements.push(await this.voice.render(text, persona.voice, `${persona.style} A quick, quiet acknowledgement, as if thinking.`));
+            this.acknowledgements.push(pcm);
         }
         log(this.scope(), `rendered ${this.acknowledgements.length} acknowledgements`);
     }
