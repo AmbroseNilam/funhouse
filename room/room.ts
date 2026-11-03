@@ -763,7 +763,7 @@ export class Room implements HostStage {
         for (const game of GAMES) {
             const lines: { text: string; pcm: Uint8Array }[] = [];
             for (const text of game.remarks) {
-                if (BUDGET.spend("voice") === false) {
+                if (BUDGET.spend("bank") === false) {
                     return;
                 }
                 lines.push({ text, pcm: await this.voice.render(text, persona.voice, `${persona.style} Muttered aside, half to yourself.`) });
@@ -1318,7 +1318,7 @@ export class Room implements HostStage {
     private async renderAcknowledgements(): Promise<void> {
         const persona: HostPersona = this.host.persona;
         for (const text of ACKNOWLEDGEMENTS) {
-            if (BUDGET.spend("voice") === false) {
+            if (BUDGET.spend("bank") === false) {
                 return;
             }
             this.acknowledgements.push(await this.voice.render(text, persona.voice, `${persona.style} A quick, quiet acknowledgement, as if thinking.`));

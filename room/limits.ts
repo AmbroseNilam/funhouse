@@ -2,8 +2,13 @@
 // so everything that costs money or memory is counted here. When a limit is hit the room stays
 // up and simply does less; nothing here throws.
 
-/** Most model replies, voice lines and pictures the whole server may spend in a day. */
-const DAILY_BUDGET: Record<SpendKind, number> = { spark: 5000, voice: 2000, image: 200 };
+/**
+ * Most model replies, spoken voice lines, pictures and pre-recorded lines the whole server may
+ * spend in a day. The bank is counted apart from the voice: every room wake records about twenty
+ * acknowledgements and remarks, and counting those as voice would let a busy day of room openings
+ * lock new rooms out while the host had barely spoken.
+ */
+const DAILY_BUDGET: Record<SpendKind, number> = { spark: 5000, voice: 2000, image: 200, bank: 4000 };
 
 /** How long a day of budget lasts. */
 const BUDGET_PERIOD_MILLISECONDS: number = 86400000;
@@ -23,8 +28,8 @@ const MAX_CODE_MISSES_PER_MINUTE: number = 10;
 /** How long an address waits after too many wrong room codes. */
 const CODE_BLOCK_MILLISECONDS: number = 600000;
 
-/** What costs money. */
-export type SpendKind = "spark" | "voice" | "image";
+/** What costs money: model replies, spoken lines, pictures, and the pre-recorded line bank. */
+export type SpendKind = "spark" | "voice" | "image" | "bank";
 
 /** Counts events in a rolling window of fixed length. */
 export class RateWindow {
@@ -59,9 +64,18 @@ export class RateWindow {
 }
 
 /** The whole server's daily spend. */
-class SpendBudget {
-    private readonly spent: Record<SpendKind, number> = { spark: 0, voice: 0, image: 0 };
+export class SpendBudget {
+    private readonly limits: Record<SpendKind, number>;
+    private readonly spent: Record<SpendKind, number> = { spark: 0, voice: 0, image: 0, bank: 0 };
     private periodStart: number = Date.now();
+
+    /**
+     * Creates a budget.
+     * @param limits most calls of each kind per day; defaults to the server's daily budget.
+     */
+    public constructor(limits: Record<SpendKind, number> = DAILY_BUDGET) {
+        this.limits = limits;
+    }
 
     /**
      * Records one paid call if the day's budget allows it.
@@ -70,7 +84,7 @@ class SpendBudget {
      */
     public spend(kind: SpendKind): boolean {
         this.rollOver();
-        if (this.spent[kind] >= DAILY_BUDGET[kind]) {
+        if (this.spent[kind] >= this.limits[kind]) {
             return false;
         }
         this.spent[kind] += 1;
@@ -78,12 +92,13 @@ class SpendBudget {
     }
 
     /**
-     * Whether anything new should start today.
-     * @returns false once model replies or voice lines have run out.
+     * Whether anything new should start today. The bank is left out on purpose: a room with no
+     * pre-recorded lines still plays, so running out of them must not turn anyone away.
+     * @returns false once model replies or spoken lines have run out.
      */
     public hasRoom(): boolean {
         this.rollOver();
-        return this.spent.spark < DAILY_BUDGET.spark && this.spent.voice < DAILY_BUDGET.voice;
+        return this.spent.spark < this.limits.spark && this.spent.voice < this.limits.voice;
     }
 
     /** Starts a fresh budget when a day has passed. */
@@ -95,6 +110,7 @@ class SpendBudget {
         this.spent.spark = 0;
         this.spent.voice = 0;
         this.spent.image = 0;
+        this.spent.bank = 0;
     }
 }
 
