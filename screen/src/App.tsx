@@ -114,13 +114,16 @@ function Countdown(props: { seconds: number; running: boolean; label?: string })
     const [left, setLeft] = useState<number>(props.seconds);
     const leftRef = useRef<number>(props.seconds);
     leftRef.current = left;
-    useEffect(() => { setLeft(props.seconds); }, [props.seconds]);
+    const shownSecondsRef = useRef<number>(props.seconds);
     useEffect(() => {
+        // New seconds from the room are the truth; the same seconds with the clock restarting means carry on from here.
+        const from: number = shownSecondsRef.current === props.seconds ? leftRef.current : props.seconds;
+        shownSecondsRef.current = props.seconds;
+        setLeft(from);
         if (props.running === false) {
             return;
         }
         const startedAt: number = Date.now();
-        const from: number = leftRef.current;
         const timer: number = window.setInterval(() => { setLeft(Math.max(0, from - Math.floor((Date.now() - startedAt) / 1000))); }, 250);
         return (): void => { window.clearInterval(timer); };
     }, [props.running, props.seconds]);
@@ -147,7 +150,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={`${player.speaking === true ? "speaking" : ""} ${player.badge === "out" ? "out" : ""}`}>{player.name}{player.badge !== undefined ? <small>{player.badge}</small> : null}</li>)}</ul>;
     }
     if (block.type === "timer") {
-        return <Countdown key={index} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
+        return <Countdown key={`${index}-${block.label ?? ""}`} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
     }
     if (block.type === "tally") {
         return <table key={index} className={`tally ${block.rows.length > 6 ? "many" : ""}`}><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
