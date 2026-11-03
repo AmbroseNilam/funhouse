@@ -132,7 +132,9 @@ describe("the twenty doors blueprint", () => {
         const found: Step<GuessingState> = game.cartridge.onEvent(late.state, { type: "hostRuled", at: 4, ruling: "correct", detail: "", playerId: "paper2" });
         assert.equal(found.state.won, true);
         assert.equal(found.state.finder, "Spoon");
-        assert.equal(game.cartridge.onEvent(current, { type: "hostRuled", at: 5, ruling: "no", detail: "", playerId: "paper4" }).state, current, "nothing heard from that player");
+        const unnamed: Step<GuessingState> = game.cartridge.onEvent(current, { type: "hostRuled", at: 5, ruling: "no", detail: "", playerId: "paper4" });
+        assert.equal(unnamed.state.said.at(-1)?.text, "Is it alive?", "a ruling for someone with nothing waiting takes the oldest line");
+        assert.equal(game.cartridge.onEvent(state, { type: "hostRuled", at: 6, ruling: "no", detail: "", playerId: "paper1" }).state, state, "nothing waiting, nothing ruled");
     });
 
     it("records a free answer without spending, so the ruling still visibly works", () => {

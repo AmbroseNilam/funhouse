@@ -12,7 +12,7 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { boxProblems, isShortText, isWholeIn, rulingNameProblem, type Box, type HiddenValue, type KitGame } from "../kit/kit.ts";
-import { because, frozenCopy, pick, spend, type Budget, type Spent } from "../kit/primitives.ts";
+import { because, frozenCopy, pick, spend, takeRuledLine, waitForRuling, type Budget, type Spent, type WaitingLine } from "../kit/primitives.ts";
 
 /** A thing the secret can be, with a secret to use when the model can't supply one. */
 export interface Category {
@@ -68,11 +68,11 @@ export interface GuessingState {
     count: Budget;
     said: SaidLine[];
     /**
-     * The latest thing each player said that hasn't been ruled on, by player id. Kept per player
-     * because replies can overlap: a ruling answers the person the host was answering, not
-     * whoever spoke last.
+     * The latest thing each player said that hasn't been ruled on, oldest first. Kept per player
+     * because replies can overlap: a ruling answers the person the host was answering, or the
+     * oldest waiting when it names nobody waiting, as in the hand-written Twenty Doors.
      */
-    heard: Record<string, string>;
+    unruled: WaitingLine[];
     won: boolean;
     finder: string | null;
     revealPicture: string | null;
@@ -236,22 +236,21 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
      * @returns the step.
      */
     const finish = (state: GuessingState, won: boolean, finder: string | null, text: string, decision: string): Step<GuessingState> => {
-        return { state: { ...state, phase: "end", won, finder, heard: {} }, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
+        return { state: { ...state, phase: "end", won, finder, unruled: [] }, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
     };
 
     /**
      * Records an answer, spends one of the count if it costs one, and ends the game on the last.
      * @param state the state.
      * @param name the answer ruling.
-     * @param playerId who asked, with their line in heard.
-     * @param text what they asked.
+     * @param playerId who the host was answering; their line is used, or else the oldest waiting.
      * @returns the step.
      */
-    const answer = (state: GuessingState, name: AnswerRuling, playerId: string, text: string): Step<GuessingState> => {
+    const answer = (state: GuessingState, name: AnswerRuling, playerId: string | null): Step<GuessingState> => {
         const chosen: AnswerDecision = answers[name];
-        const line: SaidLine = { speaker: nameOf(state, playerId), text, answer: chosen.label };
-        const heard: Record<string, string> = Object.fromEntries(Object.entries(state.heard).filter(([speaker]: [string, string]) => speaker !== playerId));
-        const recorded: GuessingState = { ...state, said: [...state.said, line], heard };
+        const taken: { line: WaitingLine | undefined; rest: WaitingLine[] } = takeRuledLine(state.unruled, playerId);
+        const line: SaidLine = { speaker: taken.line === undefined ? "Someone" : nameOf(state, taken.line.playerId), text: taken.line?.text ?? "", answer: chosen.label };
+        const recorded: GuessingState = { ...state, said: [...state.said, line], unruled: taken.rest };
         if (chosen.spends === false) {
             return { state: recorded, facts: [] };
         }
@@ -280,7 +279,7 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
                 secret: "",
                 count: { used: 0, max: count.budget, warnAt: count.warnAt },
                 said: [],
-                heard: {},
+                unruled: [],
                 won: false,
                 finder: null,
                 revealPicture: null,
@@ -336,7 +335,7 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
                 return { state: { ...state, revealPicture: event.src }, facts: [] };
             }
             if (event.type === "speechEnded" && state.phase === "asking") {
-                return { state: { ...state, heard: { ...state.heard, [event.playerId]: event.text } }, facts: [] };
+                return { state: { ...state, unruled: waitForRuling(state.unruled, event.playerId, event.text) }, facts: [] };
             }
             if (event.type !== "hostRuled" || state.phase !== "asking") {
                 return { state, facts: [] };
@@ -344,18 +343,17 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
             if (event.ruling === "giveup") {
                 return finish(state, false, null, `They gave up after ${state.count.used} ${unitOf(state.count.used)}. The secret was ${state.secret}.`, answerDecision("giveup"));
             }
-            const asker: string | null = event.playerId;
-            const asked: string | undefined = asker === null ? undefined : state.heard[asker];
-            if (asker === null || asked === undefined) {
+            if (state.unruled.length === 0) {
                 return { state, facts: [] };
             }
             if (event.ruling === "correct") {
-                const finder: string = nameOf(state, asker);
+                const finderId: string | undefined = event.playerId ?? state.unruled[0]?.playerId;
+                const finder: string = finderId === undefined ? "Someone" : nameOf(state, finderId);
                 const text: string = `${finder} found it after ${state.count.used} ${unitOf(state.count.used)}. The secret was ${state.secret}. Announce it.`;
                 return finish(state, true, finder, text, answerDecision("correct"));
             }
             if (event.ruling in answers) {
-                return answer(state, event.ruling as AnswerRuling, asker, asked);
+                return answer(state, event.ruling as AnswerRuling, event.playerId);
             }
             return { state, facts: [] };
         },

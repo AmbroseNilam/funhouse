@@ -12,7 +12,7 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { boxProblems, isShortText, isWholeIn, rulingNameProblem, type Box, type HiddenValue, type KitGame } from "../kit/kit.ts";
-import { because, dealOne, frozenCopy, pick, spend, tally, type Budget, type Spent, type Tally, type TallyRow } from "../kit/primitives.ts";
+import { because, dealOne, frozenCopy, pick, spend, takeRuledLine, tally, waitForRuling, type Budget, type Spent, type Tally, type TallyRow, type WaitingLine } from "../kit/primitives.ts";
 import type { Category } from "./guessing.ts";
 
 /** Everything a creator may choose for a plant game. */
@@ -54,11 +54,11 @@ export interface PlantState {
     questions: Budget;
     asked: AskedLine[];
     /**
-     * The latest thing each player said that hasn't been ruled on, by player id. Kept per player
-     * because replies can overlap: a ruling answers the person the host was answering, not
-     * whoever spoke last.
+     * The latest thing each player said that hasn't been ruled on, oldest first. Kept per player
+     * because replies can overlap: a ruling answers the person the host was answering, or the
+     * oldest waiting when it names nobody waiting, the same rule as the guessing kit and the hand-written Twenty Doors.
      */
-    heard: Record<string, string>;
+    unruled: WaitingLine[];
     finderId: string | null;
     /** Who may vote, fixed when the vote opens. */
     voters: string[];
@@ -262,7 +262,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
      * @returns the step.
      */
     const finish = (state: PlantState, result: PlantResult, text: string, decision: string): Step<PlantState> => {
-        const ended: PlantState = { ...state, phase: "end", result, heard: {}, plantName: nameOf(state, state.plantId), finderName: state.finderId === null ? "" : nameOf(state, state.finderId) };
+        const ended: PlantState = { ...state, phase: "end", result, unruled: [], plantName: nameOf(state, state.plantId), finderName: state.finderId === null ? "" : nameOf(state, state.finderId) };
         return { state: ended, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
     };
 
@@ -295,27 +295,17 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
     };
 
     /**
-     * What is left heard once one player's line has been ruled on.
-     * @param state the state.
-     * @param playerId whose line it was.
-     * @returns everyone else's unruled lines.
-     */
-    const without = (state: PlantState, playerId: string): Record<string, string> => {
-        return Object.fromEntries(Object.entries(state.heard).filter(([speaker]: [string, string]) => speaker !== playerId));
-    };
-
-    /**
      * Applies an answer ruling: records the question, spends one, ends the round on the last.
      * @param state the state.
      * @param name the ruling.
-     * @param playerId who asked, with their line in heard.
-     * @param text what they asked.
+     * @param line the line it answers.
+     * @param rest the lines still waiting.
      * @returns the step.
      */
-    const answer = (state: PlantState, name: string, playerId: string, text: string): Step<PlantState> => {
+    const answer = (state: PlantState, name: string, line: WaitingLine, rest: WaitingLine[]): Step<PlantState> => {
         const spent: Spent = spend(state.questions);
-        const line: AskedLine = { playerId, text, answer: ANSWER_LABELS[name] ?? name };
-        const next: PlantState = { ...state, questions: spent.budget, asked: [...state.asked, line], heard: without(state, playerId) };
+        const asked: AskedLine = { playerId: line.playerId, text: line.text, answer: ANSWER_LABELS[name] ?? name };
+        const next: PlantState = { ...state, questions: spent.budget, asked: [...state.asked, asked], unruled: rest };
         if (spent.exhausted === true) {
             return unfound(next, "questions", PLANT_DECISIONS.budget);
         }
@@ -334,7 +324,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
      */
     const found = (state: PlantState, finderId: string): Step<PlantState> => {
         const voters: string[] = state.players.map((player: CartridgePlayer) => player.playerId);
-        const next: PlantState = { ...state, phase: "vote", finderId, voters, votes: {}, heard: {} };
+        const next: PlantState = { ...state, phase: "vote", finderId, voters, votes: {}, unruled: [] };
         const text: string = [
             `${nameOf(state, finderId)} found it: the word was ${state.word}.`,
             "Say so, then call the vote in one line: everyone votes on their phone for who knew it all along.",
@@ -378,7 +368,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
             players: state.players.filter((player: CartridgePlayer) => player.playerId !== playerId),
             voters: state.voters.filter((voter: string) => voter !== playerId),
             votes,
-            heard: without(state, playerId),
+            unruled: state.unruled.filter((line: WaitingLine) => line.playerId !== playerId),
         };
         if (next.phase === "vote" && next.voters.every((voter: string) => next.votes[voter] !== undefined) === true) {
             return resolve(next);
@@ -401,7 +391,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 word: "",
                 questions: { used: 0, max: decisions.questions.budget, warnAt: decisions.questions.warnAt },
                 asked: [],
-                heard: {},
+                unruled: [],
                 finderId: null,
                 voters: [],
                 votes: {},
@@ -492,7 +482,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 return resolve(state);
             }
             if (event.type === "speechEnded" && state.phase === "asking") {
-                return { state: { ...state, heard: { ...state.heard, [event.playerId]: event.text } }, facts: [] };
+                return { state: { ...state, unruled: waitForRuling(state.unruled, event.playerId, event.text) }, facts: [] };
             }
             if (event.type !== "hostRuled" || state.phase !== "asking") {
                 return { state, facts: [] };
@@ -500,16 +490,15 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
             if (event.ruling === "giveup") {
                 return unfound(state, "gaveUp", PLANT_DECISIONS.giveUp);
             }
-            const asker: string | null = event.playerId;
-            const asked: string | undefined = asker === null ? undefined : state.heard[asker];
-            if (asker === null || asked === undefined) {
+            const taken: { line: WaitingLine | undefined; rest: WaitingLine[] } = takeRuledLine(state.unruled, event.playerId);
+            if (taken.line === undefined) {
                 return { state, facts: [] };
             }
             if (event.ruling === "correct") {
-                return found(state, asker);
+                return found(state, event.playerId ?? taken.line.playerId);
             }
             if (ANSWER_LABELS[event.ruling] !== undefined) {
-                return answer(state, event.ruling, asker, asked);
+                return answer(state, event.ruling, taken.line, taken.rest);
             }
             return { state, facts: [] };
         },

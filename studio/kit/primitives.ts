@@ -148,3 +148,34 @@ export function deepFreeze<Value>(value: Value): Value {
     }
     return Object.freeze(value);
 }
+
+/** One line a player said that is waiting for a ruling. */
+export interface WaitingLine {
+    playerId: string;
+    text: string;
+}
+
+/**
+ * Adds a player's line to those waiting for a ruling. Each player has at most one: a newer line
+ * replaces theirs and goes to the back, so the list stays oldest first. The same rule as the
+ * hand-written Twenty Doors.
+ * @param waiting the lines waiting, oldest first.
+ * @param playerId who spoke.
+ * @param text what they said.
+ * @returns the new list.
+ */
+export function waitForRuling(waiting: readonly WaitingLine[], playerId: string, text: string): WaitingLine[] {
+    return [...waiting.filter((line: WaitingLine) => line.playerId !== playerId), { playerId, text }];
+}
+
+/**
+ * Takes the line a ruling answers: the named player's, or else the oldest waiting, because the host
+ * may rule without saying who it was answering. The same rule as the hand-written Twenty Doors.
+ * @param waiting the lines waiting, oldest first.
+ * @param playerId who the host was answering, or null.
+ * @returns the line, or undefined when nothing is waiting, and the lines left.
+ */
+export function takeRuledLine(waiting: readonly WaitingLine[], playerId: string | null): { line: WaitingLine | undefined; rest: WaitingLine[] } {
+    const line: WaitingLine | undefined = waiting.find((candidate: WaitingLine) => candidate.playerId === playerId) ?? waiting[0];
+    return { line, rest: waiting.filter((candidate: WaitingLine) => candidate !== line) };
+}
