@@ -86,8 +86,8 @@ const PRE_ROLL_FRAMES: number = 4;
 /** How long a phone buzzes when its turn comes. */
 const TURN_BUZZ_MILLISECONDS: number = 40;
 
-/** Least time between telling the TV this phone was touched, so its seat can show it. */
-const TOUCH_SIGNAL_GAP_MILLISECONDS: number = 400;
+/** How long a hold can go without real sound before the phone says it can't hear the mic. */
+const MIC_SILENCE_LIMIT_MILLISECONDS: number = 1200;
 
 /** How long the microphone keeps sending after release, so last words survive. */
 const TAIL_MILLISECONDS: number = 300;
@@ -378,13 +378,14 @@ export function App(): ReactElement {
     const surfaceRef = useRef<HTMLDivElement | null>(null);
     const padRef = useRef<PadView | null>(null);
     const lastLeanAtRef = useRef<number>(0);
-    const lastTouchSentRef = useRef<number>(0);
     const [learned, setLearned] = useState<Set<string>>(readLearned);
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic">("closed");
     const [micRetried, setMicRetried] = useState<boolean>(false);
+    const [micSilent, setMicSilent] = useState<boolean>(false);
+    const micSilentRef = useRef<boolean>(false);
     const [invited, setInvited] = useState<string>("");
 
     useEffect(() => {
@@ -516,6 +517,35 @@ export function App(): ReactElement {
         return keepScreenOn();
     }, [joined]);
 
+    // A held mic that sends only silence is broken, usually after the phone was away, so say so and reopen it.
+    useEffect(() => {
+        if (state.holding === false) {
+            micSilentRef.current = false;
+            setMicSilent(false);
+            return;
+        }
+        const startedAt: number = Date.now();
+        let reopened: boolean = false;
+        const watch: number = window.setInterval(() => {
+            const heldFor: number = Date.now() - startedAt;
+            if (heldFor < MIC_SILENCE_LIMIT_MILLISECONDS || startingMicrophoneRef.current !== null) {
+                return;
+            }
+            const capture: MicrophoneCapture | null = captureRef.current;
+            const hearingSound: boolean = capture !== null && capture.isLive() === true && capture.silentFor() < MIC_SILENCE_LIMIT_MILLISECONDS / 2;
+            micSilentRef.current = hearingSound === false;
+            setMicSilent(hearingSound === false);
+            if (hearingSound === false && reopened === false) {
+                reopened = true;
+                capture?.stop();
+                captureRef.current = null;
+                void ensureMicrophone();
+            }
+        }, MIC_SILENCE_LIMIT_MILLISECONDS / 2);
+        return (): void => { window.clearInterval(watch); };
+        // Only starting or ending a hold should restart this watch.
+    }, [state.holding]);
+
     useEffect(() => {
         const surface: HTMLDivElement | null = surfaceRef.current;
         if (state.holding === false || surface === null) {
@@ -642,7 +672,7 @@ export function App(): ReactElement {
     /** Stops talking, keeping the microphone on a moment so the last word isn't cut. */
     const stopTalking = (): void => {
         dispatch({ type: "holding", holding: false });
-        setSent(true);
+        setSent(micSilentRef.current === false);
         send({ type: "released" });
         tailTimerRef.current = window.setTimeout(() => {
             holdingRef.current = false;
@@ -690,12 +720,10 @@ export function App(): ReactElement {
                 const box: DOMRect = surface.getBoundingClientRect();
                 surface.style.setProperty("--thumb-x", `${x - box.left}px`);
                 surface.style.setProperty("--thumb-y", `${y - box.top}px`);
-                surface.classList.add("touched");
-                const touchedAt: number = Date.now();
-                if (touchedAt - lastTouchSentRef.current >= TOUCH_SIGNAL_GAP_MILLISECONDS) {
-                    lastTouchSentRef.current = touchedAt;
+                if (surface.classList.contains("touched") === false) {
                     send({ type: "touched" });
                 }
+                surface.classList.add("touched");
                 wakeMicrophone();
             },
             lifted: (): void => { surface.classList.remove("touched"); },
@@ -848,7 +876,7 @@ export function App(): ReactElement {
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -864,7 +892,11 @@ export function App(): ReactElement {
                 <div className="thumb" aria-hidden="true" />
                 <div className="line" aria-live="polite">
                     {state.holding === true
-                        ? <strong>Listening</strong>
+                        ? micSilent === true
+                            ? <><strong>Can't hear your mic</strong><small>Let go and try again</small></>
+                            : view?.hearing !== undefined && view.hearing !== ""
+                                ? <p className="hearing">{view.hearing.slice(-90)}</p>
+                                : <strong>Listening</strong>
                         : sent === true
                             ? <strong>Got it</strong>
                             : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}

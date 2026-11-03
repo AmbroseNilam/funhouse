@@ -12,7 +12,7 @@
 import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
 import { HOST_NAME } from "../shared/brand.ts";
-import { HOST_MOODS, isHostMood, type HostMood } from "../shared/hostMood.ts";
+import { isHostMood, type HostMood } from "../shared/hostMood.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { log } from "./log.ts";
 
@@ -100,7 +100,7 @@ const MOOD_DELIVERY: Record<HostMood, string> = {
 };
 
 /** The mood a ruling suggests, when the host didn't pick a stronger one. */
-const RULING_MOOD: Record<string, HostMood> = { correct: "delighted", right: "delighted", close: "impressed", wrong: "teasing", giveup: "smug" };
+const RULING_MOOD: Record<string, HostMood> = { correct: "delighted", right: "delighted", close: "impressed", wrong: "teasing", giveup: "smug", yes: "suspicious", no: "smug", sortof: "teasing" };
 
 /** Most recent things said that the livelier host is reminded of. */
 const REMEMBERED_LINES: number = 12;
@@ -110,7 +110,6 @@ const CALLBACK_AGE_MILLISECONDS: number = 60000;
 
 /** What the livelier host is told on top of everything else. */
 const LIVELY_INSTRUCTIONS: string = [
-    `How you feel: write [[mood: word]] first in every reply you speak, choosing one word from ${HOST_MOODS.join(", ")}. It colours how the line is said and how you look. It never changes what's true, what you rule, or what you may reveal, and the word itself is never spoken. Use easy only for plain information. When someone tries a trick, picks up a clue, guesses, or gets close, let it show, and try not to use the same mood twice in a row.`,
     "Your memory: at most once a round, when it fits, bring back something a player actually said, from the lines you're given with how long ago they said it, in a few words. Only what's really there; never make one up, and never bring back anything that gives away a secret.",
     "Your teasing: dare the room, and make players look good. Never put one person down.",
 ].join("\n");

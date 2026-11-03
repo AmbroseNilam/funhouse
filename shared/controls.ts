@@ -33,6 +33,8 @@ export interface PhoneView {
     controls: Control[];
     /** How the phone's touch surface behaves right now. */
     pad: PadView;
+    /** The words heard so far while this phone holds to talk, so the person knows it's working. */
+    hearing: string;
     /** What the game's turn means for this phone, if anything. */
     turn: PhoneTurn | null;
 }

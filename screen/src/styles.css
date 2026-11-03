@@ -145,7 +145,7 @@
     .blocks .image { margin: 0; }
     .blocks .image img { max-height: calc(360 * var(--u)); width: auto; rotate: -1.2deg; box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; animation: reveal-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .play-column { position: absolute; left: calc(80 * var(--u)); right: calc(420 * var(--u)); top: calc(60 * var(--u)); bottom: calc(300 * var(--u)); display: flex; flex-direction: column; gap: calc(16 * var(--u)); }
-    .turn-label { flex: none; margin: 0; font-size: calc(32 * var(--u)); font-weight: 600; color: var(--paper); text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
+    .turn-label { flex: none; align-self: flex-start; margin: 0; padding: calc(6 * var(--u)) calc(18 * var(--u)); font-size: calc(36 * var(--u)); font-weight: 600; background: var(--paper); color: var(--paper-ink); rotate: -0.6deg; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .place-cards { position: absolute; z-index: 3; left: calc(320 * var(--u)); right: calc(80 * var(--u)); bottom: calc(14 * var(--u)); display: flex; align-items: flex-end; justify-content: flex-start; gap: calc(12 * var(--u)); pointer-events: none; }
     .place-cards li { position: relative; flex: 0 1 auto; min-width: 0; padding: calc(8 * var(--u)) calc(18 * var(--u)); color: var(--paper); font-size: calc(30 * var(--u)); font-weight: 600; line-height: 1.15; white-space: nowrap; rotate: -1deg; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; transition: translate 140ms ease-out, opacity 200ms ease-out, box-shadow 140ms ease-out; }
     .place-cards li:nth-child(even) { rotate: 1deg; }
@@ -196,8 +196,9 @@
     .lantern[data-state="listening"] .lantern-body { transform: rotate(8deg) translateY(-4px); }
     .lantern[data-state="listening"] .eye { transform: translateX(5px) scale(1.2); }
     .lantern[data-state="listening"] .brow { transform: translateY(-6px); }
-    .lantern[data-state="thinking"] .glass { fill: #b07a2a; }
-    .lantern[data-state="thinking"] .eye { transform: translate(5px, -9px); }
+    .lantern[data-state="thinking"] .glass { animation: lantern-ponder-glow 1.6s ease-in-out infinite alternate; }
+    .lantern[data-state="thinking"] .eye { animation: lantern-ponder-eyes 2.4s ease-in-out infinite; }
+    .lantern[data-state="thinking"] .brow-left { transform: translateY(-5px); }
     .lantern[data-state="thinking"] .lantern-body { animation: lantern-think 1.1s ease-in-out infinite alternate; }
     .lantern[data-state="thinking"] .smile { opacity: 0.35; }
     .lantern:not([data-mood="easy"]) .brow, .lantern:not([data-mood="easy"]) .eye { transition-duration: 300ms; }
@@ -290,6 +291,17 @@
     to { rotate: 1.2deg; }
 }
 
+@keyframes lantern-ponder-glow {
+    from { fill: #b07a2a; }
+    to { fill: var(--lamp); }
+}
+
+@keyframes lantern-ponder-eyes {
+    0%, 100% { transform: translate(5px, -9px); }
+    40% { transform: translate(-6px, -9px); }
+    70% { transform: translate(-1px, -11px); }
+}
+
 @keyframes lantern-think {
     from { translate: 0 0; }
     to { translate: 0 -5px; }
@@ -297,7 +309,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     .slip, .pause-card, .pause-backing, .title, .row, .shelf-heading { animation: none; }
-    .lantern-body, .eye { animation: none !important; transition: none; }
+    .lantern-body, .eye, .glass { animation: none !important; transition: none; }
     .box, .row { transition: none; }
     ::view-transition-group(*), ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0s; }
 }

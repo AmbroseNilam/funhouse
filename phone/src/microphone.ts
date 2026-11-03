@@ -13,6 +13,8 @@ const LEVEL_GAIN: number = 5;
 export interface MicrophoneCapture {
     /** True while the track is live and the audio context is running. */
     isLive(): boolean;
+    /** How long since the microphone sent any real sound, in milliseconds. A muted track sends pure silence or nothing. */
+    silentFor(): number;
     /** How loud the microphone is right now, from 0 to about 1. */
     level(): number;
     /** Tries to wake a suspended audio context; call from a user gesture. */
@@ -48,7 +50,13 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     await context.audioWorklet.addModule("/phone/pcm-worklet.js");
     const source: MediaStreamAudioSourceNode = context.createMediaStreamSource(stream);
     const worklet: AudioWorkletNode = new AudioWorkletNode(context, "pcm-downsampler");
-    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => { onFrame(event.data); };
+    let lastSoundAt: number = Date.now();
+    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => {
+        if (new Int16Array(event.data).some((sample: number) => sample !== 0) === true) {
+            lastSoundAt = Date.now();
+        }
+        onFrame(event.data);
+    };
     source.connect(worklet);
     const analyser: AnalyserNode = context.createAnalyser();
     analyser.fftSize = LEVEL_WINDOW_SAMPLES;
@@ -56,7 +64,10 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     const window: Float32Array<ArrayBuffer> = new Float32Array(LEVEL_WINDOW_SAMPLES);
     return {
         isLive(): boolean {
-            return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live") === true && context.state === "running";
+            return stream.getAudioTracks().some((track: MediaStreamTrack) => track.readyState === "live" && track.muted === false) === true && context.state === "running";
+        },
+        silentFor(): number {
+            return Date.now() - lastSoundAt;
         },
         level(): number {
             analyser.getFloatTimeDomainData(window);

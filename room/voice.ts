@@ -31,6 +31,8 @@ const SCREEN_CUSHION_MILLISECONDS: number = 120;
 class FetchedLine {
     private readonly chunks: Uint8Array[] = [];
     private done: boolean = false;
+    /** Called when this line's first audio goes out. */
+    public onFirstAudio: (() => void) | null = null;
     private wake: (() => void) | null = null;
 
     /**
@@ -91,9 +93,12 @@ export class HostVoice {
      * @param text the words.
      * @param voice which voice to use.
      * @param style delivery direction.
+     * @param onFirstAudio called when its first audio goes out to the screens.
      */
-    public say(text: string, voice: SpeechVoice, style: string): void {
-        this.enqueue(this.download(text, voice, style));
+    public say(text: string, voice: SpeechVoice, style: string, onFirstAudio?: () => void): void {
+        const line: FetchedLine = this.download(text, voice, style);
+        line.onFirstAudio = onFirstAudio ?? null;
+        this.enqueue(line);
     }
 
     /**
@@ -252,6 +257,8 @@ export class HostVoice {
             this.playbackEndsAt = startsAt + (even / BYTES_PER_SECOND) * 1000;
             this.setSpeaking(true);
             this.output.chunk(joined.subarray(0, even));
+            line.onFirstAudio?.();
+            line.onFirstAudio = null;
         }
         this.output.lineEnded();
     }

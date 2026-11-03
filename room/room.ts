@@ -119,6 +119,9 @@ const PHONE_DOWN_AFTER_MILLISECONDS: number = 3000;
 /** Least time between the host being told someone joined, so it doesn't greet every arrival. */
 const JOIN_NOTICE_GAP_MILLISECONDS: number = 30000;
 
+/** Longest a host line's words wait for its voice before appearing anyway. */
+const CAPTION_WAIT_MILLISECONDS: number = 2500;
+
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
 
@@ -312,6 +315,7 @@ export class Room implements HostStage {
     private hostThinking: boolean = false;
     private hostMood: HostMood | null = null;
     private lastJoinNoticeAt: number = 0;
+    private captionGeneration: number = 0;
     private lastOutKey: string = "";
     private releasedAt: number = 0;
     private replyClockAt: number = 0;
@@ -606,13 +610,26 @@ export class Room implements HostStage {
             this.replyClockAt = 0;
         }
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
-        this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
-        this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
-        this.broadcastScene();
+        const generation: number = this.captionGeneration;
+        let shown: boolean = false;
+        // The words appear as the voice starts, or after a short wait if the voice never does.
+        const showCaption = (): void => {
+            if (shown === true || generation !== this.captionGeneration) {
+                return;
+            }
+            shown = true;
+            clearTimeout(captionTimer);
+            this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
+            this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
+            this.broadcastScene();
+        };
+        const captionTimer: NodeJS.Timeout = setTimeout(showCaption, CAPTION_WAIT_MILLISECONDS);
+        captionTimer.unref();
         if (BUDGET.spend("voice") === false) {
+            showCaption();
             return;
         }
-        this.voice.say(text, this.host.persona.voice, style);
+        this.voice.say(text, this.host.persona.voice, style, showCaption);
     }
 
     /**
@@ -638,6 +655,7 @@ export class Room implements HostStage {
 
     /** Silences the host at once. */
     public stopSpeaking(): void {
+        this.captionGeneration += 1;
         this.voice.stop();
     }
 
@@ -1417,6 +1435,7 @@ export class Room implements HostStage {
         player.partial = partial;
         this.caption = { speaker: player.name, text: partial, final: false };
         this.broadcastScene();
+        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
     }
 
     /**
@@ -1713,7 +1732,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", turn: this.phoneTurn(player) };
     }
 
     /**
@@ -1723,17 +1742,20 @@ export class Room implements HostStage {
      */
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
+        if (turn?.kind === "anyone") {
+            return { yours: false, open: true, line: turn.label };
+        }
         if (turn?.kind === "one") {
-            return turn.playerId === player.playerId ? { yours: true, line: "Your turn" } : { yours: false, line: this.waitingLine(turn.playerId) };
+            return turn.playerId === player.playerId ? { yours: true, open: false, line: "Your turn" } : { yours: false, open: false, line: this.waitingLine(turn.playerId) };
         }
         if (turn?.kind !== "everyone" || turn.playerIds.includes(player.playerId) === false) {
             return null;
         }
         if (turn.doneIds.includes(player.playerId) === false) {
-            return { yours: true, line: "Your turn" };
+            return { yours: true, open: false, line: "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
-        return left.length === 1 ? { yours: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, line: `Waiting for ${left.length} people` };
+        return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: `Waiting for ${left.length} people` };
     }
 
     /**
