@@ -193,6 +193,8 @@ describe("leading questions: asking", () => {
         const unnamed: Step<PlantState> = on(game, current, { type: "hostRuled", at: 5, ruling: "yes", detail: "", playerId: "paper4" });
         assert.equal(unnamed.state.asked.at(-1)?.text, "Is it heavy?", "a ruling for someone with nothing waiting takes the oldest line");
         assert.equal(on(game, state, { type: "hostRuled", at: 6, ruling: "yes", detail: "", playerId: "paper1" }).state, state, "nothing waiting, nothing ruled");
+        const credited: Step<PlantState> = on(game, current, { type: "hostRuled", at: 9, ruling: "correct", detail: "", playerId: "paper4" });
+        assert.equal(credited.state.finderId, "paper1", "a correct ruling for someone with nothing waiting credits whose line it took");
         const again: PlantState = on(game, on(game, state, { type: "speechEnded", at: 7, playerId: "paper1", text: "First?" }).state, { type: "speechEnded", at: 8, playerId: "paper1", text: "Second?" }).state;
         assert.deepEqual(again.unruled, [{ playerId: "paper1", text: "Second?" }], "a player's newer line replaces their older one");
     });

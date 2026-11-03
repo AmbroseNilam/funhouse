@@ -496,7 +496,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 return { state, facts: [] };
             }
             if (event.ruling === "correct") {
-                return found(state, event.playerId ?? taken.line.playerId);
+                return found(state, taken.line.playerId);
             }
             if (ANSWER_LABELS[event.ruling] !== undefined) {
                 return answer(state, event.ruling, taken.line, taken.rest);
