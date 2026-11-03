@@ -142,7 +142,7 @@ const HINT_MILLISECONDS: number = 3000;
 const NOT_HEARD_HINT: string = "Didn't catch that. Try again?";
 
 /** How long a dropped phone keeps its seat before the room says they left. */
-const REJOIN_GRACE_MILLISECONDS: number = 30000;
+const REJOIN_GRACE_MILLISECONDS: number = 120000;
 
 /** The same during a game: a locked phone mustn't lose its seat, and every phase has a timer. */
 const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
@@ -319,7 +319,7 @@ export class Room implements HostStage {
             }
             const message: PhoneMessage = parsed;
             if (message.type === "hello" && player === null) {
-                player = this.resume(socket, message.playerId, message.resumeToken) ?? this.join(socket, message.name);
+                player = this.seat(socket, message);
                 return;
             }
             if (player === null || message.type === "hello") {
@@ -455,6 +455,33 @@ export class Room implements HostStage {
     }
 
     /**
+     * Finds a phone its seat: the one it remembers, or one it's asked to take over, or a new
+     * one. A name already at the table is checked first, because the same person often arrives
+     * twice, as Safari and the home-screen app don't share a seat. Taking a seat over is only
+     * offered outside a game, so nobody can use a name to read someone's secret role.
+     * @param socket the phone's WebSocket.
+     * @param hello what the phone said.
+     * @returns the player, or null while the phone is deciding or the room is full.
+     */
+    private seat(socket: WebSocket, hello: Extract<PhoneMessage, { type: "hello" }>): Player | null {
+        const resumed: Player | null = this.resume(socket, hello.playerId, hello.resumeToken);
+        if (resumed !== null) {
+            return resumed;
+        }
+        const wanted: string = hello.name.trim().toLowerCase();
+        const namesake: Player | undefined = [...this.players.values()].find((candidate: Player) => candidate.name.toLowerCase() === wanted);
+        if (namesake === undefined || this.game !== null || hello.sameName === "newSeat") {
+            return this.join(socket, hello.name);
+        }
+        if (hello.sameName === "takeSeat") {
+            return this.resume(socket, namesake.playerId, namesake.resumeToken);
+        }
+        const asking: RoomToPhoneMessage = { type: "nameTaken", name: namesake.name };
+        socket.send(JSON.stringify(asking));
+        return null;
+    }
+
+    /**
      * Seats a new player and tells everyone.
      * @param socket the phone's WebSocket.
      * @param rawName the name the player typed.
@@ -515,6 +542,7 @@ export class Room implements HostStage {
         this.welcome(player);
         this.broadcastScene();
         this.broadcastShell();
+        this.refreshPhones();
         this.prepareStandby(player);
         return player;
     }
@@ -691,7 +719,8 @@ export class Room implements HostStage {
         this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
         this.gameDecided = false;
         this.shell.gameStarted(installed.manifest.id);
-        this.host.notice(`(Game: ${installed.manifest.name} has just started, so this is addressed to you. Say something out loud now, and do what "This moment" says. Don't stay quiet.)`, WAKE_DELAY_MILLISECONDS.screen);
+        const opening: string = `(Game: ${installed.manifest.name} has just started, so this is addressed to you. Say something out loud now, and do what "This moment" says. Don't stay quiet.)`;
+        this.host.notice(opening, WAKE_DELAY_MILLISECONDS.screen);
         this.broadcastScene();
     }
 
@@ -802,6 +831,7 @@ export class Room implements HostStage {
         log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${grace / 1000} s`);
         this.broadcastScene();
         this.broadcastShell();
+        this.refreshPhones();
         player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, grace);
     }
 

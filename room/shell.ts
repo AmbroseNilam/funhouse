@@ -5,7 +5,7 @@
 import type { NavAction, NavAxis, PadView, Seat, ShelfGame, ShellScreen, ShellView } from "../shared/shell.ts";
 
 /** How long a driver may sit idle before anyone else's swipe takes over. */
-const DRIVER_IDLE_MILLISECONDS: number = 5000;
+const DRIVER_IDLE_MILLISECONDS: number = 10000;
 
 /** The pause menu's fixed rows. */
 const KEEP_PLAYING: string = "Keep playing";
@@ -48,6 +48,7 @@ export class Shell {
     private gameId: string | null = null;
     private driverId: string | null = null;
     private lastDriveAt: number = 0;
+    private freeTimer: NodeJS.Timeout | null = null;
 
     /**
      * Creates a console on the shelf.
@@ -141,6 +142,7 @@ export class Shell {
     public pad(playerId: string, colour: string): PadView {
         const driver: Omit<Seat, "driving"> | undefined = this.stage.seats().find((seat) => seat.playerId === this.driverId);
         const count: number = this.itemCount();
+        const canDrive: boolean = this.mayDrive(playerId);
         return {
             colour,
             axis: this.axis(),
@@ -148,24 +150,43 @@ export class Shell {
             canNext: this.focus < count - 1,
             driving: playerId === this.driverId,
             driverName: driver?.name ?? "",
-            backLabel: this.backLabel(),
-            canSelect: count > 0,
+            canDrive,
+            backLabel: canDrive === true ? this.backLabel() : null,
+            canSelect: count > 0 && canDrive === true,
         };
     }
 
     /**
-     * Whether this person's swipes are in charge right now.
+     * Whether someone else is actively driving, so this person has to wait.
+     * @param playerId who's asking.
+     * @returns true when the controller is theirs or free.
+     */
+    private mayDrive(playerId: string): boolean {
+        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true);
+        return this.driverId === playerId || driverPresent === false || Date.now() - this.lastDriveAt >= DRIVER_IDLE_MILLISECONDS;
+    }
+
+    /**
+     * Gives this person the controller if they may have it, and tells every phone when it
+     * changes hands or comes free.
      * @param playerId who.
      * @returns false while someone else is actively driving.
      */
     private claimDrive(playerId: string): boolean {
-        const now: number = Date.now();
-        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true);
-        if (this.driverId !== playerId && driverPresent === true && now - this.lastDriveAt < DRIVER_IDLE_MILLISECONDS) {
+        if (this.mayDrive(playerId) === false) {
             return false;
         }
+        const changedHands: boolean = this.driverId !== playerId;
         this.driverId = playerId;
-        this.lastDriveAt = now;
+        this.lastDriveAt = Date.now();
+        if (this.freeTimer !== null) {
+            clearTimeout(this.freeTimer);
+        }
+        this.freeTimer = setTimeout(() => { this.stage.changed(); }, DRIVER_IDLE_MILLISECONDS);
+        this.freeTimer.unref();
+        if (changedHands === true) {
+            this.stage.changed();
+        }
         return true;
     }
 

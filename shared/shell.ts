@@ -55,6 +55,8 @@ export interface PadView {
     canNext: boolean;
     driving: boolean;
     driverName: string;
+    /** True when this phone's swipes would count now: it's driving, or the controller is free. */
+    canDrive: boolean;
     /** What the back corner does here, or null when it does nothing. */
     backLabel: string | null;
     /** True when a tap on the surface would do something. */

@@ -11,7 +11,7 @@ export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree";
 
 /** Phone to room. */
 export type PhoneMessage =
-    | { type: "hello"; name: string; playerId?: string; resumeToken?: string }
+    | { type: "hello"; name: string; playerId?: string; resumeToken?: string; sameName?: "takeSeat" | "newSeat" }
     | { type: "input"; input: ControlInput }
     | { type: "holdToTalk"; down: boolean }
     | { type: "rename"; name: string }
@@ -24,6 +24,7 @@ export type PhoneMessage =
 export type RoomToPhoneMessage =
     | { type: "welcome"; playerId: string; roomCode: string; name: string; resumeToken: string }
     | { type: "view"; view: PhoneView }
+    | { type: "nameTaken"; name: string }
     | { type: "rejected"; reason: RejectedReason }
     | { type: "heartbeat" };
 
@@ -60,7 +61,7 @@ export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 70000;
  */
 export function isPhoneMessage(message: { type: string } & Record<string, unknown>): boolean {
     if (message.type === "hello") {
-        return typeof message.name === "string" && ["string", "undefined"].includes(typeof message.playerId) === true && ["string", "undefined"].includes(typeof message.resumeToken) === true;
+        return typeof message.name === "string" && ["string", "undefined"].includes(typeof message.playerId) === true && ["string", "undefined"].includes(typeof message.resumeToken) === true && ["takeSeat", "newSeat", undefined].includes(message.sameName as string | undefined) === true;
     }
     if (message.type === "holdToTalk") {
         return typeof message.down === "boolean";

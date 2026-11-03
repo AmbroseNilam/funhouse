@@ -205,10 +205,10 @@ function writeLearned(learned: Set<string>): void {
  * @returns the headline and a smaller line under it.
  */
 function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean): { big: string; small: string } {
-    if (pad.driving === true && pad.axis !== null && learned.has("slide") === false) {
+    if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
     }
-    if (pad.driving === true && pad.canSelect === true && learned.has("tap") === false) {
+    if (pad.canSelect === true && pad.axis !== null && learned.has("tap") === false) {
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
     if (canTalk === true && learned.has("hold") === false) {
@@ -217,10 +217,19 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (waiting !== "") {
         return { big: waiting, small: "" };
     }
-    if (pad.driving === false && pad.axis !== null && pad.driverName !== "") {
-        return { big: `${pad.driverName} has the controller`, small: "Slide to take over" };
+    const talkLine: string = canTalk === true ? "Press and hold to talk" : "";
+    if (pad.axis === null) {
+        return { big: "", small: talkLine };
     }
-    return { big: "", small: canTalk === true ? "Press and hold to talk" : "" };
+    if (pad.driving === true) {
+        return { big: "You have the controller", small: talkLine };
+    }
+    if (pad.driverName === "") {
+        return { big: "", small: talkLine };
+    }
+    return pad.canDrive === true
+        ? { big: `${pad.driverName} has the controller`, small: "Slide to take over" }
+        : { big: `${pad.driverName} is choosing`, small: talkLine };
 }
 
 /**
@@ -334,6 +343,7 @@ export function App(): ReactElement {
     const lastLeanAtRef = useRef<number>(0);
     const [learned, setLearned] = useState<Set<string>>(readLearned);
     const [movedAway, setMovedAway] = useState<boolean>(false);
+    const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits">("closed");
     const [invited, setInvited] = useState<string>("");
@@ -384,8 +394,13 @@ export function App(): ReactElement {
                     location.assign(`${INSTALLED === true ? "/phone/" : "/"}?${message.reason === "roomFull" ? "full" : "missing"}=${encodeURIComponent(ROOM_CODE)}`);
                     return;
                 }
+                if (message.type === "nameTaken") {
+                    setSameName(message.name);
+                    return;
+                }
                 if (message.type === "welcome") {
                     pendingNameRef.current = null;
+                    setSameName(null);
                     writeSeat({ playerId: message.playerId, resumeToken: message.resumeToken, name: message.name, roomCode: message.roomCode });
                 }
                 dispatch({ type: "message", message });
@@ -460,6 +475,13 @@ export function App(): ReactElement {
     }, [sent]);
 
     useEffect(() => blockBrowserGestures(), []);
+
+    // Colours the page behind the surface too, so no band of another colour shows past its edge.
+    const seatColour: string | undefined = state.view?.pad.colour;
+    useEffect(() => {
+        document.documentElement.style.background = seatColour ?? "";
+        return (): void => { document.documentElement.style.background = ""; };
+    }, [seatColour]);
 
     const send = (message: PhoneMessage): void => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -575,17 +597,18 @@ export function App(): ReactElement {
             },
             lifted: (): void => { surface.classList.remove("touched"); },
             step: (delta: number): void => {
-                send({ type: "nav", action: { kind: "step", delta } });
-                if (padRef.current?.driving === true) {
-                    learn("slide");
+                if (padRef.current?.canDrive === false) {
+                    return;
                 }
+                send({ type: "nav", action: { kind: "step", delta } });
+                learn("slide");
                 if ("vibrate" in navigator) {
                     navigator.vibrate(STEP_BUZZ_MILLISECONDS);
                 }
             },
             lean: (x: number, y: number): void => {
                 const now: number = Date.now();
-                if (padRef.current?.driving === true && (now - lastLeanAtRef.current >= LEAN_INTERVAL_MILLISECONDS || (x === 0 && y === 0))) {
+                if (padRef.current?.canDrive === true && (now - lastLeanAtRef.current >= LEAN_INTERVAL_MILLISECONDS || (x === 0 && y === 0))) {
                     lastLeanAtRef.current = now;
                     send({ type: "lean", x, y });
                 }
@@ -634,6 +657,18 @@ export function App(): ReactElement {
                     <button className="primary" type="submit">Sit down</button>
                 </form>
                 <p className="fine">Your browser will ask for the microphone. That's how {HOST_NAME} hears you.</p>
+            </main>
+        );
+    }
+
+    if (sameName !== null) {
+        return (
+            <main className="note-screen">
+                <div className="place-card">
+                    <label>You're already sitting here as {sameName}.</label>
+                    <button className="primary" onClick={() => { send({ type: "hello", name: sameName, sameName: "takeSeat" }); }}>Take that seat</button>
+                    <button className="plain" onClick={() => { send({ type: "hello", name: sameName, sameName: "newSeat" }); }}>I'm someone else</button>
+                </div>
             </main>
         );
     }

@@ -18,7 +18,8 @@
 
 @layer base {
     html, body, #root { position: fixed; inset: 0; margin: 0; overflow: hidden; overscroll-behavior: none; }
-    body { background: var(--ink); color: var(--paper); font-family: var(--font); font-size: 18px; font-variation-settings: "SOFT" 100, "WONK" 1; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-text-size-adjust: 100%; }
+    html { background: var(--ink); }
+    body { color: var(--paper); font-family: var(--font); font-size: 18px; font-variation-settings: "SOFT" 100, "WONK" 1; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-text-size-adjust: 100%; }
     h1, h2, p { margin: 0; }
     h1 { font-size: 42px; font-weight: 500; line-height: 1.08; letter-spacing: -0.01em; }
     button, input { font: inherit; font-variation-settings: inherit; color: inherit; }
@@ -97,6 +98,10 @@
     .place-warning { background: var(--wine); color: var(--paper); padding: 6px 10px; font-size: 18px; }
     .code-field { font-size: 40px; letter-spacing: 0.25em; text-transform: uppercase; }
     .primary:disabled { opacity: 0.45; }
+    .plain { display: block; width: 100%; padding: 14px; font-size: 20px; color: var(--paper-ink); text-decoration: underline; }
+    @media (display-mode: standalone) {
+        .pad-screen { bottom: auto; height: 100lvh; }
+    }
 }
 
 @keyframes paper-in {
