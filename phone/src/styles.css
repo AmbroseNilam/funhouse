@@ -23,39 +23,45 @@
     h1 { font-size: 42px; font-weight: 500; line-height: 1.08; letter-spacing: -0.01em; }
     button, input { font: inherit; font-variation-settings: inherit; color: inherit; }
     button { border: 0; background: none; padding: 0; }
-    input { width: 100%; box-sizing: border-box; padding: 16px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); font-size: 22px; user-select: text; -webkit-user-select: text; box-shadow: 4px 4px 0 #000; }
+    input { width: 100%; box-sizing: border-box; padding: 16px; border: 0; background: var(--paper); color: var(--paper-ink); font-size: 22px; user-select: text; -webkit-user-select: text; box-shadow: 4px 4px 0 #000; }
     input::placeholder { color: #8a7a60; }
     :focus-visible { outline: 3px solid var(--lamp); outline-offset: 3px; }
 }
 
 @layer components {
-    .primary { display: block; width: 100%; padding: 16px; border-radius: 4px; background: var(--lamp); color: #241a02; font-size: 22px; font-weight: 600; box-shadow: 4px 4px 0 #000; transition: transform 80ms ease-out, box-shadow 80ms ease-out; }
+    .primary { display: block; width: 100%; padding: 16px; background: var(--lamp); color: #241a02; font-size: 22px; font-weight: 600; box-shadow: 4px 4px 0 #000; transition: transform 80ms ease-out, box-shadow 80ms ease-out; }
     .primary:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
 
     .note-screen { position: fixed; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: max(24px, env(safe-area-inset-top)) 28px max(24px, env(safe-area-inset-bottom)); }
-    .note-screen form { display: flex; flex-direction: column; gap: 14px; }
+    .place-card { display: flex; flex-direction: column; gap: 14px; padding: 22px; background: var(--paper); color: var(--paper-ink); rotate: -0.8deg; box-shadow: 6px 6px 0 #000; }
+    .place-card label { font-size: 38px; font-weight: 500; line-height: 1.08; }
+    .place-card input { background: none; border: 0; border-bottom: 2px solid var(--paper-ink); padding: 10px 0; box-shadow: none; font-size: 26px; }
+    .place-card .primary { box-shadow: 3px 3px 0 var(--paper-ink); }
     .room-tag { color: var(--muted); font-size: 15px; }
     .fine { color: var(--muted); font-size: 15px; line-height: 1.4; }
 
     .pad-screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--seat); }
-    .corners { flex: none; display: flex; align-items: center; justify-content: space-between; padding-top: env(safe-area-inset-top); background: color-mix(in srgb, var(--ink) 35%, var(--seat)); }
+    .corners { flex: none; display: flex; align-items: center; justify-content: space-between; padding-top: env(safe-area-inset-top); }
     .corner, .corner-gap { flex: none; width: 76px; height: 60px; font-size: 16px; color: var(--paper); }
     .corner { transition: background 80ms ease-out; }
     .corner:active { background: color-mix(in srgb, var(--ink) 40%, transparent); }
     .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; color: var(--paper); }
 
     .private { flex: 0 1 auto; max-height: 56%; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-    .paper { background: var(--paper); color: var(--paper-ink); padding: 16px; border-radius: 3px; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ink) 70%, transparent); animation: paper-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-    .paper small { display: block; margin-bottom: 4px; color: var(--wine); font-size: 14px; }
-    .paper h2 { font-size: 30px; font-weight: 600; line-height: 1.1; margin-bottom: 6px; }
-    .paper p { line-height: 1.35; }
+    .paper { background: var(--paper); color: var(--paper-ink); padding: 16px; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ink) 70%, transparent); animation: paper-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .paper h2 { font-size: 44px; font-weight: 600; line-height: 1.1; margin-bottom: 6px; }
+    .paper p { font-size: 22px; line-height: 1.3; }
     .prompt { font-size: 18px; margin-bottom: 8px; display: block; }
     .choices { display: flex; flex-direction: column; gap: 8px; }
-    .choices button { min-height: 52px; padding: 10px 14px; text-align: left; font-size: 20px; border-radius: 3px; background: var(--card); color: var(--paper); transition: transform 70ms ease-out; }
+    .choices button { min-height: 52px; padding: 10px 14px; text-align: left; font-size: 20px; background: var(--card); color: var(--paper); transition: transform 70ms ease-out; }
     .choices button:active { transform: scale(0.98); background: var(--lamp); color: #241a02; }
     .choices button:disabled { opacity: 0.45; }
     .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
-    .note.secret { background: var(--card); color: var(--paper); }
+    .peek { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 150px; justify-content: center; text-align: center; touch-action: none; background: var(--card); color: var(--paper); font-size: 22px; line-height: 1.25; transition: background 80ms ease-out; }
+    .peek em { font-style: normal; font-size: 22px; color: var(--paper); }
+    .peek strong { font-size: 44px; font-weight: 600; line-height: 1.05; }
+    .peek.peeking { background: var(--paper); color: var(--paper-ink); }
+    .offline .surface { opacity: 0.5; }
     .note.warning { background: var(--wine); color: var(--paper); }
 
     .surface { --level: 0; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
@@ -71,12 +77,12 @@
     .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
 
     .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(10, 7, 4, 0.72); animation: fade-in 120ms ease-out; }
-    .sheet { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); background: var(--paper); color: var(--paper-ink); border-radius: 6px 6px 0 0; animation: sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .sheet { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); background: var(--paper); color: var(--paper-ink); animation: sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .sheet form { display: flex; flex-direction: column; gap: 10px; }
     .sheet label { font-size: 18px; }
     .sheet p { font-size: 20px; line-height: 1.3; margin-bottom: 6px; }
     .sheet input { box-shadow: none; border: 1px solid var(--paper-ink); }
-    .sheet button { min-height: 54px; font-size: 20px; border-radius: 3px; background: var(--card); color: var(--paper); box-shadow: none; }
+    .sheet button { min-height: 54px; font-size: 20px; background: var(--card); color: var(--paper); box-shadow: none; }
     .sheet .primary { background: var(--lamp); color: #241a02; }
     .sheet .danger { background: var(--wine); color: var(--paper); }
     .sheet .quiet { background: none; color: var(--paper-ink); }

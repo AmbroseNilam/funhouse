@@ -189,16 +189,17 @@ function writeLearned(learned: Set<string>): void {
  * @param pad how the surface behaves.
  * @param learned the gestures already done.
  * @param waiting what the game says to wait for, if anything.
+ * @param canTalk whether the microphone may open right now.
  * @returns the headline and a smaller line under it.
  */
-function surfaceLine(pad: PadView, learned: Set<string>, waiting: string): { big: string; small: string } {
+function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean): { big: string; small: string } {
     if (pad.driving === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
     }
     if (pad.driving === true && pad.canSelect === true && learned.has("tap") === false) {
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
-    if (learned.has("hold") === false) {
+    if (canTalk === true && learned.has("hold") === false) {
         return { big: "Press and hold to talk", small: `${HOST_NAME} is listening` };
     }
     if (waiting !== "") {
@@ -207,7 +208,30 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string): { big
     if (pad.driving === false && pad.axis !== null && pad.driverName !== "") {
         return { big: `${pad.driverName} has the controller`, small: "Slide to take over" };
     }
-    return { big: "", small: "Press and hold to talk" };
+    return { big: "", small: canTalk === true ? "Press and hold to talk" : "" };
+}
+
+/**
+ * A secret dealt face down. It shows only while pressed, so a phone left on the table gives
+ * nothing away.
+ * @param props the secret.
+ * @returns the element.
+ */
+function SecretCard(props: { title: string; body: string }): ReactElement {
+    const [peeking, setPeeking] = useState<boolean>(false);
+    return (
+        <button
+            className={`paper peek ${peeking === true ? "peeking" : ""}`}
+            onPointerDown={() => { setPeeking(true); }}
+            onPointerUp={() => { setPeeking(false); }}
+            onPointerCancel={() => { setPeeking(false); }}
+            onPointerLeave={() => { setPeeking(false); }}
+        >
+            {peeking === true
+                ? <>{props.title !== "" ? <strong>{props.title}</strong> : null}<span>{props.body}</span></>
+                : <em>Press and hold to peek</em>}
+        </button>
+    );
 }
 
 /**
@@ -222,7 +246,9 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
         return null;
     }
     if (control.type === "roleCard") {
-        return <section key={index} className={`paper ${control.secret === true ? "secret" : ""}`}>{control.secret === true ? <small>Only you can see this</small> : null}<h2>{control.title}</h2><p>{control.body}</p></section>;
+        return control.secret === true
+            ? <SecretCard key={index} title={control.title} body={control.body} />
+            : <section key={index} className="paper"><h2>{control.title}</h2><p>{control.body}</p></section>;
     }
     if (control.type === "buttons" || control.type === "choice") {
         return (
@@ -236,9 +262,12 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
         return (
             <form key={index} className="paper choices" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("value") as HTMLInputElement; send({ type: "input", input: { value: field.value.slice(0, control.maxLength), controlIndex: index } }); field.value = ""; }}>
                 <label className="prompt">{control.prompt}<input name="value" maxLength={control.maxLength} placeholder={control.placeholder ?? ""} autoComplete="off" /></label>
-                <button type="submit">Send</button>
+                <button type="submit">Send it</button>
             </form>
         );
+    }
+    if (control.tone === "secret") {
+        return <SecretCard key={index} title="" body={control.text} />;
     }
     return <p key={index} className={`paper note ${control.tone}`}>{control.text}</p>;
 }
@@ -500,7 +529,9 @@ export function App(): ReactElement {
             lifted: (): void => { surface.classList.remove("touched"); },
             step: (delta: number): void => {
                 send({ type: "nav", action: { kind: "step", delta } });
-                learn("slide");
+                if (padRef.current?.driving === true) {
+                    learn("slide");
+                }
                 if ("vibrate" in navigator) {
                     navigator.vibrate(STEP_BUZZ_MILLISECONDS);
                 }
@@ -546,9 +577,9 @@ export function App(): ReactElement {
         return (
             <main className="note-screen" data-scrolls>
                 <small className="room-tag">{PRODUCT_NAME} · Room {state.roomCode}</small>
-                <h1>Who's sitting down?</h1>
-                <form onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
-                    <input name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoFocus required aria-label="Your name" />
+                <form className="place-card" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
+                    <label htmlFor="name-field">Who's sitting down?</label>
+                    <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
                 <p className="fine">Your browser will ask for the microphone. That's how {HOST_NAME} hears you.</p>
@@ -580,14 +611,14 @@ export function App(): ReactElement {
     const pad: PadView | null = view?.pad ?? null;
     const controls: Control[] = view?.controls ?? [];
     const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
-    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting);
+    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk);
     const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
-    const problem: string = state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : "";
+    const problem: string = state.connected === false ? "Finding the table…" : state.micError !== "" ? state.micError : "";
     const status: string = problem !== "" ? problem : view?.status ?? "";
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -622,8 +653,8 @@ export function App(): ReactElement {
                             <form onSubmit={rename}>
                                 <label htmlFor="new-name">What should we call you?</label>
                                 <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoFocus required />
-                                <button type="submit" className="primary">Save</button>
-                                <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Cancel</button>
+                                <button type="submit" className="primary">That's me</button>
+                                <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
                             </form>
                         ) : null}
                         {menu === "leave" ? (
