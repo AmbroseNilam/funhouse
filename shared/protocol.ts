@@ -7,7 +7,7 @@ import type { Scene } from "./scene.ts";
 import type { NavAction, ShellView } from "./shell.ts";
 
 /** Why the room turned a stage away. */
-export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree";
+export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree" | "roomClosed";
 
 /** Phone to room. */
 export type PhoneMessage =
@@ -31,7 +31,7 @@ export type RoomToPhoneMessage =
 /** Screen to room. */
 export type ScreenMessage =
     | { type: "hello" }
-    | { type: "ready" };
+    | { type: "ready"; resumed?: boolean };
 
 /**
  * Room to screen. Host audio follows as binary 24 kHz 16-bit mono PCM frames after an

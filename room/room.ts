@@ -344,6 +344,9 @@ export class Room implements HostStage {
             lit = true;
             clearTimeout(unlitTimer);
             this.wake();
+            if (message.resumed === true) {
+                return;
+            }
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
             this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
         });

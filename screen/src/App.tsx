@@ -27,6 +27,7 @@ interface ScreenState {
     connected: boolean;
     started: boolean;
     turnedAway: boolean;
+    roomClosed: boolean;
     shell: ShellView | null;
 }
 
@@ -36,7 +37,8 @@ type ScreenAction =
     | { type: "qr"; dataUrl: string }
     | { type: "connection"; connected: boolean }
     | { type: "started" }
-    | { type: "turnedAway" };
+    | { type: "turnedAway" }
+    | { type: "roomClosed" };
 
 /** True on a plug-in console with no mouse: it lights itself, and the browser must allow autoplay. */
 const ON_CONSOLE: boolean = new URLSearchParams(location.search).get("console") === "1";
@@ -57,7 +59,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, shell: null };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -71,6 +73,9 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     }
     if (action.type === "turnedAway") {
         return { ...state, turnedAway: true };
+    }
+    if (action.type === "roomClosed") {
+        return { ...state, roomClosed: true };
     }
     if (action.type === "started") {
         return { ...state, started: true };
@@ -192,6 +197,10 @@ export function App(): ReactElement {
             socket.onopen = (): void => {
                 retryDelay = 500;
                 dispatch({ type: "connection", connected: true });
+                // Already lit before the connection dropped, so the room needs to hear it again, without any fuss.
+                if (speakerRef.current !== null) {
+                    socket.send(JSON.stringify({ type: "ready", resumed: true } satisfies ScreenMessage));
+                }
             };
             socket.onclose = (): void => {
                 dispatch({ type: "connection", connected: false });
@@ -218,9 +227,15 @@ export function App(): ReactElement {
                     focused?.animate([{ translate: "0 0" }, { translate: `${leanRef.current.x * 14}px ${leanRef.current.y * 14}px` }, { translate: "0 0" }], { duration: 220, easing: "ease-out" });
                     return;
                 }
+                if (message.type === "rejected" && message.reason === "roomClosed" && ON_CONSOLE === true) {
+                    stopped = true;
+                    location.replace("/screen/?console=1");
+                    return;
+                }
                 if (message.type === "rejected") {
                     stopped = true;
-                    dispatch({ type: "turnedAway" });
+                    speakerRef.current?.cancel();
+                    dispatch({ type: message.reason === "roomClosed" ? "roomClosed" : "turnedAway" });
                     return;
                 }
                 if (message.type === "scene" && new URLSearchParams(location.search).get("room") !== message.roomCode) {
@@ -369,6 +384,19 @@ export function App(): ReactElement {
             <main className="phone-gate">
                 <h1>Every table's taken.</h1>
                 <p>Try again in a few minutes.</p>
+            </main>
+        );
+    }
+
+    if (state.roomClosed === true) {
+        return (
+            <main className="tv on-home">
+                <button className="sound-gate" onClick={() => { location.assign("/screen/"); }} autoFocus>
+                    <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
+                    <span className="gate-title">This room has closed</span>
+                    <span className="gate-detail">A new room gets a new code, so everyone will need to join again.</span>
+                    <span className="gate-action">Open a new room</span>
+                </button>
             </main>
         );
     }

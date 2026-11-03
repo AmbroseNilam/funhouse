@@ -245,6 +245,7 @@ function CodeScreen(): ReactElement {
     const search: URLSearchParams = new URLSearchParams(location.search);
     const missing: string | null = search.get("missing");
     const full: string | null = search.get("full");
+    const closed: string | null = search.get("closed");
     return (
         <main className="note-screen" data-scrolls>
             <small className="room-tag">{PRODUCT_NAME}</small>
@@ -252,6 +253,7 @@ function CodeScreen(): ReactElement {
                 <label htmlFor="code-field">What's the code on the TV?</label>
                 {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
                 {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
+                {closed !== null ? <p className="place-warning" role="alert">Room {closed} has closed. Enter the new code to rejoin.</p> : null}
                 <input
                     id="code-field"
                     className="code-field"
@@ -397,7 +399,12 @@ export function App(): ReactElement {
                 }
                 if (message.type === "rejected") {
                     stopped = true;
+                    const wasSeated: boolean = seatInThisRoom() !== null;
                     clearSeat();
+                    if (message.reason === "unknownRoom" && wasSeated === true) {
+                        location.assign(`/phone/?closed=${encodeURIComponent(ROOM_CODE)}`);
+                        return;
+                    }
                     location.assign(`${INSTALLED === true ? "/phone/" : "/"}?${message.reason === "roomFull" ? "full" : "missing"}=${encodeURIComponent(ROOM_CODE)}`);
                     return;
                 }

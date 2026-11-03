@@ -232,6 +232,11 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     }
     const existing: Room | undefined = directory.find(url.searchParams.get("room") ?? "");
     if (url.pathname === "/ws/screen") {
+        // A screen asking for a room that's gone is told so, or it would end up in a new room with its phones left behind.
+        if (existing === undefined && (url.searchParams.get("room") ?? "") !== "") {
+            turnAway(socket, "roomClosed");
+            return;
+        }
         const room: Room | null = existing ?? openRoom(address);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
