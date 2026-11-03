@@ -98,7 +98,9 @@ export interface RoleCheck<State> {
 }
 
 /**
- * Every string inside a value, for searching what a viewer sees. Keys and image addresses are left out.
+ * Every string inside a value, for searching what a viewer sees. Keys and image addresses are left
+ * out. An object with more than one string of its own also gives them joined as one line, because
+ * a viewer reads them together: a roster entry's name and badge, a card's title and body.
  * @param value plain data.
  * @returns the strings.
  */
@@ -109,7 +111,9 @@ export function stringsIn(value: unknown): string[] {
     if (typeof value !== "object" || value === null) {
         return [];
     }
-    return Object.entries(value).flatMap(([key, inner]: [string, unknown]) => (key === "src" || key === "backdrop" ? [] : stringsIn(inner)));
+    const entries: [string, unknown][] = Object.entries(value).filter(([key]: [string, unknown]) => key !== "src" && key !== "backdrop");
+    const own: string[] = Array.isArray(value) === true ? [] : entries.map(([, inner]: [string, unknown]) => inner).filter((inner: unknown): inner is string => typeof inner === "string");
+    return [...entries.flatMap(([, inner]: [string, unknown]) => stringsIn(inner)), ...(own.length > 1 ? [own.join(" ")] : [])];
 }
 
 /**

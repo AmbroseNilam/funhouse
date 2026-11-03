@@ -232,6 +232,13 @@ describe("rehearsal catches planted faults", () => {
         assert.equal(findLeaks("host", ["The Plant is E-v-e."], eve).length, 1, "spelled out");
         const table: CartridgePlayer[] = ["Eve", "Spoon", "Candle", "Saucer"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
         assert.deepEqual(checkBlueprint(LEADING_QUESTIONS_BLUEPRINT, { players: table }).problems, [], "a whole game with a player named Eve finds nothing");
+        const badged = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({
+            publicScene: (state: PlantState): Scene => {
+                const name: string = state.players.find((player: CartridgePlayer) => player.playerId === state.plantId)?.name ?? "";
+                return { ...rules.publicScene(state), blocks: [...rules.publicScene(state).blocks, { type: "roster", players: [{ playerId: state.plantId, name, speaking: false, muted: false, badge: "Plant" }] }] };
+            },
+        }));
+        assert.match(rehearseMany(badged, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a roster badge saying Plant on the Plant's name");
     });
 
     it("a timer that is due fires before the next thing a player does", () => {
