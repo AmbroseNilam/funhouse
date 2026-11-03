@@ -272,6 +272,17 @@ describe("rehearsal catches planted faults", () => {
             },
         }));
         assert.match(rehearseMany(leftOut, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a seat left out of the turn stays unticked on the TV, and that singles out the Plant");
+        const waitingOn = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({
+            turn: (state: PlantState): Turn | null => {
+                const other: string = state.players.find((player: CartridgePlayer) => player.playerId !== state.plantId)?.playerId ?? "";
+                return state.phase === "asking" ? { kind: "everyone", playerIds: [state.plantId, other], doneIds: [other], label: "Plant turn" } : rules.turn?.(state) ?? null;
+            },
+        }));
+        assert.match(
+            rehearseMany(waitingOn, plantPersonas(), [1]).problems.join("\n"),
+            /who the Plant is reached the screen/,
+            "the one player in the turn not done is singled out on the done phones, even with other seats unticked",
+        );
     });
 
     it("no word made by gluing a block's kind to its text", () => {

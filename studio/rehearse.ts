@@ -181,10 +181,10 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
 /**
  * A turn as the TV and phones show it. A turn for one player singles them out: the TV highlights
  * their place card and other phones say "Waiting for" them, so their name is shown on one line
- * with the label. A turn for everyone singles out the last seat the TV leaves unticked, in the same
- * way, when exactly one is left; otherwise its names are shown each on their own, never beside the
- * label. The TV ticks every seat in doneIds, so a seat is unticked when it is at the table and not
- * done, whether or not playerIds lists it.
+ * with the label. A turn for everyone singles a player out in the same way when they are the only
+ * seat the TV leaves unticked, or the only player in the turn not done, whom the done phones wait
+ * for; otherwise its names are shown each on their own, never beside the label. The TV ticks every
+ * seat in doneIds, so a seat is unticked when it is at the table and not done, whatever playerIds says.
  * @param turn the turn, or null.
  * @param players who is at the table.
  * @returns the lines, empty when there is no turn.
@@ -198,13 +198,16 @@ export function turnAsShown(turn: Turn | null, players: readonly CartridgePlayer
         return [`${turn.label} ${nameOf(turn.playerId)}`];
     }
     if (turn.kind === "everyone") {
+        // Two ways one player is singled out: the only seat the TV leaves unticked, and the only player
+        // in the turn not done, whom the done phones say they are waiting for. Each is checked.
         const unticked: string[] = players.map((player: CartridgePlayer) => player.playerId).filter((playerId: string) => turn.doneIds.includes(playerId) === false);
-        // Deliberately conservative: the TV never prints the label and this name together, but one
-        // unticked seat beside a label is a visible tell, and this line is how the check sees it. The
-        // cost is that a legal turn for everyone labelled with a secret word and one seat left fails.
-        const last: string | undefined = unticked.length === 1 ? unticked[0] : undefined;
+        const waitedFor: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
+        // Deliberately conservative: the TV never prints the label and the name together, but one
+        // singled-out player beside a label is a visible tell, and this line is how the check sees it.
+        // The cost is that a legal turn for everyone labelled with a secret word and one player left fails.
+        const singled: string[] = [...new Set([unticked, waitedFor].filter((group: string[]) => group.length === 1).flat())];
         const lines: string[] = [turn.label, ...[...turn.playerIds, ...turn.doneIds].map(nameOf)];
-        return last === undefined ? lines : [`${turn.label} ${nameOf(last)}`, ...lines];
+        return [...singled.map((playerId: string) => `${turn.label} ${nameOf(playerId)}`), ...lines];
     }
     return [turn.label];
 }
