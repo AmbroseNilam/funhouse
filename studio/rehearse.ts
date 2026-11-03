@@ -97,12 +97,23 @@ export interface RoleCheck<State> {
     script: readonly TraceEvent[];
 }
 
+/** Keys whose values are never shown to anyone: kinds, ids, styles and image addresses. */
+const UNSHOWN_KEYS: ReadonlySet<string> = new Set(["type", "kind", "id", "playerId", "actionId", "mood", "transition", "emphasis", "marks", "tone", "src", "backdrop"]);
+
 /**
- * Every string inside a value, for searching what a viewer sees. Keys and image addresses are left
- * out. An object with more than one string of its own also gives them joined as one line, because
- * a viewer reads them together: a roster entry's name and badge, a card's title and body.
+ * The fields of an object a viewer could read.
  * @param value plain data.
- * @returns the strings.
+ * @returns its entries, without keys that are never shown.
+ */
+function shownEntries(value: object): [string, unknown][] {
+    return Object.entries(value).filter(([key]: [string, unknown]) => UNSHOWN_KEYS.has(key) === false);
+}
+
+/**
+ * Every string inside a value a viewer could read, for searching what they see. Kinds, ids, styles
+ * and image addresses are left out.
+ * @param value plain data.
+ * @returns the strings, each once.
  */
 export function stringsIn(value: unknown): string[] {
     if (typeof value === "string") {
@@ -111,9 +122,23 @@ export function stringsIn(value: unknown): string[] {
     if (typeof value !== "object" || value === null) {
         return [];
     }
-    const entries: [string, unknown][] = Object.entries(value).filter(([key]: [string, unknown]) => key !== "src" && key !== "backdrop");
+    return shownEntries(value).flatMap(([, inner]: [string, unknown]) => stringsIn(inner));
+}
+
+/**
+ * The lines a viewer reads together: every object's own readable strings joined, such as a roster
+ * entry's name and badge or a card's title and body. Kept apart from stringsIn, so the joined copies
+ * are never glued onto the strings they came from.
+ * @param value plain data.
+ * @returns the joined lines, for objects with more than one string of their own.
+ */
+export function linesIn(value: unknown): string[] {
+    if (typeof value !== "object" || value === null) {
+        return [];
+    }
+    const entries: [string, unknown][] = shownEntries(value);
     const own: string[] = Array.isArray(value) === true ? [] : entries.map(([, inner]: [string, unknown]) => inner).filter((inner: unknown): inner is string => typeof inner === "string");
-    return [...entries.flatMap(([, inner]: [string, unknown]) => stringsIn(inner)), ...(own.length > 1 ? [own.join(" ")] : [])];
+    return [...(own.length > 1 ? [own.join(" ")] : []), ...entries.flatMap(([, inner]: [string, unknown]) => linesIn(inner))];
 }
 
 /**
@@ -121,13 +146,14 @@ export function stringsIn(value: unknown): string[] {
  * @param viewer who is looking: "screen", "host", or a player id.
  * @param seen what they see, as strings.
  * @param hidden what must stay hidden, and from whom.
+ * @param together lines they read together, from linesIn, for values that only count beside another word.
  * @returns a problem per leak.
  */
-export function findLeaks(viewer: string, seen: readonly string[], hidden: readonly HiddenValue[]): string[] {
+export function findLeaks(viewer: string, seen: readonly string[], hidden: readonly HiddenValue[], together: readonly string[] = []): string[] {
     const problems: string[] = [];
     for (const value of hidden) {
         const near: string | undefined = value.near;
-        const lines: readonly string[] = near === undefined ? seen : seen.filter((line: string) => squash(line).includes(squash(near)) === true);
+        const lines: readonly string[] = near === undefined ? seen : [...seen, ...together].filter((line: string) => squash(line).includes(squash(near)) === true);
         const found: boolean = near === undefined ? appears(seen, value.text) : appearsAsWord(lines, value.text);
         if (value.seenBy.includes(viewer) === false && found === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
@@ -238,7 +264,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         try {
             const hidden: HiddenValue[] = game.hidden(step.state);
             for (const [viewer, seen] of viewsOf(cartridge, step.state, run.players, step.facts)) {
-                problems.push(...findLeaks(viewer, stringsIn(seen), hidden));
+                problems.push(...findLeaks(viewer, stringsIn(seen), hidden, linesIn(seen)));
             }
         } catch (error: unknown) {
             problems.push(`The rules threw while drawing a view after ${event.type}: ${error instanceof Error ? error.message : String(error)}`);

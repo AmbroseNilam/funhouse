@@ -21,7 +21,7 @@ import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantDecisions, type PlantState } from "./kits/plant.ts";
 import { checkBlueprint } from "./check.ts";
 import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
-import { appears, findLeaks, PAPER_PLAYERS, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
+import { appears, findLeaks, PAPER_PLAYERS, stringsIn, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
 
 /**
  * Twenty Doors from a blueprint.
@@ -241,6 +241,14 @@ describe("rehearsal catches planted faults", () => {
             },
         }));
         assert.match(rehearseMany(badged, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a roster badge saying Plant on the Plant's name");
+    });
+
+    it("no word made by gluing a block's kind to its text", () => {
+        const tent: HiddenValue[] = [{ label: "the word", text: "tent", seenBy: ["host"] }];
+        const scene: Scene = { mood: "neutral", transition: "cut", blocks: [{ type: "text", text: "Ten" }] };
+        assert.deepEqual(findLeaks("screen", stringsIn(scene), tent), [], "\"text\" and \"Ten\" are not \"tent\"");
+        const shown: Scene = { mood: "neutral", transition: "cut", blocks: [{ type: "text", text: "A tent." }] };
+        assert.equal(findLeaks("screen", stringsIn(shown), tent).length, 1);
     });
 
     it("a timer that is due fires before the next thing a player does", () => {
