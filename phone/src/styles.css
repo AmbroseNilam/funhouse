@@ -65,15 +65,15 @@
     .offline .surface { opacity: 0.5; }
     .note.warning { background: var(--wine); color: var(--paper); }
 
-    .surface { --level: 0; --glow-size: 0.3; --glow-strength: 0.85; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+    .surface { --level: 0; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
     .pad-screen { transition: background 120ms ease-out; }
     .pad-screen.talking { background: color-mix(in srgb, var(--seat) 45%, var(--ink)); }
     .bands { position: absolute; left: var(--thumb-x); top: var(--thumb-y); opacity: 0; transition: opacity 220ms ease-out; pointer-events: none; }
-    .talking .bands { opacity: var(--glow-strength); transition-duration: 120ms; }
+    .talking .bands { opacity: 0.85; transition-duration: 120ms; }
     .bands i { position: absolute; left: -100vmax; top: -100vmax; width: 200vmax; height: 200vmax; border-radius: 50%; }
-    .bands i:nth-child(1) { background: color-mix(in srgb, var(--lamp) 28%, transparent); transform: scale(calc(0.16 + var(--level) * var(--glow-size))); }
-    .bands i:nth-child(2) { background: color-mix(in srgb, var(--lamp) 55%, transparent); transform: scale(calc(0.1 + var(--level) * var(--glow-size) * 0.62)); }
-    .bands i:nth-child(3) { background: var(--lamp); transform: scale(calc(0.05 + var(--level) * var(--glow-size) * 0.32)); }
+    .bands i:nth-child(1) { background: color-mix(in srgb, var(--lamp) 28%, transparent); transform: scale(calc(0.16 + var(--level) * 0.3)); }
+    .bands i:nth-child(2) { background: color-mix(in srgb, var(--lamp) 55%, transparent); transform: scale(calc(0.1 + var(--level) * 0.186)); }
+    .bands i:nth-child(3) { background: var(--lamp); transform: scale(calc(0.05 + var(--level) * 0.096)); }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }
@@ -81,13 +81,6 @@
     .line strong { font-size: 38px; font-weight: 500; line-height: 1.1; color: var(--paper); }
     .line small { font-size: 18px; color: color-mix(in srgb, var(--paper) 75%, transparent); }
     .talking .line strong { color: var(--paper); text-shadow: 2px 2px 0 #000; }
-    .tune-panel { display: flex; flex-direction: column; gap: 10px; padding: calc(16px + env(safe-area-inset-top)) 20px 16px; background: var(--ink); color: var(--paper); font-size: 16px; }
-    .tune-row { display: grid; grid-template-columns: 5em 1fr 3em; align-items: center; gap: 10px; }
-    .tune-row input { padding: 0; height: 32px; background: none; box-shadow: none; accent-color: var(--lamp); touch-action: auto; }
-    .tune-row b { font-weight: 500; text-align: right; }
-    .tune-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .tune-foot small { font-size: 14px; color: color-mix(in srgb, var(--paper) 75%, transparent); }
-    .tune-foot button { padding: 8px 16px; background: var(--card); }
     .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
 
     .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(10, 7, 4, 0.72); animation: fade-in 120ms ease-out; }

@@ -10,7 +10,7 @@ import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
-import { followVoice, loadTalkTuning, talkGlowStyle, type TalkTuning } from "./talkGlow.ts";
+import { followVoice } from "./talkGlow.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
 /** What the phone remembers about its seat, across reloads. */
@@ -77,7 +77,6 @@ function clearSeat(): void {
 }
 
 /** How the bands of lamplight respond to this phone's voice. */
-const TALK_TUNING: TalkTuning = loadTalkTuning();
 
 /** Frames of audio kept from before a hold, so first words survive: 320 ms. */
 const PRE_ROLL_FRAMES: number = 4;
@@ -459,7 +458,7 @@ export function App(): ReactElement {
         if (state.holding === false || surface === null) {
             return;
         }
-        return followVoice(surface, () => captureRef.current?.level() ?? 0, TALK_TUNING);
+        return followVoice(surface, () => captureRef.current?.level() ?? 0);
     }, [state.holding]);
 
     useEffect(() => {
@@ -728,7 +727,7 @@ export function App(): ReactElement {
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
             {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
-            <div className="surface" ref={surfaceRef} style={talkGlowStyle(TALK_TUNING)}>
+            <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>
                 <div className="thumb" aria-hidden="true" />
                 <div className="line" aria-live="polite">
