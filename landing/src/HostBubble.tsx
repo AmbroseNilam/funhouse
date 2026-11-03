@@ -12,7 +12,7 @@ const HOST_NAME: string = "Marlowe";
 
 /** One line per moment. */
 const LINES: Record<HostMoment, string> = {
-    arrived: "Four of you? Perfect. Nobody has to host.",
+    arrived: "Evening. I've got the rules, the timer and the secrets. You've got the snacks.",
     hoverStart: "Put me on the TV. I'll take it from there.",
     focusCode: "It's the four letters on the TV. Big ones.",
     typing: "Keep going.",

@@ -51,9 +51,9 @@ export function App(): ReactElement {
 
             <section className="hero">
                 <div className="hero-copy">
-                    <h1>The host that listens.</h1>
+                    <h1>Game night. Nobody has to host.</h1>
                     <p className="subline">
-                        Party games on your TV, with a host who hears the room, talks back, and keeps every player's secrets on their own phone.
+                        An AI host on your TV runs the game, hears every player on their own phone, and keeps your secrets. Scan a code and play.
                     </p>
                     <div className="doors">
                         <a className="start" href="/screen/" onMouseEnter={() => { setMoment("hoverStart"); }} onFocus={() => { setMoment("hoverStart"); }}>
