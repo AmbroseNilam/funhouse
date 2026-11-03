@@ -631,6 +631,7 @@ export function App(): ReactElement {
     const stopTalking = (): void => {
         dispatch({ type: "holding", holding: false });
         setSent(true);
+        send({ type: "released" });
         tailTimerRef.current = window.setTimeout(() => {
             holdingRef.current = false;
             send({ type: "holdToTalk", down: false });

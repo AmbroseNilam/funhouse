@@ -85,6 +85,8 @@ export interface HostStage {
     lively(): boolean;
     /** Shows the mood of the line about to be spoken. */
     showMood(mood: HostMood): void;
+    /** One line on how much each person has talked, for this host only. */
+    talkShare(): string;
 }
 
 /** How each mood changes the delivery, kept slight so one voice carries from line to line. */
@@ -97,10 +99,20 @@ const MOOD_DELIVERY: Record<HostMood, string> = {
     impressed: "Genuinely impressed, a small lift of surprise. Same voice, no gushing.",
 };
 
+/** The mood a ruling suggests, when the host didn't pick a stronger one. */
+const RULING_MOOD: Record<string, HostMood> = { correct: "delighted", right: "delighted", close: "impressed", wrong: "teasing", giveup: "smug" };
+
+/** Most recent things said that the livelier host is reminded of. */
+const REMEMBERED_LINES: number = 12;
+
+/** How old a line has to be before bringing it back means anything. */
+const CALLBACK_AGE_MILLISECONDS: number = 60000;
+
 /** What the livelier host is told on top of everything else. */
 const LIVELY_INSTRUCTIONS: string = [
     `How you feel: write [[mood: word]] first in every reply you speak, choosing one word from ${HOST_MOODS.join(", ")}. It colours how the line is said and how you look. It never changes what's true, what you rule, or what you may reveal, and the word itself is never spoken. Use easy only for plain information. When someone tries a trick, picks up a clue, guesses, or gets close, let it show, and try not to use the same mood twice in a row.`,
-    "Your memory: once or twice in a game, when it fits, bring back something a player actually said earlier in the Earlier lines, in a few words. Only what's really there; never make one up, and never bring back anything that gives away a secret.",
+    "Your memory: at most once a round, when it fits, bring back something a player actually said, from the lines you're given with how long ago they said it, in a few words. Only what's really there; never make one up, and never bring back anything that gives away a secret.",
+    "Your teasing: dare the room, and make players look good. Never put one person down.",
 ].join("\n");
 
 /** Most lines of conversation the host remembers. */
@@ -139,6 +151,8 @@ export class Host {
     private wakeTimer: NodeJS.Timeout | null = null;
     private turn: AbortController | null = null;
     private mood: HostMood = "easy";
+    private rulingMood: HostMood | null = null;
+    private readonly spokenLines: { line: string; at: number }[] = [];
     private readonly replies: RateWindow = new RateWindow(REPLIES_PER_MINUTE, 60000);
 
     /**
@@ -159,6 +173,10 @@ export class Host {
      */
     public notice(line: string, delayMilliseconds: number): void {
         this.pending.push(line);
+        if (line.startsWith("(") === false) {
+            this.spokenLines.push({ line, at: Date.now() });
+            this.spokenLines.splice(0, Math.max(0, this.spokenLines.length - REMEMBERED_LINES));
+        }
         if (this.pending.length > PENDING_LIMIT) {
             this.pending.splice(0, this.pending.length - PENDING_LIMIT);
         }
@@ -268,7 +286,9 @@ export class Host {
             return false;
         }
         this.mood = "easy";
+        this.rulingMood = null;
         const rest: string = this.applyRulings(reply, speakerId);
+        this.settleMood();
         const spoken: string = rest.trimStart().startsWith(QUIET_MARKER) === true ? "" : shorten(cleanSpeech(rest));
         if (spoken === "") {
             log("host", `stayed quiet (${timing})`);
@@ -283,6 +303,13 @@ export class Host {
         this.stage.say(spoken, `${this.persona.style} ${delivery}`.trim());
         this.remember(`${this.persona.name}: ${spoken}`);
         return true;
+    }
+
+    /** Lets a ruling set the mood when the host didn't choose a stronger one itself. */
+    private settleMood(): void {
+        if (this.mood === "easy" && this.rulingMood !== null) {
+            this.mood = this.rulingMood;
+        }
     }
 
     /**
@@ -301,6 +328,7 @@ export class Host {
                 this.mood = isHostMood(detail) === true ? detail : "easy";
             }
             if (ruling !== "mood") {
+                this.rulingMood = RULING_MOOD[ruling] ?? this.rulingMood;
                 log("host", "made a ruling");
                 this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
             }
@@ -335,6 +363,21 @@ export class Host {
     }
 
     /**
+     * What the livelier host is reminded of: how much each person has talked, and what was said a while ago.
+     * @returns the lines, or none when this isn't a livelier moment.
+     */
+    private memoryLines(): string[] {
+        if (this.stage.lively() === false) {
+            return [];
+        }
+        const now: number = Date.now();
+        const older: string[] = this.spokenLines
+            .filter((entry: { line: string; at: number }) => now - entry.at >= CALLBACK_AGE_MILLISECONDS)
+            .map((entry: { line: string; at: number }) => `${Math.round((now - entry.at) / 60000)} min ago, ${entry.line}`);
+        return [this.stage.talkShare(), older.length === 0 ? "" : `Said a while ago:\n${older.join("\n")}`].filter((part: string) => part !== "");
+    }
+
+    /**
      * The message for one turn: recent conversation, then what is new.
      * @param earlier the conversation before this turn.
      * @param lines what happened since the last turn.
@@ -344,6 +387,7 @@ export class Host {
         const names: string[] = this.stage.playerNames();
         return [
             `Players here: ${names.length === 0 ? "nobody yet" : names.join(", ")}.`,
+            ...this.memoryLines(),
             earlier.length === 0 ? "Nothing has happened before this." : `Earlier:\n${earlier.join("\n")}`,
             `New, respond to this:\n${lines.join("\n")}`,
         ].join("\n\n");

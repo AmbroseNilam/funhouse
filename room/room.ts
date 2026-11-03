@@ -53,6 +53,7 @@ interface Player {
     awaitingFinal: Set<TranscribeSession>;
     /** When this seat last pressed to talk, or zero if it never has. */
     lastPressAt: number;
+    talkMilliseconds: number;
     /** The seat's colour, on the TV and as the phone's background. */
     colour: string;
     /** A short message replacing the phone's status line, such as a press that wasn't heard. */
@@ -80,8 +81,11 @@ const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", nu
  */
 const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
 
-/** The same wait for the livelier host, which reacts sooner. */
-const LIVELY_ACKNOWLEDGE_AFTER_MILLISECONDS: number = 500;
+/** How soon after a thumb lifts the livelier host reacts, for it to feel like being heard. */
+const REACTION_AFTER_RELEASE_MILLISECONDS: number = 100;
+
+/** Reactions that can't disagree with what comes next, because the ruling isn't known yet. */
+const NEUTRAL_REACTIONS: string[] = ["Hm.", "Okay.", "Mm-hm.", "Let's see.", "Alright."];
 
 /** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
 const ACKNOWLEDGE_CHANCE: number = 0.6;
@@ -286,6 +290,9 @@ export class Room implements HostStage {
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
     private hostMood: HostMood | null = null;
+    private releasedAt: number = 0;
+    private replyClockAt: number = 0;
+    private lastLullPlayerId: string | null = null;
     private moodTimer: NodeJS.Timeout | null = null;
     private lastActivityAt: number = 0;
     private lastLullAt: number = 0;
@@ -432,6 +439,10 @@ export class Room implements HostStage {
                 this.onHoldToTalk(player, message.down);
                 return;
             }
+            if (message.type === "released") {
+                this.onReleased(player);
+                return;
+            }
             if (message.type === "touched") {
                 this.broadcastToScreens({ type: "seatTouched", playerId: player.playerId });
                 return;
@@ -555,6 +566,10 @@ export class Room implements HostStage {
      * @param style delivery direction.
      */
     public say(text: string, style: string): void {
+        if (this.replyClockAt !== 0) {
+            log(this.scope(), `reply ready ${Date.now() - this.replyClockAt} ms after release`);
+            this.replyClockAt = 0;
+        }
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
         this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
         this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
@@ -637,7 +652,7 @@ export class Room implements HostStage {
         const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, talkMilliseconds: 0, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -1130,6 +1145,7 @@ export class Room implements HostStage {
         }
         player.transcribe = null;
         player.releasedAt = Date.now();
+        player.talkMilliseconds += Math.max(0, player.releasedAt - player.lastPressAt);
         session.end();
         setTimeout(() => {
             if (player.awaitingFinal.has(session) === true) {
@@ -1359,7 +1375,10 @@ export class Room implements HostStage {
      * @param said what the player said so far.
      */
     private scheduleAcknowledgement(said: string): void {
-        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1 || this.lively() === true;
+        if (this.lively() === true) {
+            return;
+        }
+        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1;
         if (addressed === false || this.acknowledgements.length === 0) {
             return;
         }
@@ -1388,7 +1407,7 @@ export class Room implements HostStage {
             this.acknowledgedLastTurn = true;
             log(this.scope(), `acknowledged with "${ACKNOWLEDGEMENTS[index] ?? ""}"`);
             this.voice.sayRecorded(pcm);
-        }, this.lively() === true ? LIVELY_ACKNOWLEDGE_AFTER_MILLISECONDS : ACKNOWLEDGE_AFTER_MILLISECONDS);
+        }, ACKNOWLEDGE_AFTER_MILLISECONDS);
     }
 
     /**
@@ -1420,19 +1439,69 @@ export class Room implements HostStage {
         if (this.lively() === false || this.game?.hostMayInterject() !== true || busy === true || tooSoon === true || this.lullsThisGame >= LULL_LIMIT) {
             return;
         }
-        const quietest: Player | undefined = [...present].sort((first: Player, second: Player) => first.lastPressAt - second.lastPressAt)[0];
+        const candidates: Player[] = present.length > 1 ? present.filter((player: Player) => player.playerId !== this.lastLullPlayerId) : present;
+        const quietest: Player | undefined = [...candidates].sort((first: Player, second: Player) => first.talkMilliseconds - second.talkMilliseconds)[0];
         if (quietest === undefined) {
             return;
         }
         this.lastLullAt = now;
         this.lullsThisGame += 1;
+        this.lastLullPlayerId = quietest.playerId;
         log(this.scope(), `spoke up to ${quietest.playerId} after a lull`);
         const prompt: string = [
             "(Nobody has spoken to you for a while. You can't hear the table, so they may be busy talking; don't say the room is quiet.",
-            `In one short line, put ${quietest.name} on the spot by name, starting with the name, about this game: for instance that they haven't asked you anything.`,
+            `In one short line, starting with the name ${quietest.name}, ask them one direct question about this game that they can answer out loud.`,
             "No ruling. Or reply (quiet) if it wouldn't help.)",
         ].join(" ");
         this.host.notice(prompt, WAKE_DELAY_MILLISECONDS.screen);
+    }
+
+    /**
+     * Reacts as soon as someone's thumb lifts, in the livelier host only, unless the voice is already going.
+     * @param player who let go.
+     */
+    private onReleased(player: Player): void {
+        if (this.lively() === false || player.holdingToTalk === false) {
+            return;
+        }
+        this.releasedAt = Date.now();
+        this.replyClockAt = this.releasedAt;
+        this.cancelAcknowledgement();
+        this.acknowledgeTimer = setTimeout(() => {
+            this.acknowledgeTimer = null;
+            this.playReaction();
+        }, REACTION_AFTER_RELEASE_MILLISECONDS);
+    }
+
+    /** Plays one neutral recorded reaction that hasn't been heard lately. */
+    private playReaction(): void {
+        if (this.voice.isBusy() === true) {
+            return;
+        }
+        const usable = (text: string, index: number): boolean => NEUTRAL_REACTIONS.includes(text) === true && this.acknowledgements[index] !== undefined;
+        const indexes: number[] = ACKNOWLEDGEMENTS.flatMap((text: string, index: number) => (usable(text, index) === true ? [index] : []));
+        const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.at(-1) !== index);
+        const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
+        const pcm: Uint8Array | undefined = index === undefined ? undefined : this.acknowledgements[index];
+        if (index === undefined || pcm === undefined) {
+            return;
+        }
+        this.recentAcknowledgements.push(index);
+        this.recentAcknowledgements.splice(0, Math.max(0, this.recentAcknowledgements.length - ACKNOWLEDGE_NO_REPEAT));
+        this.voice.sayRecorded(pcm);
+    }
+
+    /**
+     * One line on how much each person has talked, for the host's prompt only.
+     * @returns the line.
+     */
+    public talkShare(): string {
+        const present: Player[] = [...this.players.values()].filter((player: Player) => player.connected === true);
+        const total: number = present.reduce((sum: number, player: Player) => sum + player.talkMilliseconds, 0);
+        if (total === 0) {
+            return "Nobody has talked much yet.";
+        }
+        return `Talk so far: ${present.map((player: Player) => `${player.name} ${Math.round((player.talkMilliseconds / total) * 100)}%`).join(", ")}.`;
     }
 
     /** Cancels a pending acknowledgement. */
@@ -1464,7 +1533,13 @@ export class Room implements HostStage {
      */
     private voiceOutput(): VoiceOutput {
         return {
-            lineStarted: (): void => { this.broadcastToScreens({ type: "audioStart", mediaType: "audio/pcm;rate=24000" }); },
+            lineStarted: (): void => {
+                this.broadcastToScreens({ type: "audioStart", mediaType: "audio/pcm;rate=24000" });
+                if (this.releasedAt !== 0) {
+                    log(this.scope(), `first sound ${Date.now() - this.releasedAt} ms after release`);
+                    this.releasedAt = 0;
+                }
+            },
             chunk: (bytes: Uint8Array): void => { this.broadcastAudio(bytes); },
             lineEnded: (): void => { this.broadcastToScreens({ type: "audioEnd" }); },
             cancelled: (): void => { this.broadcastToScreens({ type: "audioCancel" }); },

@@ -21,7 +21,8 @@ export type PhoneMessage =
     | { type: "textOnlySay"; text: string }
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
-    | { type: "touched" };
+    | { type: "touched" }
+    | { type: "released" };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
@@ -70,7 +71,7 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     if (message.type === "holdToTalk") {
         return typeof message.down === "boolean";
     }
-    if (message.type === "touched") {
+    if (message.type === "touched" || message.type === "released") {
         return true;
     }
     if (message.type === "rename") {
