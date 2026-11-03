@@ -15,6 +15,8 @@ export interface MicrophoneCapture {
     isLive(): boolean;
     /** How long since the microphone sent any real sound, in milliseconds. Noise suppression sends pure silence in a quiet room, so this alone doesn't mean it's broken. */
     silentFor(): number;
+    /** How long this capture has been open, in milliseconds. */
+    openFor(): number;
     /** How long since the microphone delivered any audio at all, in milliseconds. A long gap means it has stopped. */
     stalledFor(): number;
     /** How loud the microphone is right now, from 0 to about 1. */
@@ -54,6 +56,7 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
     const worklet: AudioWorkletNode = new AudioWorkletNode(context, "pcm-downsampler");
     let lastSoundAt: number = Date.now();
     let lastFrameAt: number = Date.now();
+    const openedAt: number = Date.now();
     worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>): void => {
         lastFrameAt = Date.now();
         if (new Int16Array(event.data).some((sample: number) => sample !== 0) === true) {
@@ -72,6 +75,9 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
         },
         silentFor(): number {
             return Date.now() - lastSoundAt;
+        },
+        openFor(): number {
+            return Date.now() - openedAt;
         },
         stalledFor(): number {
             return Date.now() - lastFrameAt;

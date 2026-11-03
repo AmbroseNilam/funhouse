@@ -540,7 +540,7 @@ export function App(): ReactElement {
             }
             const capture: MicrophoneCapture | null = captureRef.current;
             const stopped: boolean = capture === null || capture.isLive() === false || capture.stalledFor() >= MIC_STALL_LIMIT_MILLISECONDS;
-            const nothingYet: boolean = capture !== null && capture.silentFor() >= heldFor && heldFor >= MIC_QUIET_LIMIT_MILLISECONDS;
+            const nothingYet: boolean = capture !== null && capture.silentFor() >= Math.min(heldFor, capture.openFor()) && heldFor >= MIC_QUIET_LIMIT_MILLISECONDS;
             const worry: "" | "stopped" | "quiet" = stopped === true && heldFor >= MIC_STALL_LIMIT_MILLISECONDS ? "stopped" : nothingYet === true ? "quiet" : "";
             micSilentRef.current = worry;
             setMicSilent(worry);

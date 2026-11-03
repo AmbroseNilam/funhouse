@@ -337,7 +337,8 @@ export class Room implements HostStage {
     private readonly livelyRoom: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
-    private hostTurnText: string = "";
+    /** The words of the host's latest turn; a line still in the voice's queue keeps adding to its own turn. */
+    private hostTurn: { text: string } = { text: "" };
     private readonly acknowledgements: Uint8Array[] = [];
     /** Indexes of the latest acknowledgements played, newest last. */
     private readonly recentAcknowledgements: number[] = [];
@@ -626,7 +627,7 @@ export class Room implements HostStage {
      */
     public setThinking(thinking: boolean): void {
         if (thinking === true) {
-            this.hostTurnText = "";
+            this.hostTurn = { text: "" };
         }
         if (this.hostThinking === thinking) {
             return;
@@ -647,25 +648,30 @@ export class Room implements HostStage {
         }
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
         const generation: number = this.captionGeneration;
+        const turn: { text: string } = this.hostTurn;
         let shown: boolean = false;
-        // The words appear as the voice starts, or after a short wait if the voice never does.
+        let captionTimer: NodeJS.Timeout | null = null;
+        // The words appear as the voice starts, or after a short wait from its turn if the voice never does.
         const showCaption = (): void => {
             if (shown === true || generation !== this.captionGeneration) {
                 return;
             }
             shown = true;
-            clearTimeout(captionTimer);
-            this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
-            this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
+            if (captionTimer !== null) {
+                clearTimeout(captionTimer);
+            }
+            turn.text = `${turn.text} ${text}`.trim();
+            this.caption = { speaker: this.host.persona.name, text: turn.text, final: true };
             this.broadcastScene();
         };
-        const captionTimer: NodeJS.Timeout = setTimeout(showCaption, CAPTION_WAIT_MILLISECONDS);
-        captionTimer.unref();
         if (BUDGET.spend("voice") === false) {
             showCaption();
             return;
         }
-        this.voice.say(text, this.host.persona.voice, style, showCaption);
+        this.voice.say(text, this.host.persona.voice, style, showCaption, (aheadMilliseconds: number): void => {
+            captionTimer = setTimeout(showCaption, aheadMilliseconds + CAPTION_WAIT_MILLISECONDS);
+            captionTimer.unref();
+        });
     }
 
     /**
@@ -1282,6 +1288,8 @@ export class Room implements HostStage {
     private startPress(player: Player): void {
         this.lastActivityAt = Date.now();
         player.partial = "";
+        // The phone still has the last press's words until it's told otherwise.
+        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
         this.setHint(player, "");
         this.cancelAcknowledgement();
         if (this.hostSpeaking === true || this.hostThinking === true) {
