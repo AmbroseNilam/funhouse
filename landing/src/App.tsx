@@ -57,9 +57,9 @@ export function App(): ReactElement {
                 <div className="table-inner">
                     <header className="heading">
                         <p className="name">{PRODUCT_NAME}</p>
-                        <h1>Party games for your TV, with an AI host</h1>
+                        <h1>Game night that runs itself</h1>
                         <p className="plain">
-                            The game plays on your TV. Your phone is the controller and mic, and there's nothing to install.
+                            An AI host runs the game on your TV. Your phone is the controller and mic, and there's nothing to install.
                         </p>
                     </header>
                     <div className="cards">
