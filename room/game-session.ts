@@ -2,6 +2,7 @@
 // sends each fact only where its scope allows, and fetches content the rules ask for. The
 // rules stay the referee. The host hears facts and may only make rulings the phase allows.
 
+import type { Turn } from "../shared/turn.ts";
 import type { Cartridge, CartridgeManifest, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { Control, ListeningMode } from "../shared/controls.ts";
 import type { Scene } from "../shared/scene.ts";
@@ -33,6 +34,8 @@ export interface RunningGame {
     input(playerId: string, value: string): void;
     /** Something happened in the room that the rules may care about. */
     event(event: RoomEvent): void;
+    /** Whose turn it is, if the game says. */
+    turn(): Turn | null;
     /** True when the current phase allows this ruling from the host. */
     allowsRuling(ruling: string): boolean;
     /** True when the host may speak up unprompted right now. */
@@ -107,6 +110,14 @@ export class GameSession<State> implements RunningGame {
             return;
         }
         this.apply(this.cartridge.onEvent(this.state, event));
+    }
+
+    /**
+     * Whose turn it is, once the game has begun and if it says.
+     * @returns the turn, or null.
+     */
+    public turn(): Turn | null {
+        return this.state === null ? null : this.cartridge.turn?.(this.state) ?? null;
     }
 
     /**

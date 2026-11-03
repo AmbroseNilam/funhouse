@@ -1,6 +1,7 @@
 // Quizmaster's rules core. The host's model writes six questions on the players' topic, and only the
 // host is told each answer. Right answers score 2, close ones 1; each player answers once per question.
 
+import type { Turn } from "../../shared/turn.ts";
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
@@ -313,6 +314,16 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
             }
             const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
             return [{ type: "waiting", text: line }];
+        },
+
+        turn(state: QuizmasterState): Turn | null {
+            if (state.phase === "topic") {
+                return { kind: "anyone", label: "Anyone can pick the topic" };
+            }
+            if (state.phase === "question") {
+                return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label: "Everyone answers once" };
+            }
+            return null;
         },
 
         hostFacts(state: QuizmasterState, scope: Scope): ScopedFact[] {

@@ -2,6 +2,7 @@
 // this; it narrates the facts these functions emit, each carrying a visibility scope. The
 // room drives phases by applying player actions and events through the Cartridge interface.
 
+import type { Turn } from "../../shared/turn.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
 import type { Scene } from "../../shared/scene.ts";
@@ -363,6 +364,19 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }];
             }
             return [{ type: "waiting", text: "Talk it out" }];
+        },
+
+        turn(state: WerewolfState): Turn | null {
+            if (state.phase === "night") {
+                return { kind: "secret", label: "Waiting on the night" };
+            }
+            if (state.phase === "discussion") {
+                return { kind: "anyone", label: "Anyone can talk" };
+            }
+            if (state.phase === "vote") {
+                return { kind: "everyone", playerIds: alive(state).map((seat) => seat.playerId), doneIds: Object.keys(state.dayVotes), label: "Everyone votes" };
+            }
+            return null;
         },
 
         hostFacts(state: WerewolfState, scope: Scope): ScopedFact[] {

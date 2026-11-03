@@ -3,6 +3,7 @@
 // private to this player appears above the surface. The phone never decides game logic. It
 // remembers its seat, so a refresh, a locked screen or a network blip returns to the same seat.
 
+import type { PhoneTurn } from "../../shared/turn.ts";
 import { useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
@@ -81,6 +82,12 @@ function clearSeat(): void {
 
 /** Frames of audio kept from before a hold, so first words survive: 320 ms. */
 const PRE_ROLL_FRAMES: number = 4;
+
+/** How long a phone buzzes when its turn comes. */
+const TURN_BUZZ_MILLISECONDS: number = 40;
+
+/** Least time between telling the TV this phone was touched, so its seat can show it. */
+const TOUCH_SIGNAL_GAP_MILLISECONDS: number = 400;
 
 /** How long the microphone keeps sending after release, so last words survive. */
 const TAIL_MILLISECONDS: number = 300;
@@ -373,6 +380,7 @@ export function App(): ReactElement {
     const surfaceRef = useRef<HTMLDivElement | null>(null);
     const padRef = useRef<PadView | null>(null);
     const lastLeanAtRef = useRef<number>(0);
+    const lastTouchSentRef = useRef<number>(0);
     const [learned, setLearned] = useState<Set<string>>(readLearned);
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
@@ -482,6 +490,14 @@ export function App(): ReactElement {
             captureRef.current?.stop();
         };
     }, []);
+
+    // A nudge in the hand when it becomes this phone's turn; phones that can't simply don't.
+    const myTurn: boolean = state.view?.turn?.yours === true;
+    useEffect(() => {
+        if (myTurn === true && "vibrate" in navigator) {
+            navigator.vibrate(TURN_BUZZ_MILLISECONDS);
+        }
+    }, [myTurn]);
 
     const joined: boolean = state.stage === "joined";
     useEffect(() => {
@@ -665,6 +681,11 @@ export function App(): ReactElement {
                 surface.style.setProperty("--thumb-x", `${x - box.left}px`);
                 surface.style.setProperty("--thumb-y", `${y - box.top}px`);
                 surface.classList.add("touched");
+                const touchedAt: number = Date.now();
+                if (touchedAt - lastTouchSentRef.current >= TOUCH_SIGNAL_GAP_MILLISECONDS) {
+                    lastTouchSentRef.current = touchedAt;
+                    send({ type: "touched" });
+                }
                 wakeMicrophone();
             },
             lifted: (): void => { surface.classList.remove("touched"); },
@@ -805,10 +826,11 @@ export function App(): ReactElement {
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
     const status: string = problem !== "" ? problem : view?.status ?? "";
+    const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false ? "not-my-turn" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -816,6 +838,7 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
+            {turn !== null ? <p className="turn-line">{turn.line}</p> : null}
             {pad !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>

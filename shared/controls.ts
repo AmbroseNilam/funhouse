@@ -3,6 +3,7 @@
 // purpose: the host's creativity is in labels, composition and timing, not new widgets.
 
 import type { PadView } from "./shell.ts";
+import type { PhoneTurn } from "./turn.ts";
 
 /** How a phone's microphone behaves right now. See docs/VOICE.md in the planning repo. */
 export type ListeningMode = "muted" | "holdToTalk" | "openFloor" | "hostSpeaking";
@@ -32,6 +33,8 @@ export interface PhoneView {
     controls: Control[];
     /** How the phone's touch surface behaves right now. */
     pad: PadView;
+    /** What the game's turn means for this phone, if anything. */
+    turn: PhoneTurn | null;
 }
 
 /** What a phone sends when a player uses a control. */

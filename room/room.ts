@@ -26,6 +26,7 @@ import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
 import type { HostMood } from "../shared/hostMood.ts";
+import type { PhoneTurn, Turn } from "../shared/turn.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -389,7 +390,7 @@ export class Room implements HostStage {
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
             this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
         });
-        this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code });
+        this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
         this.sendToScreen(socket, this.hostStateMessage());
         this.sendToScreen(socket, { type: "shell", view: this.shell.view() });
     }
@@ -428,6 +429,10 @@ export class Room implements HostStage {
             }
             if (message.type === "holdToTalk") {
                 this.onHoldToTalk(player, message.down);
+                return;
+            }
+            if (message.type === "touched") {
+                this.broadcastToScreens({ type: "seatTouched", playerId: player.playerId });
                 return;
             }
             if (message.type === "rename") {
@@ -481,7 +486,7 @@ export class Room implements HostStage {
      */
     public brief(): string {
         if (this.game !== null) {
-            return `${this.game.brief()}\n\nIf the group clearly wants to stop playing, write [[quit]] first.`;
+            return [this.game.brief(), this.turnBrief(), "If the group clearly wants to stop playing, write [[quit]] first."].filter((part: string) => part !== "").join("\n\n");
         }
         const games: string[] = GAMES.map((game: InstalledGame) => {
             const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
@@ -1539,7 +1544,44 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.padFor(player) };
+        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.padFor(player), turn: this.phoneTurn(player) };
+    }
+
+    /**
+     * What the game's turn means for one phone. A secret turn looks the same on every phone.
+     * @param player the player.
+     * @returns the turn, or null when this phone has nothing to wait for or do.
+     */
+    private phoneTurn(player: Player): PhoneTurn | null {
+        const turn: Turn | null = this.game?.turn() ?? null;
+        if (turn?.kind === "one") {
+            return turn.playerId === player.playerId ? { yours: true, line: "Your turn" } : { yours: false, line: `Waiting for ${this.players.get(turn.playerId)?.name ?? "someone"}` };
+        }
+        if (turn?.kind !== "everyone" || turn.playerIds.includes(player.playerId) === false) {
+            return null;
+        }
+        if (turn.doneIds.includes(player.playerId) === false) {
+            return { yours: true, line: "Your turn" };
+        }
+        const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
+        return left.length === 1 ? { yours: false, line: `Waiting for ${this.players.get(left[0] ?? "")?.name ?? "someone"}` } : { yours: false, line: `Waiting for ${left.length} people` };
+    }
+
+    /**
+     * One line for the host about who's up, using what's already public.
+     * @returns the line, or an empty string when no one in particular is.
+     */
+    private turnBrief(): string {
+        const turn: Turn | null = this.game?.turn() ?? null;
+        const nameOf = (playerId: string): string => this.players.get(playerId)?.name ?? "someone";
+        if (turn?.kind === "one") {
+            return `It's ${nameOf(turn.playerId)}'s turn.`;
+        }
+        if (turn?.kind !== "everyone") {
+            return "";
+        }
+        const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
+        return left.length === 0 ? "" : `Still to go: ${left.map(nameOf).join(", ")}.`;
     }
 
     /**
@@ -1585,7 +1627,7 @@ export class Room implements HostStage {
 
     /** Sends the current scene to every screen. */
     private broadcastScene(): void {
-        this.broadcastToScreens({ type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code });
+        this.broadcastToScreens({ type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
     }
 
     /**

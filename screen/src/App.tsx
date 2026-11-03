@@ -1,6 +1,7 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
+import type { Turn } from "../../shared/turn.ts";
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import { flushSync } from "react-dom";
 import QRCode from "qrcode";
@@ -25,6 +26,7 @@ interface ScreenState {
     qrDataUrl: string;
     hostThinking: boolean;
     hostMood: HostMood | null;
+    turn: Turn | null;
     hostSpeaking: boolean;
     hostName: string;
     connected: boolean;
@@ -50,6 +52,9 @@ if (new URLSearchParams(location.search).get("fps") === "1") {
     startFrameMeter();
 }
 
+/** How long a touched phone's seat stays lifted on the TV. */
+const TOUCH_SHOWN_MILLISECONDS: number = 700;
+
 /** How long someone's arrival stays on the TV. */
 const ARRIVAL_MILLISECONDS: number = 3000;
 
@@ -62,7 +67,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, turn: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -88,7 +93,7 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     }
     const message: RoomToScreenMessage = action.message;
     if (message.type === "scene") {
-        return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode };
+        return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode, turn: message.turn };
     }
     if (message.type === "shell") {
         return { ...state, shell: message.view };
@@ -174,6 +179,8 @@ export function App(): ReactElement {
     const wasOverRef = useRef<boolean>(false);
     const arrivalTimerRef = useRef<number>(0);
     const [arrival, setArrival] = useState<Seat | null>(null);
+    const [touchedId, setTouchedId] = useState<string | null>(null);
+    const touchTimerRef = useRef<number>(0);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
@@ -254,6 +261,12 @@ export function App(): ReactElement {
                     rootRef.current?.style.setProperty("--lean-x", String(message.x));
                     rootRef.current?.style.setProperty("--lean-y", String(message.y));
                     leanRef.current = message;
+                    return;
+                }
+                if (message.type === "seatTouched") {
+                    setTouchedId(message.playerId);
+                    window.clearTimeout(touchTimerRef.current);
+                    touchTimerRef.current = window.setTimeout(() => { setTouchedId(null); }, TOUCH_SHOWN_MILLISECONDS);
                     return;
                 }
                 if (message.type === "micLevel") {
@@ -411,6 +424,7 @@ export function App(): ReactElement {
     const shell: ShellView | null = state.shell;
     const seats: Seat[] = shell?.seats ?? [];
     const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
+    const touchedSeat: Seat | undefined = seats.find((seat: Seat) => seat.playerId === touchedId);
     const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
     const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
     const stageMood: string = playing === true ? mood : "room";
@@ -422,8 +436,10 @@ export function App(): ReactElement {
             {playing === true ? (
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
-                    <SeatStrip seats={seats} />
-                    <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
+                    <div className="play-column">
+                        <SeatStrip seats={seats} turn={state.turn} touchedId={touchedId} />
+                        <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
+                    </div>
                     {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
                     <aside className="corner-tag"><strong>{state.roomCode}</strong><small>{joinHost}</small></aside>
                 </section>
@@ -443,7 +459,8 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {arrival !== null && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
+            {touchedSeat !== undefined && playing === false && state.started === true ? <p className="arrival touched-seat" style={{ background: touchedSeat.colour }}>{touchedSeat.name}</p> : null}
+            {arrival !== null && touchedSeat === undefined && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

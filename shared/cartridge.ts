@@ -3,6 +3,7 @@
 // controls, and variant options collected in the lobby. The room never lets the host override
 // the rules; the host narrates whatever the rules say is true.
 
+import type { Turn } from "./turn.ts";
 import type { Control, ListeningMode } from "./controls.ts";
 import type { Scene } from "./scene.ts";
 import type { RoomEvent } from "./timeline.ts";
@@ -81,6 +82,8 @@ export interface Cartridge<State> {
     init(players: CartridgePlayer[], variants: Record<string, boolean>): Step<State>;
     /** The current phase id. */
     phaseOf(state: State): string;
+    /** Whose turn it is. Pure, and it never changes the rules. Left out, or returning null, shows no turn at all. */
+    turn?(state: State): Turn | null;
     /** The role id of a player, used to look up listening modes. */
     roleOf(state: State, playerId: string): string;
     /** Group ids a player belongs to, used for group-scoped facts. */

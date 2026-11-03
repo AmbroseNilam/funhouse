@@ -2,6 +2,7 @@
 // frames carry audio: phone to room is raw 24 kHz 16-bit mono PCM, room to screen is encoded
 // host speech. Both stages reduce messages into local state; the room is the only writer.
 
+import type { Turn } from "./turn.ts";
 import type { HostMood } from "./hostMood.ts";
 import type { ControlInput, PhoneView } from "./controls.ts";
 import type { Scene } from "./scene.ts";
@@ -19,7 +20,8 @@ export type PhoneMessage =
     | { type: "leave" }
     | { type: "textOnlySay"; text: string }
     | { type: "nav"; action: NavAction }
-    | { type: "lean"; x: number; y: number };
+    | { type: "lean"; x: number; y: number }
+    | { type: "touched" };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
@@ -39,7 +41,8 @@ export type ScreenMessage =
  * audioStart; audioCancel means drop anything still queued because someone cut in.
  */
 export type RoomToScreenMessage =
-    | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string }
+    | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string; turn: Turn | null }
+    | { type: "seatTouched"; playerId: string }
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
@@ -66,6 +69,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "holdToTalk") {
         return typeof message.down === "boolean";
+    }
+    if (message.type === "touched") {
+        return true;
     }
     if (message.type === "rename") {
         return typeof message.name === "string";

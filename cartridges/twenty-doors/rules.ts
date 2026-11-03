@@ -1,6 +1,7 @@
 // Twenty Doors' rules core. The host's model chooses the secret, which only the host is told.
 // Every yes, no, sort-of or wrong guess opens a door. Twenty doors without the answer loses.
 
+import type { Turn } from "../../shared/turn.ts";
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
@@ -199,6 +200,10 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 return [{ type: "waiting", text: state.won === true ? "You found it." : "Better luck next time." }];
             }
             return [{ type: "waiting", text: "Ask a yes-or-no question" }];
+        },
+
+        turn(state: TwentyDoorsState): Turn | null {
+            return state.phase === "asking" ? { kind: "anyone", label: "Anyone can ask" } : null;
         },
 
         hostFacts(state: TwentyDoorsState, scope: Scope): ScopedFact[] {
