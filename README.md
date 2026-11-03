@@ -13,7 +13,7 @@ this repository was written in that window.
 | Need | Model | How |
 | --- | --- | --- |
 | Hear every player | Muse Voice Transcribe | One realtime WebSocket session per phone, so the room always knows who said what without diarization. `providers/meta/transcribe.ts` |
-| Think and host | Muse Spark 1.3 | Streamed replies, spoken a sentence at a time as they arrive, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as secrets and quiz questions. `providers/meta/spark.ts` |
+| Think and host | Muse Spark 1.3 | Streamed replies, spoken once complete, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as secrets and quiz questions. `providers/meta/spark.ts` |
 | Draw | Muse Image | Paintings drawn ahead of need: Werewolf's village through each phase, and the Twenty Doors secret for its reveal. `providers/meta/image.ts` |
 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech

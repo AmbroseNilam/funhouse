@@ -9,7 +9,7 @@
 // the next one, which may compose while the previous reply is still playing (the voice keeps
 // lines in order). Holding to talk on any phone interrupts.
 
-import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
+import { streamSparkWithBackup, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
 import { HOST_NAME } from "../shared/brand.ts";
 import { isHostMood, type HostMood } from "../shared/hostMood.ts";
@@ -128,6 +128,9 @@ const RULING_PATTERN: RegExp = /^\s*\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]
 
 /** Room for Spark's hidden reasoning plus a spoken reply. A brief with rulings reasons longer, and running out means no reply at all. */
 const REPLY_TOKEN_LIMIT: number = 1500;
+
+/** A reply with no text by now gets a second request racing it: 9 tries took the median from 3.6 s to 2.4 s and the slowest from 11.9 s to 3.3 s. */
+const REPLY_BACKUP_AFTER_MILLISECONDS: number = 1000;
 
 /** How long one reply may take before it is tried again. A request can hang with no error. */
 const REPLY_TIME_LIMIT_MILLISECONDS: number = 12000;
@@ -268,7 +271,7 @@ export class Host {
             { role: "system", content: this.systemPrompt() },
             { role: "user", content: this.turnPrompt(earlier, lines) },
         ];
-        for await (const delta of streamSpark(messages, { signal, maxTokens: REPLY_TOKEN_LIMIT })) {
+        for await (const delta of streamSparkWithBackup(messages, { signal, maxTokens: REPLY_TOKEN_LIMIT }, REPLY_BACKUP_AFTER_MILLISECONDS, () => BUDGET.spend("spark"))) {
             if (firstTextAt === 0) {
                 firstTextAt = Date.now();
             }
