@@ -1,11 +1,16 @@
-// The public stage: connects to the room, keeps the latest scene, and renders it block by
-// block. The screen is deliberately dumb; it draws what it is told and plays what it is sent.
+// The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
+// said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
-import { Orb } from "./Orb.tsx";
+import { HOST_NAME } from "../../shared/brand.ts";
+import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+import { Caption } from "./Caption.tsx";
+import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
+import { Lantern } from "./Lantern.tsx";
+import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
 
 /** Local state reduced from room messages. */
@@ -20,6 +25,7 @@ interface ScreenState {
     connected: boolean;
     started: boolean;
     turnedAway: boolean;
+    shell: ShellView | null;
 }
 
 /** Actions that change screen state. */
@@ -39,7 +45,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, shell: null };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -63,6 +69,9 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     const message: RoomToScreenMessage = action.message;
     if (message.type === "scene") {
         return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode };
+    }
+    if (message.type === "shell") {
+        return { ...state, shell: message.view };
     }
     if (message.type === "hostState") {
         return { ...state, hostThinking: message.thinking, hostSpeaking: message.speaking, hostName: message.hostName };
@@ -107,7 +116,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <figure key={index} className="image"><img src={block.src} alt={block.caption ?? ""} />{block.caption !== undefined ? <figcaption>{block.caption}</figcaption> : null}</figure>;
     }
     if (block.type === "roster") {
-        return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={player.speaking === true ? "speaking" : ""}>{player.name}{player.badge !== undefined ? <span className="badge">{player.badge}</span> : null}</li>)}</ul>;
+        return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={`${player.speaking === true ? "speaking" : ""} ${player.badge === "out" ? "out" : ""}`}>{player.name}{player.badge !== undefined ? <small>{player.badge}</small> : null}</li>)}</ul>;
     }
     if (block.type === "timer") {
         return <Countdown key={index} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
@@ -116,9 +125,16 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <table key={index} className="tally"><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
     }
     if (block.type === "progress") {
-        return <div key={index} className="progress"><span>{block.label}</span><strong>{block.current} / {block.max}</strong><div className="progress-track"><div className="progress-fill" style={{ width: `${Math.min(100, (block.current / Math.max(1, block.max)) * 100)}%` }} /></div></div>;
+        const marks: number[] = Array.from({ length: block.max }, (_unused: unknown, position: number) => position);
+        return (
+            <div key={index} className="progress">
+                <span>{block.label}</span>
+                <strong>{block.current} of {block.max}</strong>
+                <div className={`marks marks-${block.marks ?? "card"}`}>{marks.map((position: number) => <i key={position} className={position < block.current ? "done" : ""} />)}</div>
+            </div>
+        );
     }
-    return <p key={index} className={`caption ${block.final === true ? "final" : ""}`}><strong>{block.speaker}</strong> {block.text}</p>;
+    return <span key={index} hidden />;
 }
 
 /** The screen application. */
@@ -127,6 +143,10 @@ export function App(): ReactElement {
     const socketRef = useRef<WebSocket | null>(null);
     const speakerRef = useRef<HostSpeaker | null>(null);
     const micRef = useRef<{ level: number; at: number }>({ level: 0, at: 0 });
+    const rootRef = useRef<HTMLElement | null>(null);
+    const soundsRef = useRef<ConsoleSounds | null>(null);
+    const leanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const previousShellRef = useRef<ShellView | null>(null);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
@@ -185,6 +205,12 @@ export function App(): ReactElement {
                     speakerRef.current?.cancel();
                     return;
                 }
+                if (message.type === "lean") {
+                    rootRef.current?.style.setProperty("--lean-x", String(message.x));
+                    rootRef.current?.style.setProperty("--lean-y", String(message.y));
+                    leanRef.current = message;
+                    return;
+                }
                 if (message.type === "micLevel") {
                     micRef.current = { level: message.level, at: performance.now() };
                     return;
@@ -210,7 +236,10 @@ export function App(): ReactElement {
     /** Unlocks audio with the click browsers require, then tells the room the screen is live. */
     const start = (): void => {
         const speaker: HostSpeaker = new HostSpeaker();
+        const sounds: ConsoleSounds = new ConsoleSounds();
+        soundsRef.current = sounds;
         dispatch({ type: "started" });
+        sounds.start().then(() => { sounds.light(); }).catch((error: unknown) => { console.error("sounds failed:", error); });
         speaker.start().then(() => {
             speakerRef.current = speaker;
             const ready: ScreenMessage = { type: "ready" };
@@ -223,7 +252,7 @@ export function App(): ReactElement {
             return;
         }
         let cancelled: boolean = false;
-        QRCode.toDataURL(state.joinUrl, { margin: 1, width: 320 }).then((dataUrl: string) => {
+        QRCode.toDataURL(state.joinUrl, { margin: 1, width: 480, color: { dark: "#17110c", light: "#efe3c8" } }).then((dataUrl: string) => {
             if (cancelled === false) {
                 dispatch({ type: "qr", dataUrl });
             }
@@ -234,10 +263,10 @@ export function App(): ReactElement {
     if (phoneGate === true) {
         return (
             <main className="phone-gate">
-                <h1>This is the big-screen view.</h1>
-                <p>Join as a player instead?</p>
-                <a className="phone-gate-join" href="/">Join as a player</a>
-                <button className="phone-gate-continue" onClick={() => { setPhoneGate(false); }}>Continue anyway</button>
+                <h1>This one's for the big screen.</h1>
+                <p>Open it on a TV or laptop. Your phone is the controller.</p>
+                <a className="phone-gate-join" href="/">Join a room instead</a>
+                <button className="phone-gate-continue" onClick={() => { setPhoneGate(false); }}>Use this screen anyway</button>
             </main>
         );
     }
@@ -245,27 +274,70 @@ export function App(): ReactElement {
     if (state.turnedAway === true) {
         return (
             <main className="phone-gate">
-                <h1>Every room is in use.</h1>
+                <h1>Every table's taken.</h1>
                 <p>Try again in a few minutes.</p>
             </main>
         );
     }
 
-    const mood: string = state.scene?.mood ?? "neutral";
+    useEffect(() => {
+        const previous: ShellView | null = previousShellRef.current;
+        const shell: ShellView | null = state.shell;
+        previousShellRef.current = shell;
+        const sounds: ConsoleSounds | null = soundsRef.current;
+        if (previous === null || shell === null || sounds === null) {
+            return;
+        }
+        if (previous.screen !== shell.screen) {
+            const backing: boolean = shell.screen === "home" || (previous.screen === "howTo" && shell.screen === "pause") || (previous.screen === "pause" && shell.screen === "play");
+            if (backing === true) {
+                sounds.back();
+                return;
+            }
+            sounds.select();
+            return;
+        }
+        if (previous.focus !== shell.focus) {
+            sounds.tick(shell.focus);
+        }
+    }, [state.shell]);
+
+    useEffect(() => { soundsRef.current?.duck(state.hostSpeaking); }, [state.hostSpeaking]);
+
+    const caption: { speaker: string; text: string; final: boolean } | null = (() => {
+        const block = state.scene?.blocks.find((candidate: SceneBlock) => candidate.type === "caption");
+        return block?.type === "caption" ? { speaker: block.speaker, text: block.text, final: block.final } : null;
+    })();
+    const shell: ShellView | null = state.shell;
+    const seats: Seat[] = shell?.seats ?? [];
+    const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
+    const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
+    const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
+    const mood: string = playing === true ? state.scene?.mood ?? "neutral" : "room";
+    const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
+    const backdrop: string | undefined = state.scene?.backdrop ?? game?.art;
     return (
-        <main className={`stage mood-${mood}`} data-connected={state.connected}>
-            {state.scene?.backdrop !== undefined ? <img key={state.scene.backdrop} className="backdrop" src={state.scene.backdrop} alt="" /> : null}
-            <section className="blocks">{state.scene?.blocks.map(renderBlock)}</section>
-            <aside className="join">
-                {state.qrDataUrl !== "" ? <img src={state.qrDataUrl} alt={`QR code to join room ${state.roomCode}`} /> : null}
-                <p className="code">{state.roomCode}</p>
-                <Orb micRef={micRef} speakerRef={speakerRef} thinking={state.hostThinking} speaking={state.hostSpeaking} />
-                <p className="host">{state.hostName}</p>
-            </aside>
+        <main ref={rootRef} className={`tv mood-${mood} on-${shell?.screen ?? "home"}`} data-connected={state.connected}>
+            {playing === true ? (
+                <section className="screen play-screen">
+                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" /> : null}
+                    <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
+                    {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
+                    <aside className="corner-tag"><strong>{state.roomCode}</strong><small>Join with this code</small></aside>
+                </section>
+            ) : null}
+            {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} /> : null}
+            <div className="host-spot">
+                <Lantern micRef={micRef} speakerRef={speakerRef} awake={state.started} thinking={state.hostThinking} speaking={state.hostSpeaking} look={look} />
+                {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
+            </div>
+            {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} /> : null}
+            {state.connected === false && state.started === true ? <p className="reconnecting">Finding the room again…</p> : null}
             {state.started === false ? (
                 <button className="sound-gate" disabled={state.connected === false} onClick={start}>
-                    <span className="sound-gate-title">Tap anywhere to turn on sound</span>
-                    <span className="sound-gate-detail">{state.connected === true ? `${state.hostName} hosts out loud, so the room needs sound.` : "Connecting…"}</span>
+                    <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
+                    <span className="gate-title">Click to light the lantern</span>
+                    <span className="gate-detail">{state.connected === true ? `${HOST_NAME} hosts out loud, so this needs sound.` : "Finding the room…"}</span>
                 </button>
             ) : null}
         </main>
