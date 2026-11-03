@@ -180,6 +180,19 @@ describe("leading questions: asking", () => {
         assert.equal(ask(game, state, "paper2", "maybe").state.questions.used, 0);
     });
 
+    it("matches each ruling to the person it answers, so overlapping replies keep a correct guess", () => {
+        const { game, state } = startAsking(2);
+        let current: PlantState = on(game, state, { type: "speechEnded", at: 1, playerId: "paper1", text: "Is it heavy?" }).state;
+        current = on(game, current, { type: "speechEnded", at: 2, playerId: "paper2", text: "Is it a colander?" }).state;
+        const late: Step<PlantState> = on(game, current, { type: "hostRuled", at: 3, ruling: "no", detail: "", playerId: "paper1" });
+        assert.equal(late.state.asked.at(-1)?.text, "Is it heavy?");
+        assert.equal(late.state.asked.at(-1)?.playerId, "paper1");
+        const found: Step<PlantState> = on(game, late.state, { type: "hostRuled", at: 4, ruling: "correct", detail: "", playerId: "paper2" });
+        assert.equal(found.state.phase, "vote");
+        assert.equal(found.state.finderId, "paper2");
+        assert.equal(on(game, current, { type: "hostRuled", at: 5, ruling: "yes", detail: "", playerId: "paper4" }).state, current, "nothing heard from that player");
+    });
+
     it("ends when the clock runs out or the table gives up, and ignores a stale timer", () => {
         const { game, state } = startAsking(0);
         assert.equal(on(game, state, { type: "timerFired", at: 250, timerId: "asking" }).state.result, "clock");
