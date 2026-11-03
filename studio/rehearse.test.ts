@@ -230,6 +230,8 @@ describe("rehearsal catches planted faults", () => {
         assert.deepEqual(findLeaks("host", ["You never know who the Plant is."], eve), [], "not inside another word");
         assert.equal(findLeaks("host", ["The Plant is Eve."], eve).length, 1);
         assert.equal(findLeaks("host", ["The Plant is E-v-e."], eve).length, 1, "spelled out");
+        const john: HiddenValue[] = [{ label: "who the Plant is", text: "John", seenBy: ["paper1"], near: "plant" }];
+        assert.equal(findLeaks("host", ["The Plant is nhoJ."], john).length, 1, "reversed");
         const table: CartridgePlayer[] = ["Eve", "Spoon", "Candle", "Saucer"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
         assert.deepEqual(checkBlueprint(LEADING_QUESTIONS_BLUEPRINT, { players: table }).problems, [], "a whole game with a player named Eve finds nothing");
         const badged = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({

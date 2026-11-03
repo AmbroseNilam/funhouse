@@ -104,8 +104,8 @@ export function appears(seen: readonly string[], text: string): boolean {
 }
 
 /**
- * Whether a value appears as a whole word, spaced or punctuated in any way, in any of the lines:
- * "Eve" and "E-v-e" are found, "never" is not taken for "Eve".
+ * Whether a value appears as a whole word, spaced, punctuated or reversed, in any of the lines:
+ * "Eve", "E-v-e" and "nhoJ" for "John" are found, "never" is not taken for "Eve".
  * @param seen the lines.
  * @param text the value.
  * @returns true when it appears.
@@ -115,9 +115,11 @@ export function appearsAsWord(seen: readonly string[], text: string): boolean {
     if (needle === "") {
         return false;
     }
-    const spaced: string = [...needle].join("[^\\p{L}\\p{N}]*");
-    const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
-    return seen.some((line: string) => whole.test(line) === true);
+    const patterns: RegExp[] = [needle, [...needle].reverse().join("")].map((letters: string) => {
+        const spaced: string = [...letters].join("[^\\p{L}\\p{N}]*");
+        return new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
+    });
+    return seen.some((line: string) => patterns.some((pattern: RegExp) => pattern.test(line) === true));
 }
 
 /**
