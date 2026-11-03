@@ -64,6 +64,8 @@ export interface PlantState {
     voters: string[];
     /** Each voter's choice, by voter id. */
     votes: Record<string, string>;
+    /** How many times the vote has been reopened because someone left. */
+    voteRound: number;
     result: PlantResult | null;
     /** Kept at the end so the reveal shows names even if people have left. */
     plantName: string;
@@ -325,7 +327,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
      */
     const found = (state: PlantState, finderId: string): Step<PlantState> => {
         const voters: string[] = state.players.map((player: CartridgePlayer) => player.playerId);
-        const next: PlantState = { ...state, phase: "vote", finderId, voters, votes: {}, unruled: [] };
+        const next: PlantState = { ...state, phase: "vote", finderId, voters, votes: {}, voteRound: 0, unruled: [] };
         const text: string = [
             `${nameOf(state, finderId)} found it: the word was ${state.word}.`,
             "Say so, then call the vote in one line: everyone votes on their phone for who knew it all along.",
@@ -373,7 +375,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
         }
         // Someone leaving mid-vote takes their ballot and makes every ballot cast for them meaningless,
         // so the vote starts again for everyone still here, with a fresh clock.
-        const reopened: PlantState = { ...next, voters: next.players.map((player: CartridgePlayer) => player.playerId), votes: {} };
+        const reopened: PlantState = { ...next, voters: next.players.map((player: CartridgePlayer) => player.playerId), votes: {}, voteRound: next.voteRound + 1 };
         const text: string = `${nameOf(state, playerId)} left, so the vote starts again. Tell them in one line to vote again on their phones.`;
         return { state: reopened, facts: because(publicFact("revote", text), PLANT_DECISIONS.vote), timers: { vote: decisions.voteSeconds } };
     };
@@ -397,6 +399,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 finderId: null,
                 voters: [],
                 votes: {},
+                voteRound: 0,
                 result: null,
                 plantName: "",
                 finderName: "",
@@ -527,7 +530,9 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                     blocks: [
                         { type: "title", text: state.word, kicker: `${nameOf(state, state.finderId)} found it` },
                         { type: "text", text: "Who knew it all along? Vote on your phone.", emphasis: "large" },
-                        { type: "timer", seconds: decisions.voteSeconds, label: "to vote", running: true },
+                        // The TV keeps a countdown going while its position, label and seconds stay the same, so a
+                        // reopened vote alternates its label to make the TV start a fresh clock.
+                        { type: "timer", seconds: decisions.voteSeconds, label: state.voteRound % 2 === 0 ? "to vote" : "to vote again", running: true },
                     ],
                 };
             }

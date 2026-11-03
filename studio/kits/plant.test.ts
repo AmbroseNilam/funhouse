@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CartridgePlayer, Step } from "../../shared/cartridge.ts";
 import type { Control, ControlOption } from "../../shared/controls.ts";
-import type { SceneBlock, TallyRow as SceneTallyRow } from "../../shared/scene.ts";
+import type { Scene, SceneBlock, TallyRow as SceneTallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { ScopedFact } from "../../shared/visibility.ts";
 import { blueprintProblems, type PlantBlueprint } from "../blueprint.ts";
@@ -265,6 +265,14 @@ describe("leading questions: people leaving", () => {
         assert.deepEqual(reopened.state.voters, ["paper1", "paper2", "paper3"]);
         assert.deepEqual(reopened.timers, { vote: 45 });
         assert.equal(reopened.facts[0]?.kind, "revote");
+        const clockKey = (scene: Scene): string => {
+            const index: number = scene.blocks.findIndex((block: SceneBlock) => block.type === "timer");
+            const block: SceneBlock | undefined = scene.blocks[index];
+            return block?.type === "timer" ? `${index}-${block.label ?? ""}` : "";
+        };
+        assert.notEqual(clockKey(game.cartridge.publicScene(reopened.state)), clockKey(game.cartridge.publicScene(voting)), "the TV must see a new clock, not carry on the old one");
+        const again: PlantState = on(game, voteAll(game, reopened.state, { paper1: "paper2" }).state, { type: "playerLeft", at: 10, playerId: "paper2" }).state;
+        assert.notEqual(clockKey(game.cartridge.publicScene(again)), clockKey(game.cartridge.publicScene(reopened.state)), "and again on a second reopening");
         const ballot: Control | undefined = game.cartridge.privateControls(reopened.state, "paper1")[0];
         assert.ok(ballot?.type === "choice");
         assert.deepEqual(ballot.options.map((option: ControlOption) => option.label), ["Spoon", "Candle"], "the leaver is no longer a choice");
