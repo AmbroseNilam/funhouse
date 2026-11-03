@@ -328,6 +328,8 @@ export class Room implements HostStage {
     private captionGeneration: number = 0;
     private lastOutKey: string = "";
     private releasedAt: number = 0;
+    /** The last thumb lift, which the timeline log counts from. */
+    private lastLiftAt: number = 0;
     private replyClockAt: number = 0;
     private lastLullPlayerId: string | null = null;
     private moodTimer: NodeJS.Timeout | null = null;
@@ -633,6 +635,7 @@ export class Room implements HostStage {
             return;
         }
         this.hostThinking = thinking;
+        this.logMoment(thinking === true ? "thinking on" : "thinking off");
         this.broadcastHostState();
     }
 
@@ -647,6 +650,7 @@ export class Room implements HostStage {
             this.replyClockAt = 0;
         }
         this.record({ type: "hostSaid", at: Date.now(), text, scopeKey: "public" });
+        this.logMoment("line queued");
         const generation: number = this.captionGeneration;
         const turn: { text: string } = this.hostTurn;
         let shown: boolean = false;
@@ -660,6 +664,7 @@ export class Room implements HostStage {
             if (captionTimer !== null) {
                 clearTimeout(captionTimer);
             }
+            this.logMoment("caption");
             turn.text = `${turn.text} ${text}`.trim();
             this.caption = { speaker: this.host.persona.name, text: turn.text, final: true };
             this.broadcastScene();
@@ -683,6 +688,18 @@ export class Room implements HostStage {
     }
 
     /**
+     * Logs one moment of a turn in a room opened for the livelier host, timed from the last thumb
+     * lift, so one game can be read as a single timeline. Never carries anyone's words.
+     * @param moment what just happened.
+     */
+    private logMoment(moment: string): void {
+        if (this.livelyRoom === false) {
+            return;
+        }
+        log(this.scope(), `timeline ${moment}${this.lastLiftAt === 0 ? "" : ` +${Date.now() - this.lastLiftAt} ms`}`);
+    }
+
+    /**
      * Puts the mood of the next line on the lantern's face.
      * @param mood the mood.
      */
@@ -692,11 +709,13 @@ export class Room implements HostStage {
             this.moodTimer = null;
         }
         this.hostMood = mood;
+        this.logMoment(`mood ${mood}`);
         this.broadcastHostState();
     }
 
     /** Silences the host at once. */
     public stopSpeaking(): void {
+        this.logMoment("host cut off");
         this.captionGeneration += 1;
         this.voice.stop();
     }
@@ -1098,7 +1117,12 @@ export class Room implements HostStage {
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
-            record: (event: RoomEvent): void => { this.record(event); },
+            record: (event: RoomEvent): void => {
+                this.record(event);
+                if (event.type === "phaseChanged") {
+                    this.logMoment(`phase ${event.phaseId}`);
+                }
+            },
         };
     }
 
@@ -1286,6 +1310,7 @@ export class Room implements HostStage {
      * @param player the player.
      */
     private startPress(player: Player): void {
+        this.logMoment(`press ${player.playerId}`);
         this.lastActivityAt = Date.now();
         player.partial = "";
         // The phone still has the last press's words until it's told otherwise.
@@ -1509,6 +1534,7 @@ export class Room implements HostStage {
             this.onNotHeard(player);
             return;
         }
+        this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
         this.scheduleAcknowledgement(said);
     }
@@ -1600,6 +1626,7 @@ export class Room implements HostStage {
         this.moodTimer = setTimeout(() => {
             this.moodTimer = null;
             this.hostMood = null;
+            this.logMoment("mood cleared");
             this.broadcastHostState();
         }, MOOD_LINGER_MILLISECONDS);
     }
@@ -1645,6 +1672,8 @@ export class Room implements HostStage {
         }
         this.releasedAt = Date.now();
         this.replyClockAt = this.releasedAt;
+        this.lastLiftAt = this.releasedAt;
+        this.logMoment(`release ${player.playerId}`);
         this.cancelAcknowledgement();
         this.acknowledgeTimer = setTimeout(() => {
             this.acknowledgeTimer = null;
@@ -1667,6 +1696,7 @@ export class Room implements HostStage {
         }
         this.recentAcknowledgements.push(index);
         this.recentAcknowledgements.splice(0, Math.max(0, this.recentAcknowledgements.length - ACKNOWLEDGE_NO_REPEAT));
+        this.logMoment("filler");
         this.voice.sayRecorded(pcm);
     }
 
@@ -1760,6 +1790,7 @@ export class Room implements HostStage {
             lineEnded: (): void => { this.broadcastToScreens({ type: "audioEnd" }); },
             cancelled: (): void => { this.broadcastToScreens({ type: "audioCancel" }); },
             speakingChanged: (speaking: boolean): void => {
+                this.logMoment(speaking === true ? "voice on" : "voice off");
                 this.hostSpeaking = speaking;
                 this.lastActivityAt = Date.now();
                 this.broadcastHostState();
