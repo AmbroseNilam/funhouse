@@ -8,12 +8,27 @@ are cartridges: Twenty Doors, Quizmaster and Werewolf so far.
 Built during the Meta Global AI Developer Hackathon, Oct 26 to Nov 4, 2026. Everything in
 this repository was written in that window.
 
+## How to play
+
+1. Open [funhouse.live](https://funhouse.live) on a TV or laptop and turn the sound on. A room opens with a QR code and a four-letter code.
+2. Everyone scans the code with their phone, or types it at funhouse.live, and picks a name. Each phone asks for the microphone.
+3. Slide on your phone to move along the shelf on the TV, and tap to choose a game.
+4. Press and hold your phone to talk to the host. It only hears you while you hold.
+
+| Game | Players | What happens |
+| --- | --- | --- |
+| Twenty Doors | 1 to 12 | The host holds a secret. Ask yes-or-no questions out loud, and each answer opens one of twenty doors. |
+| Quizmaster | 1 to 12 | Name any topic. The host writes six questions and judges the answers you say out loud. |
+| Werewolf | 4 to 10 | Secret roles on your phone. Argue out loud by day and vote on your phone. The host narrates and is never told who is what. |
+
+The host only hosts. It doesn't play, and the game rules are code that it can't override.
+
 ## How Meta's models are used
 
 | Need | Model | How |
 | --- | --- | --- |
 | Hear every player | Muse Voice Transcribe | One realtime WebSocket session per phone, so the room always knows who said what without diarization. `providers/meta/transcribe.ts` |
-| Think and host | Muse Spark 1.3 | Streamed replies, spoken once complete, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as quiz questions. `providers/meta/spark.ts` |
+| Think and host | Muse Spark 1.3 | Streamed replies, spoken once complete, opening with a `[[ruling]]` when the host judges something. It also writes quiz questions. `providers/meta/spark.ts` |
 | Draw | Muse Image | Paintings drawn ahead of need: Werewolf's village through each phase, and the Twenty Doors secret for its reveal. `providers/meta/image.ts` |
 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
@@ -33,21 +48,24 @@ lantern, icons and share image are drawn in code, with no AI art in them.
 | `screen/` | The public stage, a web page for a laptop or TV. |
 | `landing/` | The front door at `/`: host on a big screen, or join with a room code. |
 | `phone/` | The private stage, a web page opened from the QR code. Microphone capture lives here. |
-| `cartridges/` | Games. Each has a manifest, a rules core, and simulated-player tests. |
+| `cartridges/` | Games. Each has a manifest and a rules core. Scripted whole games are in `tools/scenarios/`. |
 | `providers/` | Meta, ElevenLabs and OpenAI clients. Provider details never leak past this folder. |
 | `studio/` | Games as data: kits that each run one kind of game, blueprints that choose their decisions, and the rehearsal harness. Research notes under `studio/research/`. |
 | `tools/` | Latency probes, scripted games and the `verify.py` guard. |
 | `deploy/` | Containerfile for running the room anywhere. |
 
-## Run
+## Run locally
 
-Requires Node 24 (`.nvmrc`) and npm. Copy `.env.example` to `.env` and fill in the keys.
+Requires Node 24 (`.nvmrc`) and npm. Copy `.env.example` to `.env` and fill in the keys. `META_MODEL_API_KEY` is required. `ELEVENLABS_API_KEY` and `OPENAI_API_KEY` give the host its voice; with neither, the host's lines still show as captions with no sound.
 
 ```sh
 npm install
+npm run build            # builds the TV, phone and landing pages
 npm run probe:asr        # proves the microphone path to Meta; costs under a cent
 npm run room             # http://localhost:8740
 ```
+
+Phones only allow the microphone on HTTPS, so playing on real phones needs `PUBLIC_URL` set to an HTTPS address that reaches this server.
 
 ## Verify
 
