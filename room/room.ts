@@ -16,6 +16,7 @@ import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
+import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
@@ -111,6 +112,17 @@ const MOOD_LINGER_MILLISECONDS: number = 1500;
 
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
+
+/**
+ * Picks the host's voice: silent in the test mode, ElevenLabs where its key is set, otherwise OpenAI's.
+ * @returns the voice.
+ */
+function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
+    if (TEXT_ONLY === true) {
+        return new SilentSpeech();
+    }
+    return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiRealtimeSpeech()) : new OpenAiRealtimeSpeech();
+}
 
 /** Short, varied acknowledgements, rendered once per room and played sparingly. */
 const ACKNOWLEDGEMENTS: string[] = ["Hm.", "Okay.", "Right.", "Oh.", "Mm-hm.", "Ooh.", "Let's see.", "Alright.", "Huh.", "Yeah."];
@@ -267,7 +279,7 @@ export class Room implements HostStage {
     private readonly timeline: RoomEvent[] = [];
     private readonly host: Host;
     private readonly voice: HostVoice;
-    private readonly speech: OpenAiRealtimeSpeech | SilentSpeech = TEXT_ONLY === true ? new SilentSpeech() : new OpenAiRealtimeSpeech();
+    private readonly speech: OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech = chooseVoice();
     private woken: boolean = false;
     private game: RunningGame | null = null;
     private readonly shell: Shell;
