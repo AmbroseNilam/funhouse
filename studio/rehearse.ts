@@ -111,9 +111,9 @@ export function stringsIn(value: unknown): string[] {
 }
 
 /**
- * Whether a hidden value appears in what a viewer sees. Values of three letters or more are found
- * spaced, punctuated, reversed, or split across two strings; shorter ones only as whole words, so
- * "ox" is caught but "box" is not taken for it.
+ * Whether a hidden value appears in what a viewer sees, spaced or punctuated in any way. Values of
+ * three letters or more are also found reversed or split across two strings; shorter ones only as
+ * whole words, so "ox" and "O X" are caught but "box" is not taken for it.
  * @param seen the viewer's strings.
  * @param text the hidden value.
  * @returns true when it appears.
@@ -124,7 +124,8 @@ export function appears(seen: readonly string[], text: string): boolean {
         return false;
     }
     if (needle.length < 3) {
-        const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${needle}($|[^\\p{L}\\p{N}])`, "iu");
+        const spaced: string = [...needle].join("[^\\p{L}\\p{N}]*");
+        const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
         return [...seen, seen.join(" ")].some((candidate: string) => whole.test(candidate) === true);
     }
     const reversed: string = [...needle].reverse().join("");

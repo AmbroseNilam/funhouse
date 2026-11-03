@@ -218,6 +218,9 @@ describe("rehearsal catches planted faults", () => {
     it("a word split across two strings, and a short word, without mistaking it inside another", () => {
         assert.equal(appears(["Col", "ander"], "Colander"), true);
         assert.equal(appears(["We found an ox."], "ox"), true);
+        assert.equal(appears(["Badge: O K"], "ok"), true, "a short word spaced out");
+        assert.equal(appears(["o-k?"], "ok"), true, "a short word punctuated");
+        assert.equal(appears(["A good book."], "ok"), false);
         assert.equal(appears(["It fits in a box."], "ox"), false);
         assert.equal(appears(["xo"], "ox"), false, "short words are matched whole, not reversed");
     });
