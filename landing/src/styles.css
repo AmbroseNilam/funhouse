@@ -84,12 +84,14 @@
 
     /* The lantern, as the TV draws it */
     .lantern { --look: 0; --mouth: 0; overflow: visible; }
-    .lantern-shadow { fill: #000; opacity: 0.55; }
-    .lantern-body { transform-origin: 100px 265px; transform: rotate(calc(var(--look) * 5deg)); transition: transform 320ms cubic-bezier(0.3, 1.4, 0.5, 1); }
+    .light-pool { fill: var(--lamp); opacity: 0.1; }
+    .lantern-body { transform-origin: 100px 270px; transform: rotate(calc(var(--look) * 5deg)); transition: transform 320ms cubic-bezier(0.3, 1.4, 0.5, 1); }
     .brass { fill: var(--brass); }
     .brass-dark { fill: var(--brass-dark); }
     .glass { fill: var(--lamp); }
-    .eye { fill: #2a1a08; transform-box: fill-box; transform-origin: center; transform: translateX(calc(var(--look) * 7px)); transition: transform 200ms ease; animation: blink 5.2s infinite; }
+    .cage { fill: none; stroke: var(--brass-dark); stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; }
+    .eye { fill: #2a1a08; transform-box: fill-box; transform-origin: center; transform: translateX(calc(var(--look) * 7px)); transition: transform 180ms ease; animation: blink 5.2s infinite; }
+    .brow { fill: none; stroke: #2a1a08; stroke-width: 5; stroke-linecap: round; }
     .sleep-eyes { opacity: 0; }
     .mouth { fill: #2a1a08; transform-box: fill-box; transform-origin: center; transform: scale(0.5, 0); }
     .smile { fill: none; stroke: #2a1a08; stroke-width: 5; stroke-linecap: round; }
