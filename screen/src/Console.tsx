@@ -160,7 +160,7 @@ export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; 
     const { shell, driver, game } = props;
     return (
         <div className="pause-backing">
-            <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
+            {shell.screen === "pause" ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
             <section className="pause-card">
                 {shell.screen === "howTo"
                     ? <><h2>How to play {game?.name ?? ""}</h2><ol className="steps">{game?.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol></>

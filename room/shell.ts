@@ -173,7 +173,7 @@ export class Shell {
      * @returns true when the controller is theirs or free.
      */
     private mayDrive(playerId: string): boolean {
-        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true && seat.phoneDown === false);
+        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true && seat.phoneDown === false && seat.out === false);
         return this.driverId === playerId || driverPresent === false || Date.now() - this.lastDriveAt >= DRIVER_IDLE_MILLISECONDS;
     }
 
