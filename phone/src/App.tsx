@@ -212,7 +212,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
     if (canTalk === true && learned.has("hold") === false) {
-        return { big: "Press and hold to talk", small: `${HOST_NAME} is listening` };
+        return { big: "Press and hold to talk", small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
         return { big: waiting, small: "" };
@@ -656,7 +656,7 @@ export function App(): ReactElement {
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
-                <p className="fine">Your browser will ask for the microphone. That's how {HOST_NAME} hears you.</p>
+                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you when you hold to talk.</p>
             </main>
         );
     }
