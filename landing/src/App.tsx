@@ -18,9 +18,6 @@ const MISSING_ROOM: string | null = new URLSearchParams(location.search).get("mi
 /** The room code a phone was just turned away from for being full, if any. */
 const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full");
 
-/** The slight tilts the boxes sit at, like real boxes on a shelf. */
-const BOX_TILTS: number[] = [-1.2, 0.8, -0.6];
-
 /** What the mic does, in the host's words; the same line wherever it comes up. */
 const MIC_LINE: string = "Hold to talk. Until then, I hear nothing.";
 
@@ -121,8 +118,8 @@ export function App(): ReactElement {
                 <h2 id="games">On the shelf tonight</h2>
                 <p className="plain">Three games, and nobody sits out to run them. Even Werewolf's narrator is me.</p>
                 <ul className="shelf">
-                    {GAMES.map((game: GameBox, index: number) => (
-                        <li key={game.name} className="box" style={{ rotate: `${BOX_TILTS[index] ?? 0}deg` }}>
+                    {GAMES.map((game: GameBox) => (
+                        <li key={game.name} className="box">
                             <LatePicture src={game.art} alt={game.alt} width={1024} height={1024} />
                             <div className="box-label">
                                 <strong>{game.name}</strong>
