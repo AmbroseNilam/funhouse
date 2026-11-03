@@ -80,14 +80,12 @@ function pick<Item>(items: Item[], random: () => number): Item | undefined {
 /**
  * Tidies a spoken question for the screen, so its answer doesn't run on from it.
  * @param question what was said.
- * @returns the question, trimmed to length and ending in punctuation.
+ * @returns the question with a capital and a question mark, trimmed to length.
  */
 function shownQuestion(question: string): string {
-    const text: string = question.trim();
-    if (text.length > SHOWN_QUESTION_CHARACTERS) {
-        return `${text.slice(0, SHOWN_QUESTION_CHARACTERS).trimEnd()}…`;
-    }
-    return /[.?!,]$/.test(text) === true ? text : `${text}?`;
+    const text: string = question.trim().replace(/[\s.,!?]+$/, "");
+    const capital: string = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+    return capital.length > SHOWN_QUESTION_CHARACTERS ? `${capital.slice(0, SHOWN_QUESTION_CHARACTERS).trimEnd()}…` : `${capital}?`;
 }
 
 /**
