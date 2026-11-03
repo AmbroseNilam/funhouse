@@ -7,8 +7,10 @@ import type { NavAction, NavAxis, PadView, Seat, ShelfGame, ShellScreen, ShellVi
 /** How long a driver may sit idle before anyone else's swipe takes over. */
 const DRIVER_IDLE_MILLISECONDS: number = 5000;
 
-/** Rows on the pause menu. */
-const PAUSE_MENU: string[] = ["Keep playing", "How to play", "Leave this game"];
+/** The pause menu's fixed rows. */
+const KEEP_PLAYING: string = "Keep playing";
+const HOW_TO_PLAY: string = "How to play";
+const LEAVE_GAME: string = "Leave this game";
 
 /** Rows once a game has been decided. */
 const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
@@ -27,6 +29,12 @@ export interface ShellStage {
     refused(reason: string): void;
     /** The driver changed because the last one left. */
     driverChanged(name: string): void;
+    /** The game was paused or resumed. */
+    paused(paused: boolean): void;
+    /** Someone chose an action from the pause menu that the game offers. */
+    gameAction(playerId: string, actionId: string): void;
+    /** The highlight hit the end of what it can move through. */
+    edge(): void;
     /** Anything on the shell changed. */
     changed(): void;
 }
@@ -50,23 +58,23 @@ export class Shell {
     }
 
     /**
-     * Applies what a phone's thumb did. Anyone can go back; moving and choosing need the drive.
+     * Applies what a phone's thumb did. Only whoever is driving gets a say.
      * @param playerId who.
      * @param action what.
      */
     public act(playerId: string, action: NavAction): void {
-        if (action.kind === "back") {
-            this.back();
+        if (this.claimDrive(playerId) === false) {
             return;
         }
-        if (this.claimDrive(playerId) === false) {
+        if (action.kind === "back") {
+            this.back();
             return;
         }
         if (action.kind === "step") {
             this.step(action.delta);
             return;
         }
-        this.select();
+        this.select(playerId);
     }
 
     /**
@@ -83,6 +91,9 @@ export class Shell {
 
     /** The game ended; back to its place on the shelf. */
     public gameEnded(): void {
+        if (this.screen === "pause" || this.screen === "howTo") {
+            this.stage.paused(false);
+        }
         this.screen = "home";
         this.focus = this.shelfFocus;
         this.stage.changed();
@@ -90,6 +101,9 @@ export class Shell {
 
     /** The running game was decided, so its result takes over the screen. */
     public gameDecided(): void {
+        if (this.screen === "pause" || this.screen === "howTo") {
+            this.stage.paused(false);
+        }
         this.screen = "play";
         this.focus = 0;
         this.stage.changed();
@@ -167,7 +181,7 @@ export class Shell {
             return ["Back to the shelf"];
         }
         if (this.screen === "pause") {
-            return PAUSE_MENU;
+            return [KEEP_PLAYING, HOW_TO_PLAY, ...(this.currentGame()?.pauseActions ?? []).map((action) => action.label), LEAVE_GAME];
         }
         if (this.screen === "howTo") {
             return ["Back"];
@@ -215,6 +229,7 @@ export class Shell {
     private step(delta: number): void {
         const next: number = Math.max(0, Math.min(this.itemCount() - 1, this.focus + delta));
         if (next === this.focus) {
+            this.stage.edge();
             return;
         }
         this.focus = next;
@@ -225,8 +240,11 @@ export class Shell {
         this.stage.changed();
     }
 
-    /** Does what the highlighted item says. */
-    private select(): void {
+    /**
+     * Does what the highlighted item says.
+     * @param playerId who chose it.
+     */
+    private select(playerId: string): void {
         if (this.screen === "home") {
             this.selectOnShelf();
             return;
@@ -240,7 +258,7 @@ export class Shell {
             return;
         }
         if (this.screen === "pause") {
-            this.selectOnPause();
+            this.selectOnPause(playerId);
             return;
         }
         if (this.isDecided() === true) {
@@ -275,19 +293,34 @@ export class Shell {
         this.stage.startGame(game.id);
     }
 
-    /** Keep playing, how to play, or leave, on the pause menu. */
-    private selectOnPause(): void {
-        if (this.focus === 0) {
+    /**
+     * Does what the highlighted pause row says.
+     * @param playerId who chose it.
+     */
+    private selectOnPause(playerId: string): void {
+        const row: string | undefined = this.menu()[this.focus];
+        if (row === KEEP_PLAYING) {
             this.back();
             return;
         }
-        if (this.focus === 1) {
+        if (row === HOW_TO_PLAY) {
             this.screen = "howTo";
             this.focus = 0;
             this.stage.changed();
             return;
         }
-        this.stage.endGame();
+        if (row === LEAVE_GAME) {
+            this.stage.endGame();
+            return;
+        }
+        const action: { id: string; label: string } | undefined = this.currentGame()?.pauseActions.find((candidate) => candidate.label === row);
+        if (action !== undefined) {
+            this.screen = "play";
+            this.focus = 0;
+            this.stage.paused(false);
+            this.stage.gameAction(playerId, action.id);
+            this.stage.changed();
+        }
     }
 
     /** Play again, or back to the shelf, once a game is decided. */
@@ -309,6 +342,12 @@ export class Shell {
         const leaving: ShellScreen = this.screen;
         this.screen = parent;
         this.focus = parent === "home" ? this.shelfFocus : leaving === "howTo" ? 1 : 0;
+        if (leaving === "play") {
+            this.stage.paused(true);
+        }
+        if (parent === "play") {
+            this.stage.paused(false);
+        }
         this.stage.changed();
     }
 

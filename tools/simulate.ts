@@ -184,6 +184,17 @@ export class FakePhone {
         this.nav({ kind: "select" });
     }
 
+    /**
+     * Pauses the game and picks a row from the pause menu.
+     * @param screen the TV.
+     * @param label the row.
+     */
+    public async fromPauseMenu(screen: FakeScreen, label: string): Promise<void> {
+        this.nav({ kind: "back" });
+        await waitFor(() => screen.shell?.screen === "pause", "the pause menu");
+        await this.chooseRow(screen, label);
+    }
+
     /** Hangs up. */
     public close(): void {
         this.socket.close();

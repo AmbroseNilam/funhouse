@@ -362,7 +362,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (state.phase === "night") {
                 return [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }];
             }
-            return [{ type: "waiting", text: "Listen to the host." }];
+            return [{ type: "waiting", text: "Talk it out" }];
         },
 
         hostFacts(state: WerewolfState, scope: Scope): ScopedFact[] {
@@ -409,7 +409,8 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }] };
         }
         if (state.phase === "end") {
-            return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks: [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win" }, { type: "roster", players: roster }] };
+            const revealed = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: false, badge: seat.role }));
+            return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks: [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win" }, { type: "roster", players: revealed }] };
         }
         return { mood: state.phase === "dawn" ? "dawn" : "neutral", transition: "fade", blocks: [{ type: "title", text: state.phase === "dawn" ? "Dawn" : "Look at your phone", kicker: `Round ${state.round}` }, { type: "roster", players: roster }] };
     }
@@ -516,7 +517,7 @@ function roleBlurb(role: Role): string {
         return "Each night, choose a victim with your pack. By day, blend in.";
     }
     if (role === "seer") {
-        return "Each night, learn whether one player is a werewolf. Share wisely.";
+        return "Each night, learn whether one player is a werewolf. Be careful who you tell.";
     }
     return "Find the werewolves before they find you. Vote by day.";
 }

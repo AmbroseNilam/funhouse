@@ -20,6 +20,8 @@ export interface InstalledGame {
     howToPlay: string[];
     /** The box art, under the screen stage. */
     art: string;
+    /** Actions for everyone, offered on the pause menu. */
+    pauseActions: { id: string; label: string }[];
     /** What the host may mutter when someone lingers on this box. Eight words at most. */
     remarks: string[];
     /** Readies a new game in a room. */
@@ -33,6 +35,7 @@ export const GAMES: InstalledGame[] = [
         pitch: `${HOST_NAME} thinks of something. You get twenty questions to find it.`,
         howToPlay: ["Press and hold your phone, and ask a yes-or-no question out loud.", "Every answer opens a door. You get twenty.", "Say what you think it is when you're ready."],
         art: "art/twenty-doors.webp",
+        pauseActions: [{ id: "giveup", label: "We give up" }],
         remarks: ["Twenty doors. I've picked something good.", "Go on. I'm hard to crack.", "Nobody's guessed mine in under ten."],
         create: (stage: GameStage) => new GameSession(createTwentyDoors(), stage),
     },
@@ -41,6 +44,7 @@ export const GAMES: InstalledGame[] = [
         pitch: `Name any topic out loud. ${HOST_NAME} writes the questions and judges the answers.`,
         howToPlay: ["Say a topic. Anything you think you know.", "Press and hold your phone to answer each question out loud.", "Two points for right, one for close. One try each."],
         art: "art/quizmaster.webp",
+        pauseActions: [{ id: "skip", label: "Skip this question" }],
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],
         create: (stage: GameStage) => new GameSession(createQuizmaster(), stage),
     },
@@ -49,6 +53,7 @@ export const GAMES: InstalledGame[] = [
         pitch: "A village, a secret werewolf, and a vote every day.",
         howToPlay: ["Your phone tells you your role. Keep it to yourself.", "At night, the werewolf chooses someone on their phone.", "By day, argue out loud, then vote someone out."],
         art: "art/werewolf.webp",
+        pauseActions: [],
         remarks: ["I like this one. Everyone lies.", "You'll want more friends for this.", "Don't look at me. I don't know either."],
         create: (stage: GameStage) => new GameSession(createWerewolf(), stage),
     },

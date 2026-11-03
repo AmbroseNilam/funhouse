@@ -44,6 +44,10 @@ export interface RunningGame {
     outcome(): string | null;
     /** Stops every timer; the game is over. */
     stop(): void;
+    /** Holds every timer where it is. */
+    pause(): void;
+    /** Starts held timers again. */
+    resume(): void;
 }
 
 /** One cartridge running in one room. */
@@ -52,6 +56,8 @@ export class GameSession<State> implements RunningGame {
     private readonly cartridge: Cartridge<State>;
     private readonly stage: GameStage;
     private readonly timers: Map<string, NodeJS.Timeout> = new Map();
+    private readonly timerEnds: Map<string, number> = new Map();
+    private readonly heldTimers: Map<string, number> = new Map();
     private readonly whispers: Map<string, string[]> = new Map();
     private players: CartridgePlayer[] = [];
     private state: State | null = null;
@@ -184,6 +190,23 @@ export class GameSession<State> implements RunningGame {
         this.timers.clear();
     }
 
+    /** Holds every timer with the time it has left. */
+    public pause(): void {
+        for (const [timerId, timer] of this.timers) {
+            clearTimeout(timer);
+            this.heldTimers.set(timerId, Math.max(0, (this.timerEnds.get(timerId) ?? Date.now()) - Date.now()) / 1000);
+        }
+        this.timers.clear();
+    }
+
+    /** Starts held timers again with the time they had left. */
+    public resume(): void {
+        for (const [timerId, seconds] of this.heldTimers) {
+            this.startTimer(timerId, seconds);
+        }
+        this.heldTimers.clear();
+    }
+
     /**
      * The current phase's spec.
      * @returns the spec, or undefined before the game starts.
@@ -274,6 +297,7 @@ export class GameSession<State> implements RunningGame {
         if (running !== undefined) {
             clearTimeout(running);
         }
+        this.timerEnds.set(timerId, Date.now() + seconds * 1000);
         this.timers.set(timerId, setTimeout(() => {
             this.timers.delete(timerId);
             const event: RoomEvent = { type: "timerFired", at: Date.now(), timerId };

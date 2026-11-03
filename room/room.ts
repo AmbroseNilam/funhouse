@@ -118,7 +118,7 @@ const MAX_SCREEN_BUFFER_BYTES: number = 5760000;
 const MAX_INPUT_CHARACTERS: number = 200;
 
 /** Seat colours, as painted card. */
-const SEAT_COLOURS: string[] = ["#b5532a", "#2f6f6a", "#7d4e8c", "#8a7a24", "#2f5a8c", "#a33a4e", "#5a7a3a", "#9c6b2f", "#46607a", "#8c4a6b", "#3a7a5a", "#7a5a3a"];
+const SEAT_COLOURS: string[] = ["#b5532a", "#2f7a72", "#a8861f", "#a33a4e", "#4f7a3a", "#3f6a96", "#8a5a70", "#6e7a82"];
 
 /** How long the highlight must rest on a box before the host may remark on it. */
 const REMARK_DWELL_MILLISECONDS: number = 1500;
@@ -206,6 +206,7 @@ export class Room implements HostStage {
     private remarkTimer: NodeJS.Timeout | null = null;
     private lastRemarkAt: number = 0;
     private gameDecided: boolean = false;
+    private paused: boolean = false;
     private readonly drawings: Map<string, Drawing> = new Map();
     /** Who spoke last, so a ruling can be credited to them. */
     private lastSpeakerId: string | null = null;
@@ -531,6 +532,9 @@ export class Room implements HostStage {
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
+        if (this.paused === true) {
+            return;
+        }
         this.game?.input(player.playerId, value);
         this.refreshPhones();
     }
@@ -558,11 +562,37 @@ export class Room implements HostStage {
             focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
             refused: (reason: string): void => { this.host.notice(`(Game: ${reason} Say so in a few words.)`, WAKE_DELAY_MILLISECONDS.screen); },
             driverChanged: (name: string): void => { this.host.notice(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            paused: (paused: boolean): void => { this.setPaused(paused); },
+            gameAction: (playerId: string, actionId: string): void => { this.game?.input(playerId, actionId); },
+            edge: (): void => { this.broadcastToScreens({ type: "edge" }); },
             changed: (): void => {
                 this.broadcastShell();
                 this.refreshPhones();
             },
         };
+    }
+
+    /**
+     * Pauses or resumes for real: the host stops, timers hold, and phones go quiet.
+     * @param paused true to pause.
+     */
+    private setPaused(paused: boolean): void {
+        if (this.paused === paused) {
+            return;
+        }
+        this.paused = paused;
+        if (paused === true) {
+            this.game?.pause();
+            this.cancelAcknowledgement();
+            this.host.interrupt(this.hostSpeaking);
+            this.broadcastScene();
+            return;
+        }
+        this.game?.resume();
+        this.broadcastScene();
+        if (this.game !== null && this.game.outcome() === null) {
+            this.host.notice("(The game is back on after a pause. Say where things stand in a few words.)", WAKE_DELAY_MILLISECONDS.screen);
+        }
     }
 
     /**
@@ -576,7 +606,7 @@ export class Room implements HostStage {
         const short: number = minPlayers - count;
         const blocked: string | null = short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
         const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
-        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, blocked };
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, blocked };
     }
 
     /**
@@ -846,6 +876,9 @@ export class Room implements HostStage {
      * @returns false when the game has phones quiet.
      */
     private canTalk(player: Player): boolean {
+        if (this.paused === true) {
+            return false;
+        }
         const mode: ListeningMode = this.game?.listening(player.playerId) ?? "holdToTalk";
         return mode === "holdToTalk" || mode === "openFloor";
     }
@@ -1209,6 +1242,9 @@ export class Room implements HostStage {
     private currentScene(): Scene {
         const scene: Scene = this.game === null ? lobbyScene(this.joinUrl, this.code, this.roster()) : this.game.scene();
         for (const block of scene.blocks) {
+            if (block.type === "timer" && this.paused === true) {
+                block.running = false;
+            }
             if (block.type === "roster") {
                 block.players = block.players.map((entry: RosterEntry) => ({ ...entry, speaking: this.players.get(entry.playerId)?.speaking === true }));
             }
@@ -1238,7 +1274,7 @@ export class Room implements HostStage {
         }
         player.listening = this.game?.listening(player.playerId) ?? "holdToTalk";
         if (this.canTalk(player) === false) {
-            status = "Phones are quiet for now.";
+            status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
         return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.shell.pad(player.playerId, player.colour) };
     }

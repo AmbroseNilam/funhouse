@@ -43,6 +43,7 @@ export type RoomToScreenMessage =
     | { type: "audioCancel" }
     | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
     | { type: "shell"; view: ShellView }
+    | { type: "edge" }
     | { type: "lean"; x: number; y: number }
     | { type: "micLevel"; level: number }
     | { type: "rejected"; reason: RejectedReason }

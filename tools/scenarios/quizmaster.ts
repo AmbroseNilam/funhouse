@@ -101,7 +101,7 @@ function watch(): void {
     const ended: boolean = blocks.some((block) => block.type === "title" && block.kicker === "Final scores");
     const number: number = ended === true ? QUESTION_COUNT : current();
     for (const block of blocks) {
-        if (block.type === "text" && block.emphasis === "large" && number > 0) {
+        if (block.type === "title" && number > 0) {
             questions.set(number, block.text);
         }
         if (block.type === "text" && block.text.startsWith("Last answer: ") === true && number > 0) {
@@ -177,7 +177,7 @@ console.warn(`Waiting out the ${QUESTION_SECONDS} second timer.`);
 await reach(3, "the timer to move past question 2");
 
 // Question 3: a skip.
-alex.press("Skip this question");
+await alex.fromPauseMenu(screen, "Skip this question");
 await reach(4, "a skip to move on");
 
 // Question 4: Alex answers right.

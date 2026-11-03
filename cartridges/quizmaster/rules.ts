@@ -293,9 +293,8 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 mood: "neutral",
                 transition: "fade",
                 blocks: [
-                    { type: "title", text: "Quizmaster", kicker: state.topic },
+                    { type: "title", text: state.questions[state.index]?.question ?? "", kicker: state.topic },
                     { type: "progress", label: "Question", current: state.index + 1, max: state.questions.length },
-                    { type: "text", text: state.questions[state.index]?.question ?? "", emphasis: "large" },
                     { type: "tally", title: "Scores", rows },
                     ...last,
                 ],
@@ -312,8 +311,8 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
             if (state.phase === "end") {
                 return [{ type: "waiting", text: "That's the quiz." }];
             }
-            const line: string = state.answered.includes(playerId) === true ? "Answer locked in. Waiting for the others." : "Answer out loud. One try per question.";
-            return [{ type: "waiting", text: line }, { type: "buttons", options: [{ id: "skip", label: "Skip this question" }] }];
+            const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
+            return [{ type: "waiting", text: line }];
         },
 
         hostFacts(state: QuizmasterState, scope: Scope): ScopedFact[] {

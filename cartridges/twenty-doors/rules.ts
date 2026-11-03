@@ -183,14 +183,12 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
             }
             if (state.phase === "end") {
                 const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
-                if (state.revealPicture !== null) {
-                    blocks.push({ type: "image", src: state.revealPicture });
-                }
+                blocks.push(state.revealPicture === null ? { type: "text", text: "Still painting it…", emphasis: "whisper" } : { type: "image", src: state.revealPicture });
                 blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };
             }
             const recent: SceneBlock[] = state.asked.slice(-SHOWN_QUESTIONS).map((entry: AskedQuestion) => ({ type: "text", text: `${entry.question} ${entry.answer}.` }));
-            return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors", kicker: `It's ${state.category}` }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" }, ...recent] };
+            return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `It's ${state.category}`, kicker: "Twenty Doors" }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" }, ...recent] };
         },
 
         privateControls(state: TwentyDoorsState): Control[] {
@@ -200,10 +198,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
             if (state.phase === "end") {
                 return [{ type: "waiting", text: state.won === true ? "You found it." : "Better luck next time." }];
             }
-            return [
-                { type: "waiting", text: `Ask a yes-or-no question out loud. ${DOOR_COUNT - state.doorsOpened} doors left.` },
-                { type: "buttons", options: [{ id: "giveup", label: "We give up" }] },
-            ];
+            return [{ type: "waiting", text: "Ask a yes-or-no question" }];
         },
 
         hostFacts(state: TwentyDoorsState, scope: Scope): ScopedFact[] {

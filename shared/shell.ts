@@ -16,6 +16,8 @@ export interface ShelfGame {
     howToPlay: string[];
     players: string;
     art: string;
+    /** Actions that affect everyone, offered on the pause menu so one stray tap can't end a game. */
+    pauseActions: { id: string; label: string }[];
     /** Why it can't start right now, or null when it can. */
     blocked: string | null;
 }
