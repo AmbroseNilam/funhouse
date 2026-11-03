@@ -332,6 +332,8 @@ export class Room implements HostStage {
     private acknowledgeTimer: NodeJS.Timeout | null = null;
     /** What is on this room's shelf; a room may gain games while it is open. */
     private readonly games: InstalledGame[];
+    /** A replacement for the running game's shelf entry, installed when that game ends. */
+    private waitingInstall: InstalledGame | null = null;
 
     /**
      * Creates an empty room.
@@ -353,10 +355,15 @@ export class Room implements HostStage {
 
     /**
      * Puts a game on this room's shelf, replacing one with the same id, so a game a creator keeps
-     * can be played without restarting the room. A game in progress is not affected.
+     * can be played without restarting the room. A replacement for the game being played waits
+     * until that game ends, because the shell reads the running game's pause menu from the shelf.
      * @param game the game.
      */
     public install(game: InstalledGame): void {
+        if (this.game !== null && this.game.manifest.id === game.manifest.id) {
+            this.waitingInstall = game;
+            return;
+        }
         const index: number = this.games.findIndex((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id);
         if (index === -1) {
             this.games.push(game);
@@ -981,6 +988,11 @@ export class Room implements HostStage {
         this.game = null;
         this.caption = null;
         this.shell.gameEnded();
+        const waiting: InstalledGame | null = this.waitingInstall;
+        this.waitingInstall = null;
+        if (waiting !== null) {
+            this.install(waiting);
+        }
         this.broadcastScene();
     }
 
