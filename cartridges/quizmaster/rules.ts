@@ -1,6 +1,7 @@
 // Quizmaster's rules core. The host's model writes six questions on the players' topic, and only the
 // host is told each answer. Right answers score 2, close ones 1; each player answers once per question.
 
+import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
@@ -306,7 +307,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 return [{ type: "waiting", text: "Say a topic out loud." }];
             }
             if (state.phase === "preparing") {
-                return [{ type: "waiting", text: "Marlowe is writing the questions." }];
+                return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];
             }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: "That's the quiz." }];

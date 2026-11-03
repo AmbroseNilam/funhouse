@@ -6,7 +6,9 @@ import WebSocket from "ws";
 import { rawDataToText } from "../providers/meta/transcribe.ts";
 import type { Control, PhoneView } from "../shared/controls.ts";
 import type { RoomToPhoneMessage, RoomToScreenMessage } from "../shared/protocol.ts";
+import { HOST_NAME } from "../shared/brand.ts";
 import type { Scene } from "../shared/scene.ts";
+import type { NavAction, ShellView } from "../shared/shell.ts";
 
 /** Where the local room listens. */
 const ROOM_URL: string = process.env.ROOM_URL ?? "ws://localhost:8740";
@@ -35,6 +37,7 @@ export async function waitFor(condition: () => boolean, label: string): Promise<
 /** A fake big screen: holds the latest scene and everything the host has said. */
 export class FakeScreen {
     public scene: Scene | null = null;
+    public shell: ShellView | null = null;
     public code: string = "";
     public thinking: boolean = false;
     public readonly hostLines: string[] = [];
@@ -51,15 +54,18 @@ export class FakeScreen {
             if (message.type === "hostState") {
                 this.thinking = message.thinking;
             }
+            if (message.type === "shell") {
+                this.shell = message.view;
+            }
             if (message.type !== "scene") {
                 return;
             }
             this.scene = message.scene;
             this.code = message.roomCode;
             for (const block of message.scene.blocks) {
-                if (block.type === "caption" && block.speaker === "Marlowe" && this.hostLines.at(-1) !== block.text) {
+                if (block.type === "caption" && block.speaker === HOST_NAME && this.hostLines.at(-1) !== block.text) {
                     this.hostLines.push(block.text);
-                    console.warn(`  Marlowe: ${block.text}`);
+                    console.warn(`  ${HOST_NAME}: ${block.text}`);
                 }
             }
         });
@@ -137,6 +143,45 @@ export class FakePhone {
         }
         console.warn(`${this.name} presses ${option.label}`);
         this.socket.send(JSON.stringify({ type: "input", input: { value: option.id, controlIndex: 0 } }));
+    }
+
+    /**
+     * Sends what a thumb would do.
+     * @param action the action.
+     */
+    public nav(action: NavAction): void {
+        this.socket.send(JSON.stringify({ type: "nav", action }));
+    }
+
+    /**
+     * Walks the shelf to a game and starts it, the way a person would.
+     * @param screen the TV.
+     * @param name the game's name.
+     */
+    public async startGame(screen: FakeScreen, name: string): Promise<void> {
+        await waitFor(() => screen.shell !== null, "the shelf");
+        const target: number = screen.shell?.games.findIndex((game) => game.name === name) ?? -1;
+        console.warn(`${this.name} opens ${name}`);
+        this.nav({ kind: "step", delta: target - (screen.shell?.focus ?? 0) });
+        await waitFor(() => screen.shell?.focus === target, "the highlight to move");
+        this.nav({ kind: "select" });
+        await waitFor(() => screen.shell?.screen === "game", "the game's page");
+        this.nav({ kind: "select" });
+        await waitFor(() => screen.shell?.screen === "play", "the game to start");
+    }
+
+    /**
+     * Chooses a row on the TV's current menu.
+     * @param screen the TV.
+     * @param label the row.
+     */
+    public async chooseRow(screen: FakeScreen, label: string): Promise<void> {
+        await waitFor(() => screen.shell?.menu.includes(label) === true, `a menu with "${label}"`);
+        const shell: ShellView | null = screen.shell;
+        this.nav({ kind: "step", delta: (shell?.menu.indexOf(label) ?? 0) - (shell?.focus ?? 0) });
+        await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 150); });
+        console.warn(`${this.name} chooses ${label}`);
+        this.nav({ kind: "select" });
     }
 
     /** Hangs up. */

@@ -11,6 +11,7 @@
 
 import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
+import { HOST_NAME } from "../shared/brand.ts";
 import { log } from "./log.ts";
 
 /** Who the host is. A placeholder until the persona is chosen. */
@@ -25,11 +26,12 @@ export interface HostPersona {
 
 /** The placeholder persona. */
 export const PLACEHOLDER_PERSONA: HostPersona = {
-    name: "Marlowe",
+    name: HOST_NAME,
     voice: "ash",
     style: "Relaxed friend at a kitchen table: unhurried, a slight smile in the voice, no announcer energy.",
     character: [
-        "You are Marlowe, hosting game night in someone's living room. One big screen, and everyone's phone is their mic.",
+        `You are ${HOST_NAME}, hosting game night in someone's living room. You're a small brass lantern on the table, and you can joke about that, but don't dwell on it.`,
+        "One big screen, and everyone's phone is their controller and their mic.",
         "",
         "How you talk: like a quick, warm friend who has run a hundred game nights, not a presenter. Plain words, contractions, short sentences. Dry, light humour; never puns, never catchphrases, never \"welcome to the show\".",
         "",
@@ -134,6 +136,14 @@ export class Host {
             this.wakeTimer = null;
             this.runTurns().catch((error: unknown) => { log("host", `turn loop failed: ${error instanceof Error ? error.message : String(error)}`); });
         }, delayMilliseconds);
+    }
+
+    /**
+     * Remembers something the host said outside a turn, so it won't contradict or repeat itself.
+     * @param text the words.
+     */
+    public remark(text: string): void {
+        this.remember(`${this.persona.name}: ${text}`);
     }
 
     /**

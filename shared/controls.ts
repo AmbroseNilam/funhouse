@@ -2,6 +2,8 @@
 // which controls each role gets per phase; the host may compose within that set. Small on
 // purpose: the host's creativity is in labels, composition and timing, not new widgets.
 
+import type { PadView } from "./shell.ts";
+
 /** How a phone's microphone behaves right now. See docs/VOICE.md in the planning repo. */
 export type ListeningMode = "muted" | "holdToTalk" | "openFloor" | "hostSpeaking";
 
@@ -28,6 +30,8 @@ export interface PhoneView {
     /** Short line under the mic indicator, such as "The host is speaking". */
     status: string;
     controls: Control[];
+    /** How the phone's touch surface behaves right now. */
+    pad: PadView;
 }
 
 /** What a phone sends when a player uses a control. */

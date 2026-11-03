@@ -11,7 +11,7 @@
 import { randomBytes } from "node:crypto";
 import type WebSocket from "ws";
 import type { CartridgeManifest } from "../shared/cartridge.ts";
-import type { Control, ControlOption, ListeningMode, PhoneView } from "../shared/controls.ts";
+import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
@@ -21,7 +21,9 @@ import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
 import { streamSpark } from "../providers/meta/spark.ts";
+import type { NavAction, Seat, ShelfGame } from "../shared/shell.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
+import { Shell, type ShellStage } from "./shell.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -45,6 +47,8 @@ interface Player {
     holdingToTalk: boolean;
     /** Sessions whose press has not produced final text yet; a new press can overlap the last. */
     awaitingFinal: Set<TranscribeSession>;
+    /** The seat's colour, on the TV and as the phone's background. */
+    colour: string;
     /** A short message replacing the phone's status line, such as a press that wasn't heard. */
     hint: string;
     hintTimer: NodeJS.Timeout | null;
@@ -113,11 +117,17 @@ const MAX_SCREEN_BUFFER_BYTES: number = 5760000;
 /** Longest text a phone may send through a control. */
 const MAX_INPUT_CHARACTERS: number = 200;
 
-/** Control value that starts a game; the game's id follows. */
-const START_GAME_PREFIX: string = "room:start:";
+/** Seat colours, as painted card. */
+const SEAT_COLOURS: string[] = ["#b5532a", "#2f6f6a", "#7d4e8c", "#8a7a24", "#2f5a8c", "#a33a4e", "#5a7a3a", "#9c6b2f", "#46607a", "#8c4a6b", "#3a7a5a", "#7a5a3a"];
 
-/** Control value that ends the game and goes back to the lobby. */
-const BACK_TO_LOBBY: string = "room:lobby";
+/** How long the highlight must rest on a box before the host may remark on it. */
+const REMARK_DWELL_MILLISECONDS: number = 1500;
+
+/** Shortest gap between remarks. */
+const REMARK_GAP_MILLISECONDS: number = 30000;
+
+/** Chance a resting highlight gets a remark. */
+const REMARK_CHANCE: number = 0.5;
 
 /** Most players one room seats. The largest game plays ten; two more can watch and talk. */
 const MAX_PLAYERS: number = 12;
@@ -189,6 +199,13 @@ export class Room implements HostStage {
     private readonly speech: OpenAiRealtimeSpeech | SilentSpeech = TEXT_ONLY === true ? new SilentSpeech() : new OpenAiRealtimeSpeech();
     private woken: boolean = false;
     private game: RunningGame | null = null;
+    private readonly shell: Shell;
+    /** Recorded remarks per game, ready to play at once. */
+    private readonly remarks: Map<string, { text: string; pcm: Uint8Array }[]> = new Map();
+    private readonly remarkedOn: Set<string> = new Set();
+    private remarkTimer: NodeJS.Timeout | null = null;
+    private lastRemarkAt: number = 0;
+    private gameDecided: boolean = false;
     private readonly drawings: Map<string, Drawing> = new Map();
     /** Who spoke last, so a ruling can be credited to them. */
     private lastSpeakerId: string | null = null;
@@ -214,6 +231,7 @@ export class Room implements HostStage {
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
         this.voice = new HostVoice(this.speech, this.voiceOutput());
+        this.shell = new Shell(this.shellStage());
     }
 
     /**
@@ -229,6 +247,7 @@ export class Room implements HostStage {
         this.game?.stop();
         this.host.interrupt(false);
         this.speech.close();
+        this.scheduleRemark(null);
         this.drawings.clear();
     }
 
@@ -248,7 +267,7 @@ export class Room implements HostStage {
         }
         this.woken = true;
         this.speech.warm();
-        this.renderAcknowledgements().catch((error: unknown) => { log(this.scope(), `acknowledgements unavailable: ${error instanceof Error ? error.message : String(error)}`); });
+        this.renderAcknowledgements().then(async () => { await this.renderRemarks(); }).catch((error: unknown) => { log(this.scope(), `recorded lines unavailable: ${error instanceof Error ? error.message : String(error)}`); });
     }
 
     /**
@@ -273,6 +292,7 @@ export class Room implements HostStage {
         });
         this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code });
         this.sendToScreen(socket, this.hostStateMessage());
+        this.sendToScreen(socket, { type: "shell", view: this.shell.view() });
     }
 
     /**
@@ -310,6 +330,14 @@ export class Room implements HostStage {
             }
             if (message.type === "textOnlySay") {
                 this.onTextOnlySay(player, message.text);
+                return;
+            }
+            if (message.type === "nav") {
+                this.onNav(player, message.action);
+                return;
+            }
+            if (message.type === "lean") {
+                this.broadcastToScreens({ type: "lean", x: Math.max(-1, Math.min(1, message.x)), y: Math.max(-1, Math.min(1, message.y)) });
                 return;
             }
             if (message.type === "leave") {
@@ -350,7 +378,7 @@ export class Room implements HostStage {
         return [
             "Right now: the lobby. Games you can start:",
             ...games,
-            "When the group clearly asks to play one and there are enough players, write [[start: id]] first, then one short line. If there aren't enough, say how many more you need. Players can also pick a game on their phones.",
+            "When the group clearly asks to play one and there are enough players, write [[start: id]] first, then one short line. If there aren't enough, say how many more you need. People can also browse the shelf with their phones.",
         ].join("\n");
     }
 
@@ -438,12 +466,14 @@ export class Room implements HostStage {
         const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${name} joined as ${playerId}`);
+        this.shell.seatsChanged();
         this.welcome(player);
         this.broadcastScene();
+        this.broadcastShell();
         this.refreshPhones();
         this.prepareStandby(player);
         this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
@@ -479,6 +509,7 @@ export class Room implements HostStage {
         log(this.scope(), `${player.name} rejoined ${player.playerId}`);
         this.welcome(player);
         this.broadcastScene();
+        this.broadcastShell();
         this.prepareStandby(player);
         return player;
     }
@@ -493,25 +524,114 @@ export class Room implements HostStage {
     }
 
     /**
-     * Handles a button press or typed text: the room's own, or else the running game's.
+     * Passes a button press or typed text to the running game.
      * @param player who.
      * @param value the option id or text.
      * @param controlIndex which control.
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
-        if (value.startsWith(START_GAME_PREFIX) === true && this.game === null) {
-            this.startGame(value.slice(START_GAME_PREFIX.length));
-            return;
-        }
-        if (value === BACK_TO_LOBBY) {
-            if (this.game?.outcome() !== null) {
-                this.endGame();
-            }
-            return;
-        }
         this.game?.input(player.playerId, value);
         this.refreshPhones();
+    }
+
+    /**
+     * Applies what a phone's thumb did on the console.
+     * @param player who.
+     * @param action what.
+     */
+    private onNav(player: Player, action: NavAction): void {
+        this.shell.act(player.playerId, action);
+    }
+
+    /**
+     * What the console needs from this room.
+     * @returns the stage.
+     */
+    private shellStage(): ShellStage {
+        return {
+            games: (): ShelfGame[] => GAMES.map((game: InstalledGame) => this.shelfGame(game)),
+            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected }: Player) => ({ playerId, name, colour, connected })),
+            startGame: (gameId: string): void => { this.startGame(gameId); },
+            endGame: (): void => { this.endGame(); },
+            gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
+            focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
+            refused: (reason: string): void => { this.host.notice(`(Game: ${reason} Say so in a few words.)`, WAKE_DELAY_MILLISECONDS.screen); },
+            driverChanged: (name: string): void => { this.host.notice(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            changed: (): void => {
+                this.broadcastShell();
+                this.refreshPhones();
+            },
+        };
+    }
+
+    /**
+     * One game as the shelf shows it.
+     * @param game the game.
+     * @returns its box.
+     */
+    private shelfGame(game: InstalledGame): ShelfGame {
+        const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
+        const count: number = this.players.size;
+        const short: number = minPlayers - count;
+        const blocked: string | null = short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
+        const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, blocked };
+    }
+
+    /**
+     * Lets the host maybe remark on a box once the highlight has rested there.
+     * @param gameId the box, or null when the highlight has moved off the shelf.
+     */
+    private scheduleRemark(gameId: string | null): void {
+        if (this.remarkTimer !== null) {
+            clearTimeout(this.remarkTimer);
+            this.remarkTimer = null;
+        }
+        if (gameId === null) {
+            return;
+        }
+        this.remarkTimer = setTimeout(() => {
+            this.remarkTimer = null;
+            this.playRemark(gameId);
+        }, REMARK_DWELL_MILLISECONDS);
+    }
+
+    /**
+     * Plays one recorded remark, unless the moment isn't right.
+     * @param gameId the box.
+     */
+    private playRemark(gameId: string): void {
+        const talking: boolean = this.hostThinking === true || this.voice.isBusy() === true || [...this.players.values()].some((player: Player) => player.holdingToTalk === true);
+        const tooSoon: boolean = Date.now() - this.lastRemarkAt < REMARK_GAP_MILLISECONDS;
+        if (talking === true || tooSoon === true || this.remarkedOn.has(gameId) === true || Math.random() >= REMARK_CHANCE) {
+            return;
+        }
+        const lines: { text: string; pcm: Uint8Array }[] = this.remarks.get(gameId) ?? [];
+        const line: { text: string; pcm: Uint8Array } | undefined = lines[Math.floor(Math.random() * lines.length)];
+        if (line === undefined) {
+            return;
+        }
+        this.remarkedOn.add(gameId);
+        this.lastRemarkAt = Date.now();
+        log(this.scope(), `remarked "${line.text}"`);
+        this.host.remark(line.text);
+        this.caption = { speaker: this.host.persona.name, text: line.text, final: true };
+        this.broadcastScene();
+        this.voice.sayRecorded(line.pcm);
+    }
+
+    /** Records every game's remarks in the host's voice. */
+    private async renderRemarks(): Promise<void> {
+        const persona: HostPersona = this.host.persona;
+        for (const game of GAMES) {
+            const lines: { text: string; pcm: Uint8Array }[] = [];
+            for (const text of game.remarks) {
+                lines.push({ text, pcm: await this.voice.render(text, persona.voice, `${persona.style} Muttered aside, half to yourself.`) });
+            }
+            this.remarks.set(game.manifest.id, lines);
+        }
+        log(this.scope(), "recorded remarks");
     }
 
     /**
@@ -535,11 +655,12 @@ export class Room implements HostStage {
         this.caption = null;
         this.game = installed.create(this.gameStage());
         this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
+        this.gameDecided = false;
+        this.shell.gameStarted(installed.manifest.id);
         this.broadcastScene();
-        this.refreshPhones();
     }
 
-    /** Ends the running game and returns everyone to the lobby. */
+    /** Ends the running game and returns everyone to the shelf. */
     private endGame(): void {
         if (this.game === null) {
             return;
@@ -548,8 +669,8 @@ export class Room implements HostStage {
         this.game.stop();
         this.game = null;
         this.caption = null;
+        this.shell.gameEnded();
         this.broadcastScene();
-        this.refreshPhones();
     }
 
     /**
@@ -561,6 +682,10 @@ export class Room implements HostStage {
             tellHost: (line: string): void => { this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen); },
             changed: (): void => {
                 this.broadcastScene();
+                if (this.gameDecided === false && this.game?.outcome() !== null) {
+                    this.gameDecided = true;
+                    this.shell.gameDecided();
+                }
                 this.refreshPhones();
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
@@ -641,6 +766,7 @@ export class Room implements HostStage {
         const grace: number = this.game !== null && this.game.outcome() === null ? GAME_REJOIN_GRACE_MILLISECONDS : REJOIN_GRACE_MILLISECONDS;
         log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${grace / 1000} s`);
         this.broadcastScene();
+        this.broadcastShell();
         player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, grace);
     }
 
@@ -665,7 +791,9 @@ export class Room implements HostStage {
         this.game?.event(left);
         log(this.scope(), `${player.name} left`);
         this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+        this.shell.seatsChanged();
         this.broadcastScene();
+        this.broadcastShell();
         this.refreshPhones();
     }
 
@@ -689,6 +817,7 @@ export class Room implements HostStage {
         log(this.scope(), `${previous} is now ${name}`);
         this.welcome(player);
         this.broadcastScene();
+        this.broadcastShell();
         this.host.notice(`(${previous} now goes by ${name})`, WAKE_DELAY_MILLISECONDS.join);
     }
 
@@ -1097,12 +1226,12 @@ export class Room implements HostStage {
      */
     private phoneView(player: Player): PhoneView {
         const hostName: string = this.host.persona.name;
-        let status: string = `Hold or tap the button to talk to ${hostName}.`;
+        let status: string = "";
         if (this.hostThinking === true) {
             status = `${hostName} is thinking…`;
         }
         if (this.hostSpeaking === true) {
-            status = `${hostName} is talking. Press to cut in.`;
+            status = `${hostName} is talking. Press and hold to cut in.`;
         }
         if (player.hint !== "") {
             status = player.hint;
@@ -1111,29 +1240,16 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = "Phones are quiet for now.";
         }
-        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player) };
+        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.shell.pad(player.playerId, player.colour) };
     }
 
     /**
-     * What a phone offers: the game's controls, a way back once it's over, or the lobby's games.
+     * What a phone shows besides its touch surface: only what's private to it in the game.
      * @param player the player.
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
-        if (this.game !== null) {
-            const controls: Control[] = this.game.controls(player.playerId);
-            if (this.game.outcome() === null) {
-                return controls;
-            }
-            return [...controls, { type: "buttons", options: [{ id: BACK_TO_LOBBY, label: "Back to the games" }] }];
-        }
-        const count: number = this.players.size;
-        const options: ControlOption[] = GAMES.map((game: InstalledGame) => {
-            const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
-            const fits: boolean = count >= minPlayers && count <= maxPlayers;
-            return { id: `${START_GAME_PREFIX}${id}`, label: fits === true ? name : `${name} (${minPlayers}+ players)`, disabled: fits === false };
-        });
-        return [{ type: "buttons", prompt: "Pick a game, or just ask out loud.", options }];
+        return this.game?.controls(player.playerId) ?? [];
     }
 
     /**
@@ -1148,6 +1264,11 @@ export class Room implements HostStage {
     private broadcastHostState(): void {
         this.broadcastToScreens(this.hostStateMessage());
         this.refreshPhones();
+    }
+
+    /** Sends the console to every screen. */
+    private broadcastShell(): void {
+        this.broadcastToScreens({ type: "shell", view: this.shell.view() });
     }
 
     /** Sends the current scene to every screen. */

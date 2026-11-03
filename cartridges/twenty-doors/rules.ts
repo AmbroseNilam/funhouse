@@ -1,6 +1,7 @@
 // Twenty Doors' rules core. The host's model chooses the secret, which only the host is told.
 // Every yes, no, sort-of or wrong guess opens a door. Twenty doors without the answer loses.
 
+import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
@@ -140,7 +141,8 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
         onEvent(state: TwentyDoorsState, event: RoomEvent): Step<TwentyDoorsState> {
             if (event.type === "contentReady" && state.phase === "choosing") {
                 const chosen: string = event.text.trim().replace(/[."'!]/g, "");
-                const secret: string = chosen === "" || chosen.length > SECRET_CHARACTER_LIMIT ? state.fallback : chosen;
+                const usable: string = chosen === "" || chosen.length > SECRET_CHARACTER_LIMIT ? state.fallback : chosen;
+                const secret: string = `${usable.charAt(0).toUpperCase()}${usable.slice(1)}`;
                 const next: TwentyDoorsState = { ...state, phase: "asking", secret };
                 return {
                     state: next,
@@ -184,16 +186,16 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 if (state.revealPicture !== null) {
                     blocks.push({ type: "image", src: state.revealPicture });
                 }
-                blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT });
+                blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };
             }
             const recent: SceneBlock[] = state.asked.slice(-SHOWN_QUESTIONS).map((entry: AskedQuestion) => ({ type: "text", text: `${entry.question} ${entry.answer}.` }));
-            return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors", kicker: `It's ${state.category}` }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT }, ...recent] };
+            return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors", kicker: `It's ${state.category}` }, { type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" }, ...recent] };
         },
 
         privateControls(state: TwentyDoorsState): Control[] {
             if (state.phase === "choosing") {
-                return [{ type: "waiting", text: "Marlowe is choosing a secret." }];
+                return [{ type: "waiting", text: `${HOST_NAME} is choosing a secret.` }];
             }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: state.won === true ? "You found it." : "Better luck next time." }];

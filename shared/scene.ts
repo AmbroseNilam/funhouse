@@ -17,7 +17,7 @@ export type SceneBlock =
     | { type: "roster"; players: RosterEntry[] }
     | { type: "timer"; seconds: number; label?: string; running: boolean }
     | { type: "tally"; title: string; rows: TallyRow[] }
-    | { type: "progress"; label: string; current: number; max: number }
+    | { type: "progress"; label: string; current: number; max: number; marks?: "door" | "card" }
     | { type: "caption"; speaker: string; text: string; final: boolean };
 
 /** A player as the screen shows them. */

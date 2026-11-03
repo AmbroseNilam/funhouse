@@ -4,6 +4,7 @@
 
 import type { ControlInput, PhoneView } from "./controls.ts";
 import type { Scene } from "./scene.ts";
+import type { NavAction, ShellView } from "./shell.ts";
 
 /** Why the room turned a stage away. */
 export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree";
@@ -15,7 +16,9 @@ export type PhoneMessage =
     | { type: "holdToTalk"; down: boolean }
     | { type: "rename"; name: string }
     | { type: "leave" }
-    | { type: "textOnlySay"; text: string };
+    | { type: "textOnlySay"; text: string }
+    | { type: "nav"; action: NavAction }
+    | { type: "lean"; x: number; y: number };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
@@ -39,6 +42,8 @@ export type RoomToScreenMessage =
     | { type: "audioEnd" }
     | { type: "audioCancel" }
     | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
+    | { type: "shell"; view: ShellView }
+    | { type: "lean"; x: number; y: number }
     | { type: "micLevel"; level: number }
     | { type: "rejected"; reason: RejectedReason }
     | { type: "heartbeat" };
@@ -61,6 +66,13 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "rename") {
         return typeof message.name === "string";
+    }
+    if (message.type === "nav") {
+        const action: { kind?: unknown; delta?: unknown } | null = typeof message.action === "object" ? message.action : null;
+        return action?.kind === "select" || action?.kind === "back" || (action?.kind === "step" && typeof action.delta === "number" && Number.isFinite(action.delta) === true);
+    }
+    if (message.type === "lean") {
+        return typeof message.x === "number" && typeof message.y === "number";
     }
     if (message.type === "textOnlySay") {
         return typeof message.text === "string";

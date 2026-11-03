@@ -23,7 +23,7 @@ const SETTLE_MILLISECONDS: number = 2500;
 const screen: FakeScreen = new FakeScreen();
 await waitFor(() => screen.code !== "", "a room");
 const sam: FakePhone = new FakePhone(screen.code, "Sam");
-await waitFor(() => sam.options().length > 0, "the lobby's games");
+await waitFor(() => screen.shell?.seats.length === 1, "Sam to join");
 const alex: FakePhone = new FakePhone(screen.code, "Alex");
 await waitFor(() => alex.view !== null, "Alex to join");
 
@@ -149,7 +149,7 @@ async function answer(phone: FakePhone, line: string, closes: boolean): Promise<
     await screen.nextHostLine(before);
 }
 
-sam.press("Quizmaster");
+await sam.startGame(screen, "Quizmaster");
 await waitFor(() => screen.title() === "Quizmaster", "Quizmaster to start");
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, SETTLE_MILLISECONDS); });
 const topicBefore: number = screen.hostLines.length;
@@ -197,7 +197,7 @@ await reach(6, "question 6 after everyone answered");
 
 // Question 6: Sam gets it right and the game ends.
 await answer(sam, solve(), true);
-await waitFor(() => sam.options().some((option) => option.label === "Back to the games"), "the end of the game");
+await waitFor(() => screen.shell?.gameOver === true, "the end of the game");
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, SETTLE_MILLISECONDS); });
 watch();
 

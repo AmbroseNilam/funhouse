@@ -15,8 +15,8 @@ interface Seat {
 const screen: FakeScreen = new FakeScreen();
 await waitFor(() => screen.code !== "", "a room");
 const seats: Seat[] = ["Sam", "Priya", "Jo", "Dana", "Leo"].map((name: string) => ({ name, phone: new FakePhone(screen.code, name), role: "", out: false }));
-await waitFor(() => seats.every((seat: Seat) => seat.phone.options().some((option) => option.label === "Werewolf")), "the lobby to offer Werewolf");
-seats[0]?.phone.press("Werewolf");
+await waitFor(() => screen.shell?.seats.length === seats.length, "every phone to join");
+await seats[0]?.phone.startGame(screen, "Werewolf");
 await waitFor(() => screen.title() === "Look at your phone", "the role cards");
 await waitFor(() => seats.every((seat: Seat) => seat.phone.view?.controls.some((control) => control.type === "roleCard") === true), "every role card");
 for (const seat of seats) {

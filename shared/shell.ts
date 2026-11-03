@@ -1,0 +1,66 @@
+// The console around the games: the shelf, a game's page, the players, and the pause menu. The
+// room owns this state and both stages draw it, so every phone and the TV stay in step. A phone
+// only ever says which way the thumb went.
+
+/** Which screen the TV is on. */
+export type ShellScreen = "home" | "game" | "players" | "play" | "pause" | "howTo";
+
+/** Which way a phone's swipes move the highlight, if at all. */
+export type NavAxis = "x" | "y" | null;
+
+/** One game box on the shelf. */
+export interface ShelfGame {
+    id: string;
+    name: string;
+    pitch: string;
+    howToPlay: string[];
+    players: string;
+    art: string;
+    /** Why it can't start right now, or null when it can. */
+    blocked: string | null;
+}
+
+/** A person at the table. */
+export interface Seat {
+    playerId: string;
+    name: string;
+    colour: string;
+    connected: boolean;
+    driving: boolean;
+}
+
+/** Everything the TV needs to draw the console. */
+export interface ShellView {
+    screen: ShellScreen;
+    axis: NavAxis;
+    /** Which item is highlighted, in shelf or menu order. */
+    focus: number;
+    games: ShelfGame[];
+    /** The game whose page or session is open. */
+    gameId: string | null;
+    /** Rows on the current screen; empty when it has none. */
+    menu: string[];
+    seats: Seat[];
+    /** True once a game has been decided and is showing its result. */
+    gameOver: boolean;
+}
+
+/** What a phone needs to know to behave as a controller. */
+export interface PadView {
+    colour: string;
+    axis: NavAxis;
+    canPrevious: boolean;
+    canNext: boolean;
+    driving: boolean;
+    driverName: string;
+    /** What the back corner does here, or null when it does nothing. */
+    backLabel: string | null;
+    /** True when a tap on the surface would do something. */
+    canSelect: boolean;
+}
+
+/** What a phone's thumb did. */
+export type NavAction =
+    | { kind: "step"; delta: number }
+    | { kind: "select" }
+    | { kind: "back" };
