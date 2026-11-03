@@ -22,7 +22,7 @@ const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full"
 const STEPS: { title: string; line: string }[] = [
     { title: "Open it on a TV", line: "Any screen with a browser. A room code and a QR appear, and the host says hello." },
     { title: "Scan with your phones", line: "No app, no account. Your phone is your mic and your private hand." },
-    { title: "Play", line: "Hold to talk. The host hears who said what, runs the game, and keeps your secrets." },
+    { title: "Just play", line: "Hold to talk. The host explains the rules, keeps the pace, and settles the arguments. Everyone plays." },
 ];
 
 /** The landing page. */
@@ -107,7 +107,7 @@ export function App(): ReactElement {
 
             <section className="games" aria-labelledby="games">
                 <h2 id="games">The games</h2>
-                <p className="section-line">Three tonight. The host runs each one; you only talk.</p>
+                <p className="section-line">Three tonight, and nobody sits out to run them. Even Werewolf's narrator is the host.</p>
                 <ul>
                     {GAMES.map((game) => (
                         <li key={game.name} className="game">
