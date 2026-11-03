@@ -28,6 +28,11 @@ export interface HiddenValue {
     text: string;
     /** Who may see it: "host", or player ids. Everyone else, including the TV, may not. */
     seenBy: string[];
+    /**
+     * When set, the value only counts as seen in a line that also says this, such as a player's
+     * name beside "Plant". For values that are fine on their own but give a secret away together.
+     */
+    near?: string;
 }
 
 /** A running kit game, with what a rehearsal needs to check it. */

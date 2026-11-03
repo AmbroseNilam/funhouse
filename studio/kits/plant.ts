@@ -616,10 +616,15 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 return [];
             }
             const card: HiddenValue = { label: "the Plant's card", text: PLANT_CARD_TITLE, seenBy: [state.plantId] };
+            const plantName: string = state.players.find((player: CartridgePlayer) => player.playerId === state.plantId)?.name ?? "";
+            const who: HiddenValue[] = [
+                { label: "who the Plant is", text: plantName, seenBy: [state.plantId], near: "plant" },
+                { label: "who the Plant is", text: state.plantId, seenBy: [state.plantId], near: "plant" },
+            ];
             if (state.phase === "vote") {
-                return [card];
+                return [card, ...who];
             }
-            return [{ label: "the word", text: state.word === "" ? state.fallback : state.word, seenBy: ["host", state.plantId] }, card];
+            return [{ label: "the word", text: state.word === "" ? state.fallback : state.word, seenBy: ["host", state.plantId] }, card, ...who];
         },
     };
 }

@@ -181,6 +181,10 @@ describe("rehearsal catches planted faults", () => {
         const problems: string = rehearseMany(cards, plantPersonas(), [1]).problems.join("\n");
         assert.match(problems, /the word reached phone/);
         assert.match(problems, /the Plant's card reached phone/);
+        const named = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({
+            hostFacts: (state: PlantState, scope: Scope): ScopedFact[] => [...rules.hostFacts(state, scope), { scope: { kind: "host" }, kind: "plant", text: `The Plant is ${state.plantId}.` }],
+        }));
+        assert.match(rehearseMany(named, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the host/, "caught by an ordinary rehearsal, without the role check");
         const healthy: RoleCheck<PlantState> = plantRoleCheck(LEADING_QUESTIONS_BLUEPRINT);
         const told: RoleCheck<PlantState> = {
             script: healthy.script,
