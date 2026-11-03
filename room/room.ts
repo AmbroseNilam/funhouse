@@ -1923,6 +1923,9 @@ export class Room implements HostStage {
      */
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
+        if (this.game?.outIds().includes(player.playerId) === true) {
+            return null;
+        }
         if (turn?.kind === "anyone") {
             return { yours: false, open: true, line: turn.label };
         }

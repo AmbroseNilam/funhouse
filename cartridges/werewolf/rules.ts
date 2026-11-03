@@ -341,7 +341,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return [{ type: "waiting", text: "You are watching this round." }];
             }
             if (seat.alive === false) {
-                return [{ type: "notice", text: "You are out. Enjoy the show, and keep your role to yourself.", tone: "info" }];
+                return [{ type: "notice", text: "Keep your role to yourself until the end.", tone: "info" }, { type: "waiting", text: "You're out, so enjoy the show" }];
             }
             const actions: LegalAction[] = this.legalActions(state, playerId);
             if (state.phase === "roles") {
