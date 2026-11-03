@@ -131,6 +131,9 @@ const CAPTION_WAIT_MILLISECONDS: number = 2500;
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
 
+/** Longest name a seat can have. */
+const NAME_CHARACTER_LIMIT: number = 24;
+
 /**
  * Picks the host's voice: silent in the test mode, ElevenLabs where its key is set, otherwise OpenAI's.
  * @returns the voice.
@@ -294,7 +297,7 @@ function frameLevel(frame: Buffer): number {
  * @returns the name, possibly empty.
  */
 function cleanName(raw: string): string {
-    return raw.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/[()[\]:]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+    return raw.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/[()[\]:]/g, "").replace(/\s+/g, " ").trim().slice(0, NAME_CHARACTER_LIMIT);
 }
 
 /** The room runtime. One instance per live room. */
@@ -835,6 +838,21 @@ export class Room implements HostStage {
     }
 
     /**
+     * Makes a name different from everyone else's, so the TV and the host can tell two people apart.
+     * @param name the cleaned name.
+     * @param ownerId who wants it, whose own name doesn't count, or null for someone new.
+     * @returns the name, with a number added if it's taken.
+     */
+    private freeName(name: string, ownerId: string | null): string {
+        const taken: string[] = [...this.players.values()].filter((player: Player) => player.playerId !== ownerId).map((player: Player) => player.name.toLowerCase());
+        let candidate: string = name;
+        for (let number: number = 2; taken.includes(candidate.toLowerCase()) === true; number += 1) {
+            candidate = `${name.slice(0, NAME_CHARACTER_LIMIT - String(number).length - 1)} ${number}`;
+        }
+        return candidate;
+    }
+
+    /**
      * Seats a new player and tells everyone.
      * @param socket the phone's WebSocket.
      * @param rawName the name the player typed.
@@ -848,7 +866,7 @@ export class Room implements HostStage {
             return null;
         }
         this.wake();
-        const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
+        const name: string = this.freeName(cleanName(rawName) || `Player ${this.nextPlayerNumber}`, null);
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
         const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
@@ -1347,7 +1365,7 @@ export class Room implements HostStage {
      * @param rawName the name the player typed.
      */
     private rename(player: Player, rawName: string): void {
-        const name: string = cleanName(rawName);
+        const name: string = this.freeName(cleanName(rawName), player.playerId);
         if (name === "" || name === player.name) {
             return;
         }
