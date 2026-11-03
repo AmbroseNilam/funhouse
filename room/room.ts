@@ -362,6 +362,12 @@ export class Room implements HostStage {
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();
+        for (const player of this.players.values()) {
+            if (player.phoneDownTimer !== null) {
+                clearTimeout(player.phoneDownTimer);
+                player.phoneDownTimer = null;
+            }
+        }
         if (this.lullTimer !== null) {
             clearInterval(this.lullTimer);
         }
@@ -463,7 +469,9 @@ export class Room implements HostStage {
                 return;
             }
             if (message.type === "presence") {
-                this.onPresence(player, message.away);
+                if (player.socket === socket) {
+                    this.onPresence(player, message.away);
+                }
                 return;
             }
             if (message.type === "released") {
@@ -1550,7 +1558,7 @@ export class Room implements HostStage {
 
     /**
      * Notes that a phone has left the app or come back. Leaving only counts after a moment, so a
-     * quick glance elsewhere doesn't flicker on the TV, and it ends any hold, since nobody's thumb is there.
+     * quick glance elsewhere neither flickers on the TV nor cuts anyone off; then it ends any hold.
      * @param player whose phone.
      * @param away true when it has gone.
      */
@@ -1560,9 +1568,9 @@ export class Room implements HostStage {
             player.phoneDownTimer = null;
         }
         if (away === true) {
-            this.onHoldToTalk(player, false);
             player.phoneDownTimer = setTimeout(() => {
                 player.phoneDownTimer = null;
+                this.onHoldToTalk(player, false);
                 this.setPhoneDown(player, true);
             }, PHONE_DOWN_AFTER_MILLISECONDS);
             return;
