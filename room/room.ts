@@ -1616,7 +1616,9 @@ export class Room implements HostStage {
         if (this.hostAudible() === true) {
             player.overlapMilliseconds += frame.length / PHONE_AUDIO_BYTES_PER_MILLISECOND;
             // Tap rooms keep the TV's voice out of what's transcribed; the transcript has no word timings to trim later.
+            // Silence goes in its place, as the speech service closes a session that falls behind real time.
             if (this.tapToTalk === true) {
+                player.transcribe.sendFrame(new Uint8Array(frame.length));
                 return;
             }
         }
