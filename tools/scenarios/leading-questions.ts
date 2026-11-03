@@ -11,6 +11,9 @@
 // A pass prints PASS as its last line, takes about two minutes and costs a few cents of model
 // calls. The room's log should also show "[studio] starting blueprint leadingQuestions on the
 // plant kit", which proves the blueprint version is the one that ran.
+//
+// This is test tooling, not the server: it prints the Plant, the word and every line said to the
+// terminal it runs in, which the room's own log never does. Don't paste its output anywhere public.
 
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
@@ -74,6 +77,7 @@ async function say(seat: Seat, line: string): Promise<void> {
     await screen.nextHostLine(before);
 }
 
+const gameStart: number = screen.hostLines.length;
 await seats[0]?.phone.startGame(screen, "Leading Questions");
 await waitFor(() => seats.every((seat: Seat) => cardOf(seat.phone) !== undefined), "a card on every phone");
 /** The word on a card, only once the real word has arrived; the placeholder before it doesn't match. */
@@ -99,7 +103,6 @@ if (askers.some((seat: Seat) => squash(seat.body).includes(squash(word)) === tru
 }
 
 await waitFor(() => screen.title() === "Find the word", "asking to open");
-const leakWindow: number = screen.hostLines.length;
 const [first, second, third] = askers;
 if (first === undefined || second === undefined || third === undefined) {
     throw new Error("Expected three askers.");
@@ -121,10 +124,10 @@ if (questionsAsked(screen) < 3) {
     throw new Error(`Expected at least three questions counted, saw ${questionsAsked(screen)}.`);
 }
 await say(plant, "Would you be annoyed if you couldn't find one?");
-const midGame: string[] = screen.hostLines.slice(leakWindow);
+const beforeFound: string[] = screen.hostLines.slice(gameStart);
 await say(second, `Is it a ${word.toLowerCase()}?`);
 await waitFor(() => squash(screen.title()) === squash(word), "the vote, with the word on the TV");
-const leaked: string[] = midGame.filter((line: string) => squash(line).includes(squash(word)) === true);
+const leaked: string[] = beforeFound.filter((line: string) => squash(line).includes(squash(word)) === true);
 if (leaked.length > 0) {
     throw new Error(`The host said the word before it was found: ${leaked.join(" | ")}`);
 }
@@ -145,7 +148,7 @@ console.warn(`Reveal: ${kicker}. ${reveal} Highlighted: ${highlighted}.`);
 if (kicker !== "Caught" || reveal.includes(`${plant.name} was the Plant.`) === false || highlighted !== plant.name) {
     throw new Error("The reveal is wrong: expected the Plant caught, named and highlighted.");
 }
-const naming: string[] = screen.hostLines.slice(0, -2).filter((line: string) => line.includes(plant.name) === true && /\bplant\b/i.test(line) === true);
+const naming: string[] = screen.hostLines.slice(gameStart, -2).filter((line: string) => line.includes(plant.name) === true && /\bplant\b/i.test(line) === true);
 if (naming.length > 0) {
     throw new Error(`The host named the Plant before the reveal: ${naming.join(" | ")}`);
 }

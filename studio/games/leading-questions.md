@@ -95,6 +95,10 @@ and one left.
 **Interruption.** Holding to talk while the host is speaking stops the host mid-word, as in every
 game. A question asked over the host is heard and ruled on like any other.
 
+**Not a question.** A vague line that isn't yes-or-no gets "that's not a yes-or-no question" and
+nothing else. On the first run with the live host it got a hint instead, so the brief now says no
+answer, no hint, no ruling; that needs checking again with the host.
+
 **Misheard speech.** The host is told to reply "(quiet)" to garbled or half sentences; nothing is
 ruled, nothing is spent, and the person asks again. A mishearing that the host does rule on costs one
 question: a funny moment, not a broken game.
@@ -125,8 +129,16 @@ category-level nudge without touching the word, at most twice a round.
 | Host | Which question turned the round, at the reveal: taste, not state |
 
 The host is never told who the Plant is, so it cannot leak it, and the brief tells it never to
-guess. The host does hold the word; if it slips, the round still runs, the rehearsal catches that
-kind of leak in code, and at a table it is a moment to laugh at, not a breach.
+guess. The host does hold the word; if it slips, the round still runs, and at a table it is a
+moment to laugh at, not a breach.
+
+What catches what:
+
+| Check | Runs | Catches | Can't catch |
+| --- | --- | --- | --- |
+| The structural rehearsal (`studio/check.ts`) | Anywhere, no model | The word or the Plant's card reaching a TV, phone or brief it shouldn't, however spelled; a view that differs depending on who the Plant is; games that never end, rulings that do nothing, rules that throw or change state in place | Anything the host says: it has no model |
+| The scenario (`tools/scenarios/leading-questions.ts`) | With model keys | The host saying the word before it's found or naming the Plant, across the whole game; a question spent on chat or lobbying, as a warning | A hint that doesn't contain the word, like answering a non-question with a clue |
+| A real table | People | Whether the Plant's tension holds, and whether the host's hints give it away | Nothing a script can repeat |
 
 ## The awkward cases
 
