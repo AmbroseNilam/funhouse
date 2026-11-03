@@ -9,6 +9,7 @@ import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step }
 import type { Control } from "../shared/controls.ts";
 import type { Scene, SceneBlock } from "../shared/scene.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
+import type { Turn } from "../shared/turn.ts";
 import type { Scope, ScopedFact } from "../shared/visibility.ts";
 import { DECISIONS, rulingDecision, type Blueprint, type Ruling, type RulingEffect, type SecretCategory } from "./blueprint.ts";
 
@@ -165,6 +166,10 @@ export function createBlueprintGame(blueprint: Blueprint, random: () => number =
 
         phaseOf(state: BlueprintState): string {
             return state.phase;
+        },
+
+        turn(state: BlueprintState): Turn | null {
+            return state.phase === "asking" ? { kind: "anyone", label: "Anyone can ask" } : null;
         },
 
         roleOf(): string {

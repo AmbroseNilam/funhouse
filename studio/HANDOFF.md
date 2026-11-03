@@ -79,6 +79,35 @@ These come from research that is not in the repository. Treat them as constraint
   same word except one person, clues go round the circle one word at a time, then everyone
   votes. It could be a second mode on the same kit later; note it, don't build it yet.
 
+## First tasks: findings from an independent review of this branch
+
+A read-only review on 2026-11-03 confirmed the conflict resolution and the shelf migration and
+found these, each reproduced. Fix them while building the kit, since each one is a kit concern:
+
+1. The rehearsal checks only title and text blocks for the secret and never checks phone
+   controls. A blueprint whose count label equals the fallback secret passes. Check every
+   viewer's whole view, including labels, rosters, tallies and controls (`studio/rehearse.ts`).
+2. Installed blueprints keep references to the caller's objects, so mutating a blueprint after
+   installing it changes a running game. Copy on install (`studio/shelf.ts`, `studio/interpreter.ts`).
+3. Replacing a shelf entry by id changes a running game's pause actions, because the shell
+   resolves the active game's metadata from the shelf each time. A running game must keep the
+   entry it started with (`room/room.ts` install, `room/shell.ts`).
+4. Validation accepts ruling names the room reserves, such as `quit`, which sends everyone to
+   the shelf instead of applying the ruling. Reject reserved names (`studio/blueprint.ts`).
+5. Validation accepts non-finite numbers: a budget of `NaN` never runs out. Require finite
+   integers for budgets, warnings and player bounds.
+6. The rehearsal personas hardcode the give-up action id and ruling names, so a valid blueprint
+   with a renamed give-up action is reported as never ending. Personas must read the decisions.
+7. Blueprint remarks reach a verbatim remark log in the room, so a remark must never contain a
+   fallback secret; and host text in a blueprint is prompt input, as the trust-boundary note says.
+8. Style: a missing doc comment on the exported blueprint in `studio/games/twenty-doors.ts`,
+   several untyped locals and callbacks in `studio/rehearse.ts` and the tests, and lines over
+   the limit in `studio/interpreter.ts`, `studio/rehearse.ts`, `studio/rehearse.test.ts` and
+   `studio/games/twenty-doors.ts`.
+
+Already fixed here: the blueprint game now reports whose turn it is, matching the hand-written
+Twenty Doors.
+
 ## Leading Questions: the shape to script
 
 - 4 to 8 players, about 8 minutes a round.
@@ -112,6 +141,8 @@ beside the game.
 - On the Mac: the scenario proofs in `tools/scenarios/` against a text-only room, and a real
   table with phones and a TV. When something needs that, say exactly what to run and what a
   pass looks like, and leave it for the Mac.
+- Independent code review runs on the Mac too, with local tools a cloud session cannot reach.
+  Expect a review of each push, and answer its findings in the next commit or say why not.
 
 ## Rules
 
