@@ -404,12 +404,13 @@ export function App(): ReactElement {
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {arrival !== null && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
-            {state.connected === false && state.started === true ? <p className="reconnecting">Finding the table…</p> : null}
+            {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
-                <button className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>
+                <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>
                     <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
-                    <span className="gate-title">Light the lantern</span>
-                    <span className="gate-detail">{state.connected === true ? `${HOST_NAME} hosts out loud, so this needs sound.` : "Finding the table…"}</span>
+                    <span className="gate-title">{state.connected === true ? "Turn your sound on" : "Connecting…"}</span>
+                    {state.connected === true ? <span className="gate-detail">{HOST_NAME} hosts the game out loud. The game opens full screen.</span> : null}
+                    {state.connected === true ? <span className="gate-action">Start</span> : null}
                 </button>
             ) : null}
         </main>

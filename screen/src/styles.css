@@ -193,6 +193,8 @@
     .sound-gate .lantern { width: calc(260 * var(--u)); height: calc(377 * var(--u)); margin-bottom: calc(24 * var(--u)); }
     .gate-title { font-size: calc(84 * var(--u)); font-weight: 500; }
     .gate-detail { color: var(--muted); }
+    .gate-action { margin-top: calc(28 * var(--u)); padding: calc(16 * var(--u)) calc(72 * var(--u)); background: var(--lamp); color: var(--lamp-ink); font-size: calc(46 * var(--u)); font-weight: 600; box-shadow: calc(8 * var(--u)) calc(8 * var(--u)) 0 #000; }
+    .sound-gate:active .gate-action { translate: calc(4 * var(--u)) calc(4 * var(--u)); box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .reconnecting { position: absolute; left: 50%; top: calc(24 * var(--u)); translate: -50% 0; padding: calc(8 * var(--u)) calc(22 * var(--u)); background: var(--wine); color: var(--paper); }
 
     /* A phone that opened the big-screen page */

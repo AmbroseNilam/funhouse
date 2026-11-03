@@ -719,7 +719,7 @@ export function App(): ReactElement {
     const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk);
     const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
-    const problem: string = state.connected === false ? "Finding the table…" : state.micError !== "" ? state.micError : "";
+    const problem: string = state.connected === false ? "Connecting…" : state.micError !== "" ? state.micError : "";
     const status: string = problem !== "" ? problem : view?.status ?? "";
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     return (
