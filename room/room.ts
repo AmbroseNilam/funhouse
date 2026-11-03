@@ -825,7 +825,9 @@ export class Room implements HostStage {
         this.record(left);
         this.game?.event(left);
         log(this.scope(), `${player.name} left`);
-        this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+        if (this.players.size > 0) {
+            this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+        }
         this.shell.seatsChanged();
         this.broadcastScene();
         this.broadcastShell();
