@@ -7,7 +7,12 @@ import { HOST_NAME } from "../../shared/brand.ts";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 
 /** Slightly different box shapes, so the shelf reads as objects and not a grid. */
-const BOX_SHAPES: { height: number; tilt: number; width: number }[] = [{ height: 92, tilt: -1.2, width: 1.1 }, { height: 100, tilt: 0.8, width: 1 }, { height: 88, tilt: -0.6, width: 0.95 }, { height: 76, tilt: 1.4, width: 0.75 }];
+const BOX_SHAPES: { height: number; tilt: number; width: number }[] = [
+    { height: 92, tilt: -1.2, width: 1.1 },
+    { height: 100, tilt: 0.8, width: 1 },
+    { height: 88, tilt: -0.6, width: 0.95 },
+    { height: 76, tilt: 1.4, width: 0.75 },
+];
 
 /** Names that fit in the table box above its label. */
 const TABLE_BOX_NAMES: number = 4;
@@ -95,7 +100,6 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
             </div>
             <div className="plank" />
             <JoinTag qr={props.qr} code={props.code} big={empty} joinHost={props.joinHost} />
-            <small className="credit">Art made with Muse Image</small>
         </section>
     );
 }
@@ -127,7 +131,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
  * @param props the console.
  * @returns the element.
  */
-function PlayersPage(props: { shell: ShellView; driver: Seat | undefined }): ReactElement {
+function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string }): ReactElement {
     const { shell, driver } = props;
     return (
         <section className="screen players-screen">
@@ -140,7 +144,8 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined }): Rea
                     </li>
                 ))}
             </ul>
-            <p className="players-hint">{HOST_NAME} can hear everyone. Whoever slides next takes the controller.</p>
+            <p className="players-hint">{HOST_NAME} can hear everyone. Whoever slides next takes the controller. Anyone else can scan in.</p>
+            <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
             <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
         </section>
     );
@@ -148,13 +153,14 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined }): Rea
 
 /**
  * The pause menu or the how-to-play card, over the game.
- * @param props the console and game.
+ * @param props the console, the game, and how to join.
  * @returns the element.
  */
-export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame | undefined }): ReactElement {
+export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame | undefined; qr: string; code: string; joinHost: string }): ReactElement {
     const { shell, driver, game } = props;
     return (
         <div className="pause-backing">
+            <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
             <section className="pause-card">
                 {shell.screen === "howTo"
                     ? <><h2>How to play {game?.name ?? ""}</h2><ol className="steps">{game?.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol></>
@@ -190,7 +196,7 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         return <GamePage shell={shell} driver={driver} game={game} />;
     }
     if (shell.screen === "players") {
-        return <PlayersPage shell={shell} driver={driver} />;
+        return <PlayersPage shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
     }
     return null;
 }

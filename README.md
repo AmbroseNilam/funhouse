@@ -19,6 +19,11 @@ this repository was written in that window.
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
 provider, OpenAI's Realtime API used only as a reader, behind a small interface in `providers/openai/speech.ts`.
 
+## Credits
+
+Paintings are AI-generated with Meta's Muse Image. The host's words and voice are AI too. The
+lantern, icons and share image are drawn in code, with no AI art in them.
+
 ## Layout
 
 | Path | Owns |

@@ -82,7 +82,6 @@ export function App(): ReactElement {
                     </form>
                 </div>
                 <HostAtTable moment={moment} code={code} look={look} />
-                <small className="credit">Art made with Muse Image</small>
             </section>
 
             <section className="shelf-section" aria-labelledby="games">
@@ -101,7 +100,6 @@ export function App(): ReactElement {
                     ))}
                 </ul>
                 <div className="plank" />
-                <small className="credit">Art made with Muse Image</small>
             </section>
 
             <section className="hears" aria-labelledby="hears">
@@ -134,7 +132,7 @@ export function App(): ReactElement {
 
             <footer className="foot">
                 <a className="paper card host-card" href="/screen/"><strong>Host on a TV</strong><span>It takes a second.</span><em>Start a room</em></a>
-                <p className="fine">Your mic is only on while you hold, and the TV shows who's talking. Built with Meta's Muse models; art made with Muse Image.</p>
+                <p className="fine">Your mic is only on while you hold, and the TV shows who's talking. Built with Meta's Muse models.</p>
             </footer>
         </main>
     );
