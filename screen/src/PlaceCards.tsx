@@ -21,7 +21,7 @@ function cardState(seat: Seat, turn: Turn | null, touched: boolean): string {
     const up: boolean = turn?.kind === "one" && turn.playerId === seat.playerId;
     const done: boolean = turn?.kind === "everyone" && turn.doneIds.includes(seat.playerId) === true;
     return [
-        seat.connected === false ? "away" : "",
+        seat.connected === false && seat.phoneDown === true ? "away" : "",
         seat.out === true ? "out" : "",
         seat.connected === true && seat.phoneDown === true ? "phone-down" : "",
         seat.talking === true || touched === true ? "lifted" : "",

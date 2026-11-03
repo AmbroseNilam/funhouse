@@ -17,33 +17,27 @@ const VOICE_ID: string = "JBFqnCBsd6RMkjVDRZzb";
 /** Longest wait for a line to finish. */
 const LINE_TIME_LIMIT_MILLISECONDS: number = 30000;
 
-/** A voice that can step in, with the same connection handling as the room's other voices. */
-export interface FallbackSpeech extends TextToSpeech {
-    warm(): void;
-    close(): void;
-}
-
 /** ElevenLabs implementation of the text-to-speech boundary. */
 export class ElevenLabsSpeech implements TextToSpeech {
     public readonly mediaType: string = "audio/pcm;rate=24000";
-    private readonly fallback: FallbackSpeech;
+    private readonly fallback: TextToSpeech;
 
     /**
      * Creates the voice.
      * @param fallback speaks any line this one can't start.
      */
-    public constructor(fallback: FallbackSpeech) {
+    public constructor(fallback: TextToSpeech) {
         this.fallback = fallback;
     }
 
     /** Nothing to open ahead of time; each line is its own request. */
     public warm(): void {
-        // The fallback only connects if it's needed.
+        // No connection stays open.
     }
 
-    /** Closes the fallback, if it was ever used. */
+    /** Nothing to close; each line is its own request. */
     public close(): void {
-        this.fallback.close();
+        // No connection stays open.
     }
 
     /**

@@ -17,7 +17,7 @@ this repository was written in that window.
 | Draw | Muse Image | Paintings drawn ahead of need: Werewolf's village through each phase, and the Twenty Doors secret for its reveal. `providers/meta/image.ts` |
 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
-provider, ElevenLabs, with OpenAI's Realtime API used only as a reader when ElevenLabs can't start a line or has no key, behind a small interface in `providers/openai/speech.ts`.
+provider, ElevenLabs. OpenAI's text-to-speech steps in for any line ElevenLabs can't start, and its Realtime API used only as a reader is the voice on a server with no ElevenLabs key, behind a small interface in `providers/openai/speech.ts`.
 
 ## Credits
 

@@ -18,6 +18,7 @@ import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessag
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
+import { OpenAiSpeech } from "../providers/openai/speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
@@ -129,7 +130,7 @@ function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
     if (TEXT_ONLY === true) {
         return new SilentSpeech();
     }
-    return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiRealtimeSpeech()) : new OpenAiRealtimeSpeech();
+    return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiSpeech()) : new OpenAiRealtimeSpeech();
 }
 
 /** Short, varied acknowledgements, rendered once per room and played sparingly. */
@@ -880,7 +881,7 @@ export class Room implements HostStage {
         }
         this.remarkedOn.add(gameId);
         this.lastRemarkAt = Date.now();
-        log(this.scope(), `remarked "${line.text}"`);
+        log(this.scope(), `remarked on ${gameId}`);
         this.host.remark(line.text);
         this.caption = { speaker: this.host.persona.name, text: line.text, final: true };
         this.broadcastScene();
@@ -927,7 +928,7 @@ export class Room implements HostStage {
         }
         this.lastGameStartAt = Date.now();
         this.gamePlayerIds = new Set(this.players.keys());
-        log(this.scope(), `starting ${installed.manifest.name} with ${count}`);
+        log(this.scope(), `starting ${installed.manifest.id} with ${count}`);
         this.caption = null;
         this.game = installed.create(this.gameStage());
         this.lastActivityAt = Date.now();
@@ -946,7 +947,7 @@ export class Room implements HostStage {
         if (this.game === null) {
             return;
         }
-        log(this.scope(), `ended ${this.game.manifest.name}`);
+        log(this.scope(), `ended ${this.game.manifest.id}`);
         this.game.stop();
         this.game = null;
         this.caption = null;
@@ -1043,6 +1044,7 @@ export class Room implements HostStage {
      */
     private onDisconnect(player: Player, code: number): void {
         player.connected = false;
+        this.onPresence(player, true);
         player.holdingToTalk = false;
         player.speaking = false;
         player.transcribe?.abort();
@@ -1062,6 +1064,10 @@ export class Room implements HostStage {
      * @param player the player who is leaving.
      */
     private removePlayer(player: Player): void {
+        if (player.phoneDownTimer !== null) {
+            clearTimeout(player.phoneDownTimer);
+            player.phoneDownTimer = null;
+        }
         if (player.leaveTimer !== null) {
             clearTimeout(player.leaveTimer);
             player.leaveTimer = null;
@@ -1443,7 +1449,7 @@ export class Room implements HostStage {
                 this.recentAcknowledgements.shift();
             }
             this.acknowledgedLastTurn = true;
-            log(this.scope(), `acknowledged with "${ACKNOWLEDGEMENTS[index] ?? ""}"`);
+            log(this.scope(), `acknowledged with line ${index}`);
             this.voice.sayRecorded(pcm);
         }, ACKNOWLEDGE_AFTER_MILLISECONDS);
     }
@@ -1729,8 +1735,7 @@ export class Room implements HostStage {
      */
     private waitingLine(playerId: string): string {
         const waitingFor: Player | undefined = this.players.get(playerId);
-        const absent: boolean = waitingFor?.phoneDown === true || waitingFor?.connected === false;
-        return `Waiting for ${waitingFor?.name ?? "someone"}${absent === true ? ". Their phone is down." : ""}`;
+        return `Waiting for ${waitingFor?.name ?? "someone"}${waitingFor?.phoneDown === true ? ". Their phone is down." : ""}`;
     }
 
     /**
