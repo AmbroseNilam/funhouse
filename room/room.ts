@@ -1378,6 +1378,7 @@ export class Room implements HostStage {
         player.holdingToTalk = down;
         this.broadcastShell();
         if (down === true) {
+            this.game?.event({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
             this.startPress(player);
             return;
         }
@@ -1553,9 +1554,7 @@ export class Room implements HostStage {
         const session: TranscribeSession = new TranscribeSession({ mode, keywords: this.keywords() }, {
             onSpeechStart: (): void => {
                 player.speaking = true;
-                const started: RoomEvent = { type: "speechStarted", at: Date.now(), playerId: player.playerId };
-                this.record(started);
-                this.game?.event(started);
+                this.record({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
                 this.broadcastScene();
             },
             onTranscript: (text: string, isFinal: boolean): void => {
