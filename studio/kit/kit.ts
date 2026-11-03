@@ -104,6 +104,23 @@ export function appears(seen: readonly string[], text: string): boolean {
 }
 
 /**
+ * Whether a value appears as a whole word, spaced or punctuated in any way, in any of the lines:
+ * "Eve" and "E-v-e" are found, "never" is not taken for "Eve".
+ * @param seen the lines.
+ * @param text the value.
+ * @returns true when it appears.
+ */
+export function appearsAsWord(seen: readonly string[], text: string): boolean {
+    const needle: string = squash(text);
+    if (needle === "") {
+        return false;
+    }
+    const spaced: string = [...needle].join("[^\\p{L}\\p{N}]*");
+    const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
+    return seen.some((line: string) => whole.test(line) === true);
+}
+
+/**
  * Checks the box.
  * @param box the box.
  * @param hidden values that must never appear anywhere in the box, such as fallback secrets.

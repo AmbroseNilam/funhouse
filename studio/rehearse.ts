@@ -8,7 +8,7 @@
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
-import { appears, squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
+import { appears, appearsAsWord, squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
 
 export { appears };
 import { BECAUSE_KIND, deepFreeze } from "./kit/primitives.ts";
@@ -124,7 +124,7 @@ export function findLeaks(viewer: string, seen: readonly string[], hidden: reado
     for (const value of hidden) {
         const near: string | undefined = value.near;
         const lines: readonly string[] = near === undefined ? seen : seen.filter((line: string) => squash(line).includes(squash(near)) === true);
-        const found: boolean = near === undefined ? appears(seen, value.text) : lines.some((line: string) => appears([line], value.text) === true);
+        const found: boolean = near === undefined ? appears(seen, value.text) : appearsAsWord(lines, value.text);
         if (value.seenBy.includes(viewer) === false && found === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }

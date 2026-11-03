@@ -15,13 +15,13 @@ import type { Scope, ScopedFact } from "../shared/visibility.ts";
 import type { GuessingBlueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
-import type { KitGame } from "./kit/kit.ts";
+import type { HiddenValue, KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantDecisions, type PlantState } from "./kits/plant.ts";
 import { checkBlueprint } from "./check.ts";
 import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
-import { appears, PAPER_PLAYERS, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
+import { appears, findLeaks, PAPER_PLAYERS, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
 
 /**
  * Twenty Doors from a blueprint.
@@ -223,6 +223,15 @@ describe("rehearsal catches planted faults", () => {
         assert.equal(appears(["A good book."], "ok"), false);
         assert.equal(appears(["It fits in a box."], "ox"), false);
         assert.equal(appears(["xo"], "ox"), false, "short words are matched whole, not reversed");
+    });
+
+    it("a name beside the word Plant only as a whole word", () => {
+        const eve: HiddenValue[] = [{ label: "who the Plant is", text: "Eve", seenBy: ["paper1"], near: "plant" }];
+        assert.deepEqual(findLeaks("host", ["You never know who the Plant is."], eve), [], "not inside another word");
+        assert.equal(findLeaks("host", ["The Plant is Eve."], eve).length, 1);
+        assert.equal(findLeaks("host", ["The Plant is E-v-e."], eve).length, 1, "spelled out");
+        const table: CartridgePlayer[] = ["Eve", "Spoon", "Candle", "Saucer"].map((name: string, index: number) => ({ playerId: `paper${index + 1}`, name }));
+        assert.deepEqual(checkBlueprint(LEADING_QUESTIONS_BLUEPRINT, { players: table }).problems, [], "a whole game with a player named Eve finds nothing");
     });
 
     it("a timer that is due fires before the next thing a player does", () => {
