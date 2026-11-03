@@ -91,8 +91,8 @@ export interface RehearsalOptions {
 export interface RoleCheck<State> {
     /** The same game, with the role dealt to the player in this seat. */
     deal(seat: number, players: readonly CartridgePlayer[]): KitGame<State>;
-    /** Events to play, the same whoever holds the role. */
-    script: readonly RoomEvent[];
+    /** Events and player inputs to play, the same whoever holds the role. */
+    script: readonly TraceEvent[];
 }
 
 /**
@@ -421,7 +421,7 @@ function roleProblems<State>(check: RoleCheck<State> | undefined, players: reado
  */
 export function roleBlindness<State>(
     games: readonly { game: KitGame<State>; holderId: string }[],
-    script: readonly RoomEvent[],
+    script: readonly TraceEvent[],
     players: readonly CartridgePlayer[] = PAPER_PLAYERS,
 ): string[] {
     const problems: string[] = [];
@@ -433,7 +433,7 @@ export function roleBlindness<State>(
             if (cartridge.outcome(step.state) !== null) {
                 break;
             }
-            step = cartridge.onEvent(step.state, event);
+            step = event.type === "input" ? cartridge.apply(step.state, event.playerId, event.actionId) : cartridge.onEvent(step.state, event);
             if (cartridge.outcome(step.state) !== null) {
                 break;
             }

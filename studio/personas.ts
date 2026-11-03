@@ -4,12 +4,11 @@
 // rehearses. Between them they reach every ending a kit has.
 
 import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
-import type { RoomEvent } from "../shared/timeline.ts";
 import type { PlantBlueprint } from "./blueprint.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
 import type { KitGame } from "./kit/kit.ts";
-import type { Glimpse, Move, Persona, RoleCheck } from "./rehearse.ts";
+import type { Glimpse, Move, Persona, RoleCheck, TraceEvent } from "./rehearse.ts";
 
 /** Seconds a quiet table lets pass at a time. */
 const QUIET_SECONDS: number = 30;
@@ -212,18 +211,23 @@ export function plantPersonas(): Persona<PlantState>[] {
 /**
  * The plant kit's role check: the same game with the Plant dealt to each seat in turn, and a
  * script played the same way whoever it is: the word comes, reading ends, two questions are
- * asked and ruled. Every view but the Plant's must stay the same.
+ * asked and ruled, someone finds the word, and two people vote. Every view but the Plant's must
+ * stay the same, through the vote and up to the reveal.
  * @param blueprint the game.
  * @returns the check.
  */
 export function plantRoleCheck(blueprint: PlantBlueprint): RoleCheck<PlantState> {
-    const script: RoomEvent[] = [
+    const script: TraceEvent[] = [
         { type: "contentReady", at: 0, text: "teapot" },
         { type: "timerFired", at: 10, timerId: "read" },
         { type: "speechEnded", at: 12, playerId: "paper1", text: "Is it metal?" },
         { type: "hostRuled", at: 13, ruling: "no", detail: "", playerId: "paper1" },
         { type: "speechEnded", at: 15, playerId: "paper2", text: "Is it in a kitchen?" },
         { type: "hostRuled", at: 16, ruling: "yes", detail: "", playerId: "paper2" },
+        { type: "speechEnded", at: 18, playerId: "paper3", text: "Is it a teapot?" },
+        { type: "hostRuled", at: 19, ruling: "correct", detail: "", playerId: "paper3" },
+        { type: "input", playerId: "paper1", actionId: `${VOTE_PREFIX}paper2` },
+        { type: "input", playerId: "paper2", actionId: `${VOTE_PREFIX}paper1` },
     ];
     return {
         deal(seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> {

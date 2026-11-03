@@ -203,6 +203,16 @@ describe("rehearsal catches planted faults", () => {
             })),
         };
         assert.match(rehearseMany(leadingQuestions, plantPersonas(), [1], { roleCheck: marked }).problems.join("\n"), /screen could tell/);
+        const voteOnly: RoleCheck<PlantState> = {
+            script: healthy.script,
+            deal: (seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> => faulty(healthy.deal(seat, players), (rules: Cartridge<PlantState>) => ({
+                publicScene: (state: PlantState): Scene => {
+                    const scene: Scene = rules.publicScene(state);
+                    return state.phase === "vote" ? { ...scene, blocks: [...scene.blocks, { type: "text", text: `${state.voters.indexOf(state.plantId)}` }] } : scene;
+                },
+            })),
+        };
+        assert.match(rehearseMany(leadingQuestions, plantPersonas(), [1], { roleCheck: voteOnly }).problems.join("\n"), /screen could tell/, "a tell only in the vote is caught");
     });
 
     it("a word split across two strings, and a short word, without mistaking it inside another", () => {
