@@ -1,7 +1,7 @@
 // Who's at the table: a place card for each person, standing along the table's edge in their seat
 // colour. The card itself says how they are, so the table stays quiet: it lifts and shows their
 // full name while they talk or touch their phone, lies flat with a tick once they've gone, and
-// fades when they're away. Anyone who's only watching is counted, not listed.
+// fades when they're away or their phone is down. Anyone who's only watching is counted, not listed.
 
 import type { ReactElement } from "react";
 import type { Seat } from "../../shared/shell.ts";
@@ -22,6 +22,7 @@ function cardState(seat: Seat, turn: Turn | null, touched: boolean): string {
     const done: boolean = turn?.kind === "everyone" && turn.doneIds.includes(seat.playerId) === true;
     return [
         seat.connected === false ? "away" : "",
+        seat.connected === true && seat.phoneDown === true ? "phone-down" : "",
         seat.talking === true || touched === true ? "lifted" : "",
         up === true ? "up" : "",
         done === true ? "done" : "",

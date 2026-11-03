@@ -159,7 +159,7 @@ export class Shell {
             canNext: this.focus < count - 1,
             driving: playerId === this.driverId,
             driverName: driver?.name ?? "",
-            controllerFree: driver?.connected !== true,
+            controllerFree: driver?.connected !== true || driver.phoneDown === true,
             watching: false,
             canDrive,
             backLabel: canDrive === true ? this.backLabel() : null,
@@ -173,7 +173,7 @@ export class Shell {
      * @returns true when the controller is theirs or free.
      */
     private mayDrive(playerId: string): boolean {
-        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true);
+        const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true && seat.phoneDown === false);
         return this.driverId === playerId || driverPresent === false || Date.now() - this.lastDriveAt >= DRIVER_IDLE_MILLISECONDS;
     }
 

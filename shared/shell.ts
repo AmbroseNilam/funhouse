@@ -31,6 +31,8 @@ export interface Seat {
     driving: boolean;
     /** True while they're holding to talk. */
     talking: boolean;
+    /** True when their phone has left the app or locked, though it may still be connected. */
+    phoneDown: boolean;
     /** True when they joined after this game began, so they're only watching it. */
     watching: boolean;
 }

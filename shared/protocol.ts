@@ -22,7 +22,8 @@ export type PhoneMessage =
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
     | { type: "touched" }
-    | { type: "released" };
+    | { type: "released" }
+    | { type: "presence"; away: boolean };
 
 /** Room to phone. */
 export type RoomToPhoneMessage =
@@ -70,6 +71,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "holdToTalk") {
         return typeof message.down === "boolean";
+    }
+    if (message.type === "presence") {
+        return typeof message.away === "boolean";
     }
     if (message.type === "touched" || message.type === "released") {
         return true;

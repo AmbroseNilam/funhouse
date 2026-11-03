@@ -82,7 +82,7 @@ const PHONE_VERSION: string = await readFile(join(STAGE_ROOTS.phone ?? "", "inde
 const ROOM_LIMIT_ON: boolean = process.env.GAME_ROOM_TEXT_ONLY !== "1";
 
 /** How often the server checks on every connection. Cloudflare closes one after 100 s idle. */
-const HEARTBEAT_MILLISECONDS: number = 30000;
+const HEARTBEAT_MILLISECONDS: number = 15000;
 
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });

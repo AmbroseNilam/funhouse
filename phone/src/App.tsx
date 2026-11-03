@@ -476,13 +476,21 @@ export function App(): ReactElement {
             connect();
         };
 
+        /** Tells the room this phone has left the app or come back. Best effort: an iPhone may not get to send it. */
+        const reportPresence = (): void => {
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current.send(JSON.stringify({ type: "presence", away: document.visibilityState !== "visible" } satisfies PhoneMessage));
+            }
+        };
         connect();
         document.addEventListener("visibilitychange", onVisible);
+        document.addEventListener("visibilitychange", reportPresence);
         return (): void => {
             stopped = true;
             window.clearTimeout(retryTimer);
             window.clearTimeout(silenceTimer);
             document.removeEventListener("visibilitychange", onVisible);
+            document.removeEventListener("visibilitychange", reportPresence);
             socketRef.current?.close();
             captureRef.current?.stop();
         };

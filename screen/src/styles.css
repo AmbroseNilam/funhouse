@@ -157,6 +157,8 @@
     .place-cards .lifted .full-name { display: block; }
     .place-cards .up { box-shadow: 0 0 0 calc(4 * var(--u)) var(--lamp), calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .place-cards .away { opacity: 0.45; box-shadow: none; outline: calc(2 * var(--u)) dashed var(--paper); outline-offset: calc(-2 * var(--u)); }
+    .place-cards .phone-down { opacity: 0.6; box-shadow: none; translate: 0 calc(6 * var(--u)); padding-right: calc(46 * var(--u)); }
+    .place-cards .phone-down::after { content: ""; position: absolute; right: calc(14 * var(--u)); top: 40%; width: calc(22 * var(--u)); height: calc(9 * var(--u)); background: var(--paper); box-shadow: 0 calc(3 * var(--u)) 0 #000; }
     .place-cards .done { translate: 0 calc(6 * var(--u)); box-shadow: none; opacity: 0.8; padding-right: calc(46 * var(--u)); }
     .place-cards .tick { display: none; position: absolute; right: calc(16 * var(--u)); top: 22%; width: calc(12 * var(--u)); height: calc(22 * var(--u)); border: solid var(--paper); border-width: 0 calc(5 * var(--u)) calc(5 * var(--u)) 0; rotate: 40deg; }
     .place-cards .done .tick { display: block; }

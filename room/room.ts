@@ -55,6 +55,8 @@ interface Player {
     /** When this seat last pressed to talk, or zero if it never has. */
     lastPressAt: number;
     talkMilliseconds: number;
+    phoneDown: boolean;
+    phoneDownTimer: NodeJS.Timeout | null;
     /** The seat's colour, on the TV and as the phone's background. */
     colour: string;
     /** A short message replacing the phone's status line, such as a press that wasn't heard. */
@@ -109,6 +111,9 @@ const LULL_CHECK_MILLISECONDS: number = 5000;
 
 /** How long a mood stays on the lantern's face after the line ends. */
 const MOOD_LINGER_MILLISECONDS: number = 1500;
+
+/** How long a phone must be away from the app before the TV says so. */
+const PHONE_DOWN_AFTER_MILLISECONDS: number = 3000;
 
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
@@ -451,6 +456,10 @@ export class Room implements HostStage {
                 this.onHoldToTalk(player, message.down);
                 return;
             }
+            if (message.type === "presence") {
+                this.onPresence(player, message.away);
+                return;
+            }
             if (message.type === "released") {
                 this.onReleased(player);
                 return;
@@ -664,7 +673,7 @@ export class Room implements HostStage {
         const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, talkMilliseconds: 0, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -697,6 +706,11 @@ export class Room implements HostStage {
         const previous: WebSocket = player.socket;
         player.socket = socket;
         player.connected = true;
+        if (player.phoneDownTimer !== null) {
+            clearTimeout(player.phoneDownTimer);
+            player.phoneDownTimer = null;
+        }
+        player.phoneDown = false;
         if (player.holdingToTalk === true) {
             player.holdingToTalk = false;
             this.finishPress(player);
@@ -757,12 +771,13 @@ export class Room implements HostStage {
     private shellStage(): ShellStage {
         return {
             games: (): ShelfGame[] => GAMES.map((game: InstalledGame) => this.shelfGame(game)),
-            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk }: Player) => ({
+            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk, phoneDown }: Player) => ({
                 playerId,
                 name,
                 colour,
                 connected,
                 talking: holdingToTalk,
+                phoneDown,
                 watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
             })),
             startGame: (gameId: string): void => { this.startGame(gameId); },
@@ -1516,6 +1531,43 @@ export class Room implements HostStage {
         return `Talk so far: ${present.map((player: Player) => `${player.name} ${Math.round((player.talkMilliseconds / total) * 100)}%`).join(", ")}.`;
     }
 
+    /**
+     * Notes that a phone has left the app or come back. Leaving only counts after a moment, so a
+     * quick glance elsewhere doesn't flicker on the TV, and it ends any hold, since nobody's thumb is there.
+     * @param player whose phone.
+     * @param away true when it has gone.
+     */
+    private onPresence(player: Player, away: boolean): void {
+        if (player.phoneDownTimer !== null) {
+            clearTimeout(player.phoneDownTimer);
+            player.phoneDownTimer = null;
+        }
+        if (away === true) {
+            this.onHoldToTalk(player, false);
+            player.phoneDownTimer = setTimeout(() => {
+                player.phoneDownTimer = null;
+                this.setPhoneDown(player, true);
+            }, PHONE_DOWN_AFTER_MILLISECONDS);
+            return;
+        }
+        this.setPhoneDown(player, false);
+    }
+
+    /**
+     * Records whether a phone is down and tells the TV and the other phones.
+     * @param player whose phone.
+     * @param down true when it's down.
+     */
+    private setPhoneDown(player: Player, down: boolean): void {
+        if (player.phoneDown === down) {
+            return;
+        }
+        player.phoneDown = down;
+        log(this.scope(), `${player.playerId} phone ${down === true ? "down" : "back"}`);
+        this.broadcastShell();
+        this.refreshPhones();
+    }
+
     /** Cancels a pending acknowledgement. */
     private cancelAcknowledgement(): void {
         if (this.acknowledgeTimer === null) {
@@ -1647,7 +1699,7 @@ export class Room implements HostStage {
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
         if (turn?.kind === "one") {
-            return turn.playerId === player.playerId ? { yours: true, line: "Your turn" } : { yours: false, line: `Waiting for ${this.players.get(turn.playerId)?.name ?? "someone"}` };
+            return turn.playerId === player.playerId ? { yours: true, line: "Your turn" } : { yours: false, line: this.waitingLine(turn.playerId) };
         }
         if (turn?.kind !== "everyone" || turn.playerIds.includes(player.playerId) === false) {
             return null;
@@ -1656,7 +1708,18 @@ export class Room implements HostStage {
             return { yours: true, line: "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
-        return left.length === 1 ? { yours: false, line: `Waiting for ${this.players.get(left[0] ?? "")?.name ?? "someone"}` } : { yours: false, line: `Waiting for ${left.length} people` };
+        return left.length === 1 ? { yours: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, line: `Waiting for ${left.length} people` };
+    }
+
+    /**
+     * Says who a phone is waiting for, and if their phone is down, so nobody waits in the dark.
+     * @param playerId who.
+     * @returns the line.
+     */
+    private waitingLine(playerId: string): string {
+        const waitingFor: Player | undefined = this.players.get(playerId);
+        const absent: boolean = waitingFor?.phoneDown === true || waitingFor?.connected === false;
+        return `Waiting for ${waitingFor?.name ?? "someone"}${absent === true ? ". Their phone is down." : ""}`;
     }
 
     /**
