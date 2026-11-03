@@ -1,24 +1,30 @@
 // The pieces of the table the page shows: the TV's lantern with a slip of what it just said, a
-// paper role card as a phone shows it, and the exchange where a player speaks and the vote on
-// the TV changes. All drawn from the same card, paper and hard shadows as the TV itself.
+// phone as it really looks mid-game, and the vote that really happens in Werewolf, played once
+// the visitor scrolls to it. Pictures below the first screen wait until they're nearly in view.
 
-import { useRef, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
 import { Lantern } from "../../screen/src/Lantern.tsx";
 import type { HostSpeaker } from "../../screen/src/speaker.ts";
 
 /** What the visitor has just done. */
-export type Moment = "arrived" | "atHost" | "atCode" | "typing" | "codeReady" | "turnedAway";
+export type Moment = "arrived" | "atStart" | "atCode" | "typing" | "codeReady" | "turnedAway";
 
 /** One line per moment, in the host's voice. */
 const LINES: Record<Moment, string> = {
-    arrived: "Evening. I've got the rules, the timer and the secrets. You've got the snacks.",
-    atHost: "Put me on the TV. I'll take it from there.",
+    arrived: "Evening. I've got the rules and the timer. You've got the snacks.",
+    atStart: "Put me on the TV. I'll take it from there.",
     atCode: "It's the four big letters on the TV.",
     typing: "Keep going.",
     codeReady: "That's a room. In you go.",
     turnedAway: "That room's not open. Check the TV and try again.",
 };
+
+/** The names used in the demos, drawn from a list rather than made up on the spot. */
+export const NAMES: { owner: string; speaker: string; accused: string; third: string } = { owner: "Vanessa", speaker: "Steph", accused: "Kevin", third: "Carlos" };
+
+/** How far below the viewport a picture may be before it starts loading. */
+const LOAD_AHEAD: string = "600px 0px";
 
 /**
  * The host on the page: the lantern, awake and looking where the visitor is, with a slip of what
@@ -39,40 +45,78 @@ export function HostAtTable(props: { moment: Moment; code: string; look: number 
 }
 
 /**
- * A phone in the middle of Werewolf: the seer's paper card, and the touch surface under it.
+ * Reports whether an element has come within reach of the viewport, once.
+ * @param rootMargin how far outside the viewport counts as near.
+ * @returns a ref to attach and whether it has been near.
+ */
+function useNear<Element extends HTMLElement>(rootMargin: string): { ref: React.RefObject<Element | null>; near: boolean } {
+    const ref = useRef<Element | null>(null);
+    const [near, setNear] = useState<boolean>(false);
+    useEffect(() => {
+        const element: Element | null = ref.current;
+        if (element === null || near === true) {
+            return;
+        }
+        if ("IntersectionObserver" in window === false) {
+            setNear(true);
+            return;
+        }
+        const observer: IntersectionObserver = new IntersectionObserver((entries: IntersectionObserverEntry[]) => {
+            if (entries.some((entry: IntersectionObserverEntry) => entry.isIntersecting === true) === true) {
+                setNear(true);
+                observer.disconnect();
+            }
+        }, { rootMargin });
+        observer.observe(element);
+        return (): void => { observer.disconnect(); };
+    }, [near, rootMargin]);
+    return { ref, near };
+}
+
+/**
+ * A picture that starts loading only when it's nearly on screen, so the first screen isn't
+ * waiting behind it.
+ * @param props the picture's source, alt text and size.
+ * @returns the element.
+ */
+export function LatePicture(props: { src: string; alt: string; width: number; height: number; className?: string }): ReactElement {
+    const { ref, near } = useNear<HTMLImageElement>(LOAD_AHEAD);
+    return <img ref={ref} className={props.className ?? ""} src={near === true ? props.src : undefined} alt={props.alt} width={props.width} height={props.height} />;
+}
+
+/**
+ * A phone in the middle of Werewolf, as it really looks: the name at the top, a secret dealt face
+ * down that shows only while pressed, and the talk line on the surface below.
  * @returns the element.
  */
 export function PhoneCard(): ReactElement {
     return (
         <div className="phone">
-            <div className="phone-top"><span>Dana</span><span>KPTR</span></div>
-            <div className="paper role-card">
-                <strong>You're the seer</strong>
-                <p>Each night, pick one player and learn whether they're a werewolf. Share it wisely, or don't.</p>
-                <small>Priya is a werewolf.</small>
-            </div>
-            <div className="touch-surface"><span>Rest a thumb here to talk</span></div>
+            <div className="phone-top"><span /><strong>{NAMES.owner}</strong><span>···</span></div>
+            <div className="peek"><em>Press and hold to peek</em></div>
+            <div className="touch-surface"><span>Press and hold to talk</span></div>
         </div>
     );
 }
 
 /**
- * Someone speaks, the TV writes it down, the tally moves, the host answers. The page's one piece
- * of motion: the slips arrive in order, then it rests.
+ * What happens at a Werewolf vote: someone says they're ready, the host calls it, the phones
+ * vote, the tally fills, and the host says who's out. Plays once, when it comes into view.
  * @returns the element.
  */
-export function Exchange(): ReactElement {
+export function VoteDemo(): ReactElement {
+    const { ref, near } = useNear<HTMLDivElement>("-80px 0px");
+    const label: string = `${NAMES.speaker} says the table is ready to vote; ${HOST_NAME} calls it; the phones vote and ${NAMES.accused} is out`;
     return (
-        <div className="exchange" role="img" aria-label="A player says a name out loud; the vote on the TV changes and the host answers">
-            <p className="slip step-1"><strong>Jo</strong>I think it's Priya, honestly.</p>
-            <table className="tally step-2">
-                <tbody>
-                    <tr className="moved"><td>Priya</td><td className="count" /></tr>
-                    <tr><td>Jo</td><td>1</td></tr>
-                    <tr><td>Leo</td><td>1</td></tr>
-                </tbody>
-            </table>
-            <p className="slip from-host step-3"><strong>{HOST_NAME}</strong>Noted. That's three on Priya.</p>
+        <div ref={ref} className={`exchange ${near === true ? "playing" : ""}`} role="img" aria-label={label}>
+            <p className="slip step-1"><strong>{NAMES.speaker}</strong>{HOST_NAME}, we're ready to vote.</p>
+            <p className="slip from-host step-2"><strong>{HOST_NAME}</strong>Alright. Phones up.</p>
+            <div className="ballot step-3">
+                <span className="ballot-note">Everyone votes on their phone.</span>
+                <div className="tally-row"><span>{NAMES.accused}</span><i className="bar bar-accused" /><b className="count count-accused" /></div>
+                <div className="tally-row"><span>{NAMES.third}</span><i className="bar bar-third" /><b className="count count-third" /></div>
+            </div>
+            <p className="slip from-host step-4"><strong>{HOST_NAME}</strong>{NAMES.accused} is out.</p>
         </div>
     );
 }

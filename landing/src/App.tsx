@@ -1,13 +1,13 @@
-// The front door, drawn as the TV's own table so the first screen could be mistaken for it: the
-// painted room, the lantern, and two paper cards, host on a TV or join from a phone. Below it,
-// the shelf of games, the host hearing someone, what a phone holds, and what to install (nothing).
-// The QR code skips this page and goes straight to the phone. Follows docs/DESIGN.md in the
-// planning notes.
+// The front door, drawn as the TV's own table: the painted room, the lantern, two paper cards to
+// start on a TV or join from a phone, and the real TV and phone beside them. Then the shelf of
+// games, the vote the host really runs, and what a phone holds. The QR code skips this page and
+// goes straight to the phone. Copy is in the host's first person and says only what the code
+// does. Follows docs/DESIGN.md and docs/LANDING-RESEARCH.md in the planning notes.
 
 import { useState, type FormEvent, type ReactElement } from "react";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import { GAMES, type GameBox } from "./games.ts";
-import { Exchange, HostAtTable, PhoneCard, type Moment } from "./table.tsx";
+import { HostAtTable, LatePicture, NAMES, PhoneCard, VoteDemo, type Moment } from "./table.tsx";
 
 /** Letters in a room code. */
 const ROOM_CODE_LENGTH: number = 4;
@@ -20,6 +20,15 @@ const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full"
 
 /** The slight tilts the boxes sit at, like real boxes on a shelf. */
 const BOX_TILTS: number[] = [-1.2, 0.8, -0.6];
+
+/** What the mic does, in the host's words; the same line wherever it comes up. */
+const MIC_LINE: string = "Hold to talk. Until then, I hear nothing.";
+
+/** Where to watch a game and read the code. Empty until they exist; nothing shows until then. */
+const PROOF: { video: string; code: string } = { video: "", code: "" };
+
+/** True on a phone-sized screen, where the big painting isn't worth its weight. */
+const SMALL_SCREEN: boolean = matchMedia("(max-width: 600px)").matches;
 
 /** The landing page. */
 export function App(): ReactElement {
@@ -39,49 +48,73 @@ export function App(): ReactElement {
         setMoment(next.length === ROOM_CODE_LENGTH ? "codeReady" : next.length > 0 ? "typing" : "atCode");
     };
 
+    const atStart = (): void => {
+        setMoment("atStart");
+        setLook(-1);
+    };
+
     return (
         <main className="landing">
             <section className="table">
-                <img className="room-art" src="/screen/art/hero.webp" alt="" />
-                <header className="heading">
-                    <p className="name">{PRODUCT_NAME}</p>
-                    <h1>Game night. Nobody has to host.</h1>
-                    <p className="plain">
-                        {HOST_NAME} is an AI host on your TV. It runs the game, hears each of you on your own phone, and keeps your secrets.
-                        Scan a code and play.
-                    </p>
-                </header>
-                <div className="cards">
-                    <a className="paper card host-card" href="/screen/" onMouseEnter={() => { setMoment("atHost"); setLook(-1); }} onFocus={() => { setMoment("atHost"); setLook(-1); }}>
-                        <strong>Host on a TV</strong>
-                        <span>Open this on the big screen. A code and a QR appear, and I say hello.</span>
-                        <em>Start a room</em>
-                    </a>
-                    <form className="paper card join-card" onSubmit={join}>
-                        <strong>Join from your phone</strong>
-                        {MISSING_ROOM !== null ? <span className="turned-away" role="alert">Room {MISSING_ROOM} isn't open. Check the TV for the code.</span> : null}
-                        {FULL_ROOM !== null ? <span className="turned-away" role="alert">Room {FULL_ROOM} is full.</span> : null}
-                        <label htmlFor="room-code">The four letters on the TV</label>
-                        <div className="code-row">
-                            <input
-                                id="room-code"
-                                value={code}
-                                onChange={(event) => { typeCode(event.target.value); }}
-                                onFocus={() => { setLook(1); setMoment(ready === true ? "codeReady" : code.length > 0 ? "typing" : "atCode"); }}
-                                placeholder="KPTR"
-                                size={ROOM_CODE_LENGTH}
-                                maxLength={ROOM_CODE_LENGTH}
-                                autoCapitalize="characters"
-                                autoComplete="off"
-                                autoCorrect="off"
-                                spellCheck={false}
-                                enterKeyHint="go"
-                            />
-                            <button type="submit" disabled={ready === false}>Join</button>
+                {SMALL_SCREEN === false ? <img className="room-art" src="/screen/art/hero.webp" alt="" /> : null}
+                <div className="table-inner">
+                    <header className="heading">
+                        <p className="name">{PRODUCT_NAME}</p>
+                        <h1>Game night. Nobody has to host.</h1>
+                        <p className="plain">
+                            Party games with an AI host that hears you. The game's on the TV, your phone is the controller and the mic, and there's nothing to install.
+                        </p>
+                    </header>
+                    <div className="cards">
+                        <div className="start-side">
+                            <a className="paper card start-card" href="/screen/" onMouseEnter={atStart} onFocus={atStart}>
+                                <strong>Start on a TV</strong>
+                                <span>Open this on the big screen. A code and a QR appear, and I say hello.</span>
+                                <em>Start a room</em>
+                            </a>
+                            <p className="hosting-line">Hosting? <a href="/screen/">Open this site on a TV or laptop.</a></p>
+                            <p className="try-alone">One person can try it: a laptop, a phone, five minutes of Twenty Doors.</p>
                         </div>
-                    </form>
+                        <form className="paper card join-card" onSubmit={join}>
+                            <strong>Join from your phone</strong>
+                            {MISSING_ROOM !== null ? <span className="turned-away" role="alert">Room {MISSING_ROOM} isn't open. Check the TV for the code.</span> : null}
+                            {FULL_ROOM !== null ? <span className="turned-away" role="alert">Room {FULL_ROOM} is full.</span> : null}
+                            <label htmlFor="room-code">The four letters on the TV</label>
+                            <div className="code-row">
+                                <input
+                                    id="room-code"
+                                    value={code}
+                                    onChange={(event) => { typeCode(event.target.value); }}
+                                    onFocus={() => { setLook(1); setMoment(ready === true ? "codeReady" : code.length > 0 ? "typing" : "atCode"); }}
+                                    size={ROOM_CODE_LENGTH}
+                                    maxLength={ROOM_CODE_LENGTH}
+                                    autoCapitalize="characters"
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    spellCheck={false}
+                                    enterKeyHint="go"
+                                />
+                                <button type="submit" disabled={ready === false}>Join</button>
+                            </div>
+                            <small className="mic-note">{MIC_LINE}</small>
+                        </form>
+                    </div>
+                    <div className="product">
+                        <figure className="shot-tv">
+                            <img
+                                src="/landing/shots/tv.webp"
+                                alt={`The TV: a shelf of three game boxes, a card with the room code and QR, and ${HOST_NAME} the lantern saying hello`}
+                                width="1600"
+                                height="900"
+                            />
+                        </figure>
+                        <figure className="shot-phone">
+                            <img src="/landing/shots/phone.webp" alt={`${NAMES.owner}'s phone: a plain orange surface that says Slide your thumb, Watch the TV`} width="585" height="1190" />
+                        </figure>
+                        <p className="product-note">The real TV and {NAMES.owner}'s phone. No app, just the browser.</p>
+                    </div>
+                    <HostAtTable moment={moment} code={code} look={look} />
                 </div>
-                <HostAtTable moment={moment} code={code} look={look} />
             </section>
 
             <section className="shelf-section" aria-labelledby="games">
@@ -90,7 +123,7 @@ export function App(): ReactElement {
                 <ul className="shelf">
                     {GAMES.map((game: GameBox, index: number) => (
                         <li key={game.name} className="box" style={{ rotate: `${BOX_TILTS[index] ?? 0}deg` }}>
-                            <img src={game.art} alt={game.alt} loading="lazy" width="1024" height="1024" />
+                            <LatePicture src={game.art} alt={game.alt} width={1024} height={1024} />
                             <div className="box-label">
                                 <strong>{game.name}</strong>
                                 <p>{game.line}</p>
@@ -104,35 +137,36 @@ export function App(): ReactElement {
 
             <section className="hears" aria-labelledby="hears">
                 <div className="hears-copy">
-                    <h2 id="hears">It hears you.</h2>
+                    <h2 id="hears">I know who said what.</h2>
                     <p className="plain">
-                        Every phone is its own mic, so I always know who said what. Accuse your mate, shout an answer, ask me a rule.
-                        I'll answer you, by name if I have to.
+                        Every phone is its own mic. Accuse your friend, shout an answer, ask me a rule, and I answer you, by name if I have to.
+                        When the table's ready to vote, say so, and I call it.
                     </p>
+                    <p className="plain mic-big">{MIC_LINE}</p>
                 </div>
-                <Exchange />
+                <VoteDemo />
             </section>
 
             <section className="secrets" aria-labelledby="secrets">
                 <div className="hears-copy">
                     <h2 id="secrets">Your secrets stay in your hand.</h2>
-                    <p className="plain">The TV shows the room. Your phone shows you. Same moment, two screens. Nothing to look down at until there's a secret to keep.</p>
+                    <p className="plain">
+                        The TV shows the room. Your phone shows you, and only while you press. A phone left on the table gives nothing away, and I never see
+                        who's who either.
+                    </p>
                 </div>
                 <PhoneCard />
             </section>
 
-            <section className="nothing" aria-labelledby="nothing">
-                <h2 id="nothing">Nothing to install.</h2>
-                <ul className="notes">
-                    <li className="paper"><strong>Any TV</strong><span>A laptop turned to the room, a smart TV's browser, or a cast tab.</span></li>
-                    <li className="paper"><strong>Any phone</strong><span>Scan the code and you're in. Your friends need nothing.</span></li>
-                    <li className="paper"><strong>No accounts</strong><span>A name is all I ask for.</span></li>
-                </ul>
-            </section>
-
             <footer className="foot">
-                <a className="paper card host-card" href="/screen/"><strong>Host on a TV</strong><span>It takes a second.</span><em>Start a room</em></a>
-                <p className="fine">Your mic is only on while you hold, and the TV shows who's talking. Built with Meta's Muse models.</p>
+                <a className="paper card start-card" href="/screen/"><strong>Start on a TV</strong><span>It takes a second.</span><em>Start a room</em></a>
+                {PROOF.video !== "" || PROOF.code !== "" ? (
+                    <p className="proof">
+                        {PROOF.video !== "" ? <a href={PROOF.video}>Watch a game</a> : null}
+                        {PROOF.code !== "" ? <a href={PROOF.code}>Read the code</a> : null}
+                    </p>
+                ) : null}
+                <p className="fine">No accounts. Just a name and the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
             </footer>
         </main>
     );
