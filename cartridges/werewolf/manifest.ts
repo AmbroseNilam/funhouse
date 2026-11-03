@@ -22,17 +22,18 @@ export const WEREWOLF_MANIFEST: CartridgeManifest = {
     ],
     phases: [
         { id: "roles", hostBrief: "Tell everyone to look at their phone privately and keep it to themselves. One or two sentences.", listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },
-        { id: "night", hostBrief: "One or two hushed sentences: everyone closes their eyes, and those with something to do do it on their phones.", listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },
+        { id: "night", hostBrief: "One or two hushed sentences: everyone closes their eyes and keeps their phone face down, and those with something to do do it quietly.", listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },
         { id: "dawn", hostBrief: "Announce in one or two sentences what you're told happened overnight. Don't accuse anyone.", listening: { "*": "hostSpeaking" }, hostMayInterject: true, silenceSeconds: 0 },
         {
             id: "discussion",
             hostBrief: "They're arguing among themselves. Reply exactly (quiet) unless someone says your name or asks you something; then answer in a sentence. You don't know who is what, so never hint that you do.",
             listening: { "*": "holdToTalk", spectator: "muted" },
             hostMayInterject: true,
+            hostMostlyQuiet: true,
             silenceSeconds: 12,
             hostRulings: { vote: "the group says they're ready to vote. Write [[vote]] first, then one short line calling it." },
         },
-        { id: "vote", hostBrief: "They're voting on their phones, and you'll be told the result. Reply exactly (quiet) unless spoken to.", listening: { "*": "holdToTalk", spectator: "muted" }, hostMayInterject: true, silenceSeconds: 0 },
+        { id: "vote", hostBrief: "They're voting on their phones, and you'll be told the result. Reply exactly (quiet) unless spoken to.", listening: { "*": "holdToTalk", spectator: "muted" }, hostMayInterject: true, hostMostlyQuiet: true, silenceSeconds: 0 },
         { id: "end", hostBrief: "Recap the game in character and offer another round.", listening: { "*": "holdToTalk" }, hostMayInterject: true, silenceSeconds: 0 },
     ],
 };

@@ -42,6 +42,8 @@ export interface RunningGame {
     allowsRuling(ruling: string): boolean;
     /** True when the host may speak up unprompted right now. */
     hostMayInterject(): boolean;
+    /** True when players are mostly talking to each other, not the host. */
+    hostMostlyQuiet(): boolean;
     /** What the host needs to know right now, safe for it to act on. */
     brief(): string;
     scene(): Scene;
@@ -138,6 +140,14 @@ export class GameSession<State> implements RunningGame {
      */
     public allowsRuling(ruling: string): boolean {
         return this.phase()?.hostRulings?.[ruling] !== undefined;
+    }
+
+    /**
+     * Whether players are mostly talking to each other in this phase.
+     * @returns true when the host only reacts to its name.
+     */
+    public hostMostlyQuiet(): boolean {
+        return this.phase()?.hostMostlyQuiet === true;
     }
 
     /**

@@ -1696,6 +1696,10 @@ export class Room implements HostStage {
      * @param said what they said.
      */
     private scheduleFiller(said: string): void {
+        const named: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true;
+        if (this.game?.hostMostlyQuiet() === true && named === false) {
+            return;
+        }
         const longEnough: boolean = said.split(/\s+/).length >= FILLER_MINIMUM_WORDS;
         const eligible: boolean = longEnough === true && this.filledLastTurn === false && Math.random() < FILLER_CHANCE;
         this.filledLastTurn = false;

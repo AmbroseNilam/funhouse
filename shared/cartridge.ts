@@ -32,6 +32,8 @@ export interface PhaseSpec {
     listening: Record<string, ListeningMode>;
     /** Whether the host may speak unprompted during this phase. */
     hostMayInterject: boolean;
+    /** True when players mostly talk to each other, so the host only reacts when named. */
+    hostMostlyQuiet?: boolean;
     /** Seconds of silence before the host is woken; 0 disables the silence trigger. */
     silenceSeconds: number;
     /**
