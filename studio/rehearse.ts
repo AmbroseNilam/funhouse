@@ -8,7 +8,9 @@
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
-import { squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
+import { appears, squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
+
+export { appears };
 import { BECAUSE_KIND, deepFreeze } from "./kit/primitives.ts";
 
 /** Most moves a rehearsal may take before it is stopped as never ending. */
@@ -108,28 +110,6 @@ export function stringsIn(value: unknown): string[] {
         return [];
     }
     return Object.entries(value).flatMap(([key, inner]: [string, unknown]) => (key === "src" || key === "backdrop" ? [] : stringsIn(inner)));
-}
-
-/**
- * Whether a hidden value appears in what a viewer sees, spaced or punctuated in any way. Values of
- * three letters or more are also found reversed or split across two strings; shorter ones only as
- * whole words, so "ox" and "O X" are caught but "box" is not taken for it.
- * @param seen the viewer's strings.
- * @param text the hidden value.
- * @returns true when it appears.
- */
-export function appears(seen: readonly string[], text: string): boolean {
-    const needle: string = squash(text);
-    if (needle === "") {
-        return false;
-    }
-    if (needle.length < 3) {
-        const spaced: string = [...needle].join("[^\\p{L}\\p{N}]*");
-        const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
-        return [...seen, seen.join(" ")].some((candidate: string) => whole.test(candidate) === true);
-    }
-    const reversed: string = [...needle].reverse().join("");
-    return [...seen.map(squash), squash(seen.join(""))].some((candidate: string) => candidate.includes(needle) === true || candidate.includes(reversed) === true);
 }
 
 /**

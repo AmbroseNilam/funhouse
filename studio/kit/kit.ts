@@ -82,9 +82,31 @@ export function squash(text: string): string {
 }
 
 /**
+ * Whether a hidden value appears in what a viewer sees, spaced or punctuated in any way. Values of
+ * three letters or more are also found reversed or split across two strings; shorter ones only as
+ * whole words, so "ox" and "O X" are caught but "box" is not taken for it.
+ * @param seen the viewer's strings.
+ * @param text the hidden value.
+ * @returns true when it appears.
+ */
+export function appears(seen: readonly string[], text: string): boolean {
+    const needle: string = squash(text);
+    if (needle === "") {
+        return false;
+    }
+    if (needle.length < 3) {
+        const spaced: string = [...needle].join("[^\\p{L}\\p{N}]*");
+        const whole: RegExp = new RegExp(`(^|[^\\p{L}\\p{N}])${spaced}($|[^\\p{L}\\p{N}])`, "iu");
+        return [...seen, seen.join(" ")].some((candidate: string) => whole.test(candidate) === true);
+    }
+    const reversed: string = [...needle].reverse().join("");
+    return [...seen.map(squash), squash(seen.join(""))].some((candidate: string) => candidate.includes(needle) === true || candidate.includes(reversed) === true);
+}
+
+/**
  * Checks the box.
  * @param box the box.
- * @param hidden values that must never appear in a remark, such as fallback secrets.
+ * @param hidden values that must never appear anywhere in the box, such as fallback secrets.
  * @returns the problems, in plain words.
  */
 export function boxProblems(box: Box, hidden: readonly string[]): string[] {
@@ -102,9 +124,11 @@ export function boxProblems(box: Box, hidden: readonly string[]): string[] {
         if (remark.split(/\s+/).filter((word: string) => word !== "").length > REMARK_WORDS || remark.includes("!") === true) {
             problems.push(`A remark is too long or shouts: "${remark}".`);
         }
-        const squashed: string = squash(remark);
-        if (hidden.some((secret: string) => squash(secret).length >= 3 && squashed.includes(squash(secret)) === true) === true) {
-            problems.push("A remark gives away a secret.");
+    }
+    const shown: [string, readonly string[]][] = [["name", [box.name]], ["pitch", [box.pitch]], ["how to play", box.howToPlay], ["remark", box.remarks], ["keyword", box.keywords]];
+    for (const [field, texts] of shown) {
+        if (hidden.some((secret: string) => texts.some((text: string) => appears([text], secret) === true)) === true) {
+            problems.push(`A ${field} gives away a secret.`);
         }
     }
     return problems;

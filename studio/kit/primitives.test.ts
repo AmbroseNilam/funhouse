@@ -79,6 +79,10 @@ describe("shared checks", () => {
     it("refuses a remark that gives away a secret, however it is spaced, and a long or shouting one", () => {
         assert.deepEqual(boxProblems(BOX, ["platypus"]), []);
         assert.equal(boxProblems({ ...BOX, remarks: ["It's a p-l-a-t-y-p-u-s."] }, ["platypus"]).length, 1);
+        assert.match(boxProblems({ ...BOX, pitch: "Guess the platypus." }, ["platypus"]).join(" "), /pitch gives away/);
+        assert.match(boxProblems({ ...BOX, howToPlay: ["It's a whisk."] }, ["whisk"]).join(" "), /how to play gives away/);
+        assert.match(boxProblems({ ...BOX, keywords: ["yes", "ox"] }, ["ox"]).join(" "), /keyword gives away/);
+        assert.match(boxProblems({ ...BOX, name: "Whisk Off" }, ["whisk"]).join(" "), /name gives away/);
         assert.equal(boxProblems({ ...BOX, remarks: ["One two three four five six seven eight nine."] }, []).length, 1);
         assert.equal(boxProblems({ ...BOX, remarks: ["Go!"] }, []).length, 1);
         assert.equal(boxProblems({ ...BOX, minPlayers: Number.NaN }, []).length, 1);

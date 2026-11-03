@@ -176,7 +176,7 @@ describe("guessing checks and copying", () => {
     it("refuses a remark that gives away a fallback secret", () => {
         const leaky: GuessingBlueprint = structuredClone(TWENTY_DOORS_BLUEPRINT);
         leaky.box.remarks = ["It's not a whisk. Or is it."];
-        assert.match(blueprintProblems(leaky).join(" "), /gives away a secret/);
+        assert.match(blueprintProblems(leaky).join(" "), /remark gives away a secret/);
     });
 
     it("keeps an installed game and a running game apart from the blueprint they came from", () => {
