@@ -175,7 +175,20 @@ export class GameSession<State> implements RunningGame {
         if (this.state === null) {
             return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: this.manifest.name }] };
         }
-        return this.cartridge.publicScene(this.state);
+        const scene: Scene = this.cartridge.publicScene(this.state);
+        const phaseId: string = this.cartridge.phaseOf(this.state);
+        const held: number | undefined = this.heldTimers.get(phaseId);
+        const endsAt: number | undefined = this.timerEnds.get(phaseId);
+        // A countdown shows the time really left, so a TV that opens or reloads part way through agrees with the rules.
+        for (const block of scene.blocks) {
+            if (block.type === "timer" && held !== undefined) {
+                block.seconds = Math.ceil(held);
+            }
+            if (block.type === "timer" && held === undefined && endsAt !== undefined) {
+                block.seconds = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+            }
+        }
+        return scene;
     }
 
     /**

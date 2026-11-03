@@ -59,7 +59,8 @@ export class ElevenLabsSpeech implements TextToSpeech {
             console.warn("elevenlabs voice failed before any audio");
         }
         if (started === false && request.signal?.aborted !== true) {
-            yield* this.fallback.speak(request);
+            const limit: AbortSignal = AbortSignal.timeout(LINE_TIME_LIMIT_MILLISECONDS);
+            yield* this.fallback.speak({ ...request, signal: request.signal === undefined ? limit : AbortSignal.any([request.signal, limit]) });
         }
     }
 

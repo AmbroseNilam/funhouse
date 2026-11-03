@@ -1798,12 +1798,12 @@ export class Room implements HostStage {
 
     /** Sends the current scene to every screen. */
     private broadcastScene(): void {
+        this.broadcastToScreens({ type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
         const outKey: string = (this.game?.outIds() ?? []).join(",");
         if (outKey !== this.lastOutKey) {
             this.lastOutKey = outKey;
             this.broadcastShell();
         }
-        this.broadcastToScreens({ type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
     }
 
     /**
