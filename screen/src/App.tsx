@@ -264,6 +264,15 @@ export function App(): ReactElement {
                     leanRef.current = message;
                     return;
                 }
+                if (message.type === "heardYou") {
+                    setTouchedId(message.playerId);
+                    window.clearTimeout(touchTimerRef.current);
+                    touchTimerRef.current = window.setTimeout(() => { setTouchedId(null); }, TOUCH_SHOWN_MILLISECONDS);
+                    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches === false) {
+                        document.querySelector(".host-spot .lantern-body")?.animate([{ translate: "0 0" }, { translate: "0 10px" }, { translate: "0 0" }], { duration: 260, easing: "ease-out" });
+                    }
+                    return;
+                }
                 if (message.type === "seatTouched") {
                     setTouchedId(message.playerId);
                     window.clearTimeout(touchTimerRef.current);

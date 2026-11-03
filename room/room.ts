@@ -85,11 +85,23 @@ const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", nu
  */
 const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
 
-/** How soon after a thumb lifts the livelier host reacts, for it to feel like being heard. */
-const REACTION_AFTER_RELEASE_MILLISECONDS: number = 100;
+/** The livelier host's filler only plays if the reply still hasn't started this long after a thumb lifts; people hear anything sooner as not listening. */
+const FILLER_AFTER_RELEASE_MILLISECONDS: number = 600;
 
-/** Reactions that can't disagree with what comes next, because the ruling isn't known yet. */
-const NEUTRAL_REACTIONS: string[] = ["Hm.", "Okay.", "Mm-hm.", "Let's see.", "Alright."];
+/** A press shorter than this gets a real reply with nothing in front of it. */
+const FILLER_MINIMUM_WORDS: number = 3;
+
+/** Chance an eligible press gets a filler; repeated fillers soon grate (arXiv 2508.11781). */
+const FILLER_CHANCE: number = 0.5;
+
+/** Fillers that can't disagree with what comes next, because the ruling isn't known yet. */
+const NEUTRAL_REACTIONS: string[] = ["Hm.", "Let's see.", "Okay."];
+
+/** After a question, only thinking sounds; anything else sounds like an answer. */
+const QUESTION_REACTIONS: string[] = ["Hm.", "Let's see."];
+
+/** How a spoken question usually starts, for when the transcript has no question mark. */
+const QUESTION_START: RegExp = /^(who|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
 
 /** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
 const ACKNOWLEDGE_CHANCE: number = 0.6;
@@ -330,6 +342,8 @@ export class Room implements HostStage {
     private releasedAt: number = 0;
     /** The last thumb lift, which the timeline log counts from. */
     private lastLiftAt: number = 0;
+    /** True when the previous heard press got a filler; two in a row never play. */
+    private filledLastTurn: boolean = false;
     private replyClockAt: number = 0;
     private lastLullPlayerId: string | null = null;
     private moodTimer: NodeJS.Timeout | null = null;
@@ -1537,6 +1551,7 @@ export class Room implements HostStage {
         this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
         this.scheduleAcknowledgement(said);
+        this.scheduleFiller(said);
     }
 
     /**
@@ -1675,18 +1690,41 @@ export class Room implements HostStage {
         this.lastLiftAt = this.releasedAt;
         this.logMoment(`release ${player.playerId}`);
         this.cancelAcknowledgement();
-        this.acknowledgeTimer = setTimeout(() => {
-            this.acknowledgeTimer = null;
-            this.playReaction();
-        }, REACTION_AFTER_RELEASE_MILLISECONDS);
+        this.broadcastToScreens({ type: "heardYou", playerId: player.playerId });
     }
 
-    /** Plays one neutral recorded reaction that hasn't been heard lately. */
-    private playReaction(): void {
-        if (this.voice.isBusy() === true) {
+    /**
+     * Sets up a filler in the livelier host for a press now heard, in case the reply runs late.
+     * @param said what they said.
+     */
+    private scheduleFiller(said: string): void {
+        if (this.lively() === false) {
             return;
         }
-        const usable = (text: string, index: number): boolean => NEUTRAL_REACTIONS.includes(text) === true && this.acknowledgements[index] !== undefined;
+        const longEnough: boolean = said.split(/\s+/).length >= FILLER_MINIMUM_WORDS;
+        const eligible: boolean = longEnough === true && this.filledLastTurn === false && Math.random() < FILLER_CHANCE;
+        this.filledLastTurn = false;
+        if (eligible === false) {
+            return;
+        }
+        const question: boolean = said.endsWith("?") === true || QUESTION_START.test(said) === true;
+        this.cancelAcknowledgement();
+        this.acknowledgeTimer = setTimeout(() => {
+            this.acknowledgeTimer = null;
+            this.playReaction(question);
+        }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
+    }
+
+    /**
+     * Plays one recorded filler, not the same as the last, if the host is working on a reply it hasn't started.
+     * @param question true when the press was a question.
+     */
+    private playReaction(question: boolean): void {
+        if (this.hostThinking === false || this.voice.isBusy() === true) {
+            return;
+        }
+        const pool: string[] = question === true ? QUESTION_REACTIONS : NEUTRAL_REACTIONS;
+        const usable = (text: string, index: number): boolean => pool.includes(text) === true && this.acknowledgements[index] !== undefined;
         const indexes: number[] = ACKNOWLEDGEMENTS.flatMap((text: string, index: number) => (usable(text, index) === true ? [index] : []));
         const fresh: number[] = indexes.filter((index: number) => this.recentAcknowledgements.at(-1) !== index);
         const index: number | undefined = fresh[Math.floor(Math.random() * fresh.length)];
@@ -1696,6 +1734,7 @@ export class Room implements HostStage {
         }
         this.recentAcknowledgements.push(index);
         this.recentAcknowledgements.splice(0, Math.max(0, this.recentAcknowledgements.length - ACKNOWLEDGE_NO_REPEAT));
+        this.filledLastTurn = true;
         this.logMoment("filler");
         this.voice.sayRecorded(pcm);
     }

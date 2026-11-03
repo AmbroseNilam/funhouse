@@ -45,6 +45,7 @@ export type ScreenMessage =
 export type RoomToScreenMessage =
     | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string; turn: Turn | null }
     | { type: "seatTouched"; playerId: string }
+    | { type: "heardYou"; playerId: string }
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
