@@ -6,8 +6,10 @@
 // question on either, it is printed as a WARN, since that is the host's judgement, not the rules.
 //
 // Run it on a machine with model keys:
-//   GAME_ROOM_TEXT_ONLY=1 GAME_ROOM_STUDIO_SHELF=1 npm run room
-//   node tools/scenarios/leading-questions.ts      (in a second terminal)
+//   GAME_ROOM_TEXT_ONLY=1 npm run room
+//   ROOM_STUDIO=1 node tools/scenarios/leading-questions.ts      (in a second terminal)
+// ROOM_STUDIO=1 makes the fake screen open its room with ?studio=1, the only kind of room whose
+// shelf has Leading Questions; the room itself needs no flag.
 // A pass prints PASS as its last line, takes about two minutes and costs a few cents of model
 // calls. The room's log should also show "[studio] starting blueprint leadingQuestions on the
 // plant kit", which proves the blueprint version is the one that ran.

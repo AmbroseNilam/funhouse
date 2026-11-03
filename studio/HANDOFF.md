@@ -26,9 +26,11 @@ for the original phases, with the changes below.
   `Cartridge<State>`. `studio/rehearse.ts`: a structural rehearsal with paper players and no
   model. `studio/shelf.ts`: installs blueprints and swaps them in for hand-written games with
   the same id. `studio/games/twenty-doors.ts`: Twenty Doors as a blueprint.
-- With `GAME_ROOM_STUDIO_SHELF=1` the server uses the blueprint Twenty Doors in place of the
-  hand-written one. The scenario `tools/scenarios/twenty-doors.ts` passed against it once, in
-  text-only mode. No log line proves which version ran, so add one early.
+- A room opened with `/screen/?studio=1` gets the Studio shelf: the blueprint Twenty Doors in
+  place of the hand-written one, and blueprint games with new ids after the hand-written ones.
+  Every other room is unchanged. The server-wide `GAME_ROOM_STUDIO_SHELF` flag this note first
+  described is gone; the room needs no flag, and a scenario asks for a Studio room with
+  `ROOM_STUDIO=1`. Starting a blueprint game logs which one ran.
 - `master` now carries an optional `turn` on the cartridge contract (`shared/turn.ts`): `anyone`,
   `everyone` with done ids, `one`, and `secret` with a label only. Map asking to `anyone`, a vote
   to `everyone`, and dealing a role to `secret`. Never show a count on a secret turn.

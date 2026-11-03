@@ -408,7 +408,7 @@ export function App(): ReactElement {
     if (state.roomClosed === true) {
         return (
             <main className="tv on-home">
-                <button className="sound-gate" onClick={() => { location.assign(new URLSearchParams(location.search).get("lively") === "1" ? "/screen/?lively=1" : "/screen/"); }} autoFocus>
+                <button className="sound-gate" onClick={() => { const kept: string = new URLSearchParams([...new URLSearchParams(location.search)].filter(([name, value]: [string, string]) => (name === "lively" || name === "studio") && value === "1")).toString(); location.assign(kept === "" ? "/screen/" : `/screen/?${kept}`); }} autoFocus>
                     <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
                     <span className="gate-title">This room has closed</span>
                     <span className="gate-detail">A new room gets a new code, so everyone will need to join again.</span>

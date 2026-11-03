@@ -9,7 +9,7 @@ import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Drawing } from "../providers/meta/image.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
-import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import { GAMES } from "../cartridges/index.ts";
 import { studioShelf } from "../studio/shelf.ts";
 import { RoomDirectory } from "./directory.ts";
 import { AddressLimits, BUDGET } from "./limits.ts";
@@ -89,10 +89,8 @@ const HEARTBEAT_MILLISECONDS: number = 15000;
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
-/** With GAME_ROOM_STUDIO_SHELF=1 the shelf holds the blueprint versions of games in place of the hand-written ones, so a scenario can prove a blueprint plays the same. */
-const SHELF: InstalledGame[] = process.env.GAME_ROOM_STUDIO_SHELF === "1" ? studioShelf(GAMES) : GAMES;
-
-const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, SHELF);
+/** A room opened with ?studio=1 gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. */
+const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, GAMES, studioShelf(GAMES));
 const limits: AddressLimits = new AddressLimits();
 setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 
@@ -111,14 +109,15 @@ function addressOf(request: IncomingMessage): string {
  * Opens a room for an address, if it and the day's budget allow.
  * @param address who's asking.
  * @param lively true when it's being opened to try the livelier host.
+ * @param studio true when it's being opened with the Studio shelf.
  * @returns the room, or null.
  */
-function openRoom(address: string, lively: boolean): Room | null {
+function openRoom(address: string, lively: boolean, studio: boolean): Room | null {
     const within: boolean = ROOM_LIMIT_ON === false || limits.mayOpenRoom(address, (code: string) => directory.find(code) !== undefined);
     if (within === false || BUDGET.hasRoom() === false) {
         return null;
     }
-    const room: Room | null = directory.create(lively);
+    const room: Room | null = directory.create(lively, studio);
     if (room !== null) {
         limits.roomOpened(address, room.code);
     }
@@ -243,7 +242,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "roomClosed");
             return;
         }
-        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1");
+        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("studio") === "1");
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;

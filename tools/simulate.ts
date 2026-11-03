@@ -34,6 +34,22 @@ export async function waitFor(condition: () => boolean, label: string): Promise<
     }
 }
 
+/**
+ * What the fake screen asks the room for: an existing room with ROOM_CODE, and a room with the
+ * Studio shelf with ROOM_STUDIO=1.
+ * @returns the query, possibly empty.
+ */
+function screenQuery(): string {
+    const query: URLSearchParams = new URLSearchParams();
+    if (process.env.ROOM_CODE !== undefined) {
+        query.set("room", process.env.ROOM_CODE);
+    }
+    if (process.env.ROOM_STUDIO === "1") {
+        query.set("studio", "1");
+    }
+    return query.toString();
+}
+
 /** A fake big screen: holds the latest scene and everything the host has said. */
 export class FakeScreen {
     public scene: Scene | null = null;
@@ -41,7 +57,7 @@ export class FakeScreen {
     public code: string = "";
     public thinking: boolean = false;
     public readonly hostLines: string[] = [];
-    private readonly socket: WebSocket = new WebSocket(`${ROOM_URL}/ws/screen${process.env.ROOM_CODE === undefined ? "" : `?room=${process.env.ROOM_CODE}`}`);
+    private readonly socket: WebSocket = new WebSocket(`${ROOM_URL}/ws/screen?${screenQuery()}`);
 
     /** Opens the screen and turns its sound on. */
     public constructor() {
