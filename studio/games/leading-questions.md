@@ -150,9 +150,11 @@ host, asked to start it, says how many more are needed and can offer Twenty Door
 talking over each other and the vote becomes noise. A second mode with two Plants would suit nine
 or ten; it is not built.
 
-**Someone leaves mid-round.** Anyone but the Plant just leaves: their question stays on the TV, and
-if the vote is open they are dropped from it, and it counts at once if everyone left has voted. The
-Plant leaving ends the round with the reveal: *The Plant left*, the word, and their name.
+**Someone leaves mid-round.** Anyone but the Plant just leaves while people are asking: their
+question stays on the TV. If the vote is open, it starts again for everyone still there, with a
+fresh clock: every ballot is cleared, because the leaver's own ballot is gone and any cast for them
+no longer means anything. The host says so in one line. The Plant leaving ends the round with the
+reveal: *The Plant left*, the word, and their name.
 
 **The Plant is too obvious.** That is the game working: they get caught, the tally shows it, and the
 host credits the giveaway question. The Plant's card tells them not to get caught, and that is all

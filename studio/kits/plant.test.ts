@@ -256,10 +256,19 @@ describe("leading questions: people leaving", () => {
         assert.match(stringsIn(game.cartridge.publicScene(ended.state)).join(" "), /Spoon was the Plant/);
     });
 
-    it("drops someone else from the vote, and counts at once if everyone left has voted", () => {
+    it("starts the vote again for everyone still here when someone else leaves mid-vote", () => {
         const { game, state } = startAsking(2);
-        const voting: PlantState = voteAll(game, ask(game, state, "paper1", "correct").state, { paper1: "paper3", paper2: "paper3", paper3: "paper1" }).state;
-        const ended: Step<PlantState> = on(game, voting, { type: "playerLeft", at: 9, playerId: "paper4" });
+        const voting: PlantState = voteAll(game, ask(game, state, "paper1", "correct").state, { paper1: "paper4", paper2: "paper4", paper3: "paper1" }).state;
+        const reopened: Step<PlantState> = on(game, voting, { type: "playerLeft", at: 9, playerId: "paper4" });
+        assert.equal(reopened.state.phase, "vote");
+        assert.deepEqual(reopened.state.votes, {}, "every ballot is cleared, including those cast for the leaver");
+        assert.deepEqual(reopened.state.voters, ["paper1", "paper2", "paper3"]);
+        assert.deepEqual(reopened.timers, { vote: 45 });
+        assert.equal(reopened.facts[0]?.kind, "revote");
+        const ballot: Control | undefined = game.cartridge.privateControls(reopened.state, "paper1")[0];
+        assert.ok(ballot?.type === "choice");
+        assert.deepEqual(ballot.options.map((option: ControlOption) => option.label), ["Spoon", "Candle"], "the leaver is no longer a choice");
+        const ended: Step<PlantState> = voteAll(game, reopened.state, { paper1: "paper3", paper2: "paper3", paper3: "paper1" });
         assert.equal(ended.state.result, "caught");
         const early: PlantState = on(game, state, { type: "playerLeft", at: 9, playerId: "paper4" }).state;
         assert.equal(early.players.length, 3);

@@ -363,18 +363,19 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
             const word: string = state.word === "" ? state.fallback : state.word;
             return finish({ ...state, word }, "plantLeft", `The Plant left the game, so the round is over. The word was ${word}.`, PLANT_DECISIONS.giveUp);
         }
-        const votes: Record<string, string> = Object.fromEntries(Object.entries(state.votes).filter(([voter]: [string, string]) => voter !== playerId));
         const next: PlantState = {
             ...state,
             players: state.players.filter((player: CartridgePlayer) => player.playerId !== playerId),
-            voters: state.voters.filter((voter: string) => voter !== playerId),
-            votes,
             unruled: state.unruled.filter((line: WaitingLine) => line.playerId !== playerId),
         };
-        if (next.phase === "vote" && next.voters.every((voter: string) => next.votes[voter] !== undefined) === true) {
-            return resolve(next);
+        if (next.phase !== "vote") {
+            return { state: next, facts: [] };
         }
-        return { state: next, facts: [] };
+        // Someone leaving mid-vote takes their ballot and makes every ballot cast for them meaningless,
+        // so the vote starts again for everyone still here, with a fresh clock.
+        const reopened: PlantState = { ...next, voters: next.players.map((player: CartridgePlayer) => player.playerId), votes: {} };
+        const text: string = `${nameOf(state, playerId)} left, so the vote starts again. Tell them in one line to vote again on their phones.`;
+        return { state: reopened, facts: because(publicFact("revote", text), PLANT_DECISIONS.vote), timers: { vote: decisions.voteSeconds } };
     };
 
     const cartridge: Cartridge<PlantState> = {
