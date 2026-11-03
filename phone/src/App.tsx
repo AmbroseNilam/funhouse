@@ -11,6 +11,7 @@ import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
+import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
 import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
 import { microphoneAllowed, startMicrophone, type MicrophoneCapture } from "./microphone.ts";
@@ -338,6 +339,20 @@ function CodeScreen(): ReactElement {
 }
 
 /**
+ * One setting that is on or off.
+ * @param props its name, its state and what to do when it changes.
+ * @returns the element.
+ */
+function SettingRow(props: { label: string; on: boolean; onChange: (on: boolean) => void }): ReactElement {
+    return (
+        <button className="setting" role="switch" aria-checked={props.on} onClick={() => { props.onChange(props.on === false); }}>
+            <span>{props.label}</span>
+            <span className="setting-state">{props.on === true ? "On" : "Off"}</span>
+        </button>
+    );
+}
+
+/**
  * The camera, looking for the code on the TV.
  * @param props onRoom gets the code; onEnd closes the camera, saying why if it couldn't be used.
  * @returns the element.
@@ -446,7 +461,10 @@ export function App(): ReactElement {
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings">("closed");
+    const [settings, setSettings] = useState<PhoneSettings>(readSettings);
+    const settingsRef = useRef<PhoneSettings>(settings);
+    settingsRef.current = settings;
     const [micRetried, setMicRetried] = useState<boolean>(false);
     const [micSilent, setMicSilent] = useState<"" | "stopped" | "quiet">("");
     const micSilentRef = useRef<"" | "stopped" | "quiet">("");
@@ -568,7 +586,7 @@ export function App(): ReactElement {
     // A nudge in the hand when it becomes this phone's turn; phones that can't simply don't.
     const myTurn: boolean = state.view?.turn?.yours === true;
     useEffect(() => {
-        if (myTurn === true && "vibrate" in navigator) {
+        if (myTurn === true && settingsRef.current.vibration === true && "vibrate" in navigator) {
             navigator.vibrate(TURN_BUZZ_MILLISECONDS);
         }
     }, [myTurn]);
@@ -646,6 +664,22 @@ export function App(): ReactElement {
         document.documentElement.style.background = seatColour ?? "";
         return (): void => { document.documentElement.style.background = ""; };
     }, [seatColour]);
+
+    const reactionsWanted: boolean = settings.reactions;
+    useEffect(() => {
+        if (state.stage === "joined" && state.connected === true && socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "reactions", wanted: reactionsWanted }));
+        }
+    }, [state.stage, state.connected, reactionsWanted]);
+
+    /**
+     * Applies and saves a change of settings.
+     * @param next the settings.
+     */
+    const changeSettings = (next: PhoneSettings): void => {
+        writeSettings(next);
+        setSettings(next);
+    };
 
     const send = (message: PhoneMessage): void => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -872,7 +906,7 @@ export function App(): ReactElement {
                 }
                 send({ type: "nav", action: { kind: "step", delta } });
                 learn("slide");
-                if ("vibrate" in navigator) {
+                if (settingsRef.current.vibration === true && "vibrate" in navigator) {
                     navigator.vibrate(STEP_BUZZ_MILLISECONDS);
                 }
             },
@@ -1055,7 +1089,7 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
@@ -1066,6 +1100,7 @@ export function App(): ReactElement {
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
+                                <button onClick={() => { setMenu("settings"); }}>Settings</button>
                                 <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
                             </>
@@ -1078,6 +1113,15 @@ export function App(): ReactElement {
                                     : <p className="mic-note">Another app may be using it. Close that app, then try again.</p>}
                                 <button className="primary" onClick={() => { void ensureMicrophone().then(() => { setMicRetried(true); }); }}>Try again</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); setMicRetried(false); }}>Keep playing without talking</button>
+                            </>
+                        ) : null}
+                        {menu === "settings" ? (
+                            <>
+                                <p>These stay on this phone.</p>
+                                <SettingRow label={`${HOST_NAME}'s quick reactions`} on={settings.reactions} onChange={(on: boolean) => { changeSettings({ ...settings, reactions: on }); }} />
+                                {"vibrate" in navigator ? <SettingRow label="Vibration" on={settings.vibration} onChange={(on: boolean) => { changeSettings({ ...settings, vibration: on }); }} /> : null}
+                                {view?.tapToTalk === true ? <SettingRow label="Talk button" on={settings.talkButton} onChange={(on: boolean) => { changeSettings({ ...settings, talkButton: on }); }} /> : null}
+                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
                         ) : null}
                         {menu === "credits" ? (

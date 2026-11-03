@@ -51,6 +51,8 @@ interface Player {
     /** Replaces the standby before the provider closes it for sitting idle. */
     standbyTimer: NodeJS.Timeout | null;
     holdingToTalk: boolean;
+    /** False when this phone's owner turned the host's quick reactions off. */
+    wantsReactions: boolean;
     /** Sessions whose press has not produced final text yet; a new press can overlap the last. */
     awaitingFinal: Set<TranscribeSession>;
     /** When this seat last pressed to talk, or zero if it never has. */
@@ -536,6 +538,10 @@ export class Room implements HostStage {
                 }
                 return;
             }
+            if (message.type === "reactions") {
+                player.wantsReactions = message.wanted;
+                return;
+            }
             if (message.type === "micSettings") {
                 log(this.scope(), `${player.playerId} mic settings: echo ${message.echoCancellation}, noise ${message.noiseSuppression}, gain ${message.autoGainControl}`);
                 return;
@@ -800,7 +806,7 @@ export class Room implements HostStage {
         const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -1590,7 +1596,7 @@ export class Room implements HostStage {
         }
         this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
-        this.scheduleFiller(said);
+        this.scheduleFiller(player, said);
     }
 
     /**
@@ -1693,9 +1699,13 @@ export class Room implements HostStage {
 
     /**
      * Sets up a filler for a press now heard, in case the reply runs late.
+     * @param player who spoke.
      * @param said what they said.
      */
-    private scheduleFiller(said: string): void {
+    private scheduleFiller(player: Player, said: string): void {
+        if (player.wantsReactions === false) {
+            return;
+        }
         const named: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true;
         if (this.game?.hostMostlyQuiet() === true && named === false) {
             return;
