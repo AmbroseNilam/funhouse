@@ -2,7 +2,7 @@
 
 An AI-hosted game night at [funhouse.live](https://funhouse.live). Friends scan a QR code with their phones and join a shared
 room. An AI host runs the night: it listens to every player on their own stream, talks back,
-draws on the big screen, keeps secrets, and can play too. Funhouse is the console; games
+draws on the big screen and keeps secrets. Funhouse is the console; games
 are cartridges: Twenty Doors, Quizmaster and Werewolf so far.
 
 Built during the Meta Global AI Developer Hackathon, Oct 26 to Nov 4, 2026. Everything in
@@ -13,7 +13,7 @@ this repository was written in that window.
 | Need | Model | How |
 | --- | --- | --- |
 | Hear every player | Muse Voice Transcribe | One realtime WebSocket session per phone, so the room always knows who said what without diarization. `providers/meta/transcribe.ts` |
-| Think and host | Muse Spark 1.3 | Streamed replies that are spoken as they are written, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as secrets and quiz questions. `providers/meta/spark.ts` |
+| Think and host | Muse Spark 1.3 | Streamed replies, spoken a sentence at a time as they arrive, opening with a `[[ruling]]` when the host judges something. It also writes game content, such as secrets and quiz questions. `providers/meta/spark.ts` |
 | Draw | Muse Image | Paintings drawn ahead of need: Werewolf's village through each phase, and the Twenty Doors secret for its reveal. `providers/meta/image.ts` |
 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
@@ -34,8 +34,8 @@ lantern, icons and share image are drawn in code, with no AI art in them.
 | `landing/` | The front door at `/`: host on a big screen, or join with a room code. |
 | `phone/` | The private stage, a web page opened from the QR code. Microphone capture lives here. |
 | `cartridges/` | Games. Each has a manifest, a rules core, and simulated-player tests. |
-| `providers/` | Meta and OpenAI clients. Provider details never leak past this folder. |
-| `tools/` | Latency probes and the `verify.py` guard. |
+| `providers/` | Meta, ElevenLabs and OpenAI clients. Provider details never leak past this folder. |
+| `tools/` | Latency probes, scripted games and the `verify.py` guard. |
 | `deploy/` | Containerfile for running the room anywhere. |
 
 ## Run
