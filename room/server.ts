@@ -105,14 +105,15 @@ function addressOf(request: IncomingMessage): string {
 /**
  * Opens a room for an address, if it and the day's budget allow.
  * @param address who's asking.
+ * @param lively true when it's being opened to try the livelier host.
  * @returns the room, or null.
  */
-function openRoom(address: string): Room | null {
+function openRoom(address: string, lively: boolean): Room | null {
     const within: boolean = ROOM_LIMIT_ON === false || limits.mayOpenRoom(address, (code: string) => directory.find(code) !== undefined);
     if (within === false || BUDGET.hasRoom() === false) {
         return null;
     }
-    const room: Room | null = directory.create();
+    const room: Room | null = directory.create(lively);
     if (room !== null) {
         limits.roomOpened(address, room.code);
     }
@@ -237,7 +238,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "roomClosed");
             return;
         }
-        const room: Room | null = existing ?? openRoom(address);
+        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1");
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;

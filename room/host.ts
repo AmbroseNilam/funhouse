@@ -12,6 +12,7 @@
 import { streamSpark, type SparkMessage } from "../providers/meta/spark.ts";
 import type { SpeechVoice } from "../providers/openai/speech.ts";
 import { HOST_NAME } from "../shared/brand.ts";
+import { HOST_MOODS, isHostMood, type HostMood } from "../shared/hostMood.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { log } from "./log.ts";
 
@@ -80,7 +81,27 @@ export interface HostStage {
     say(text: string, style: string): void;
     /** Drops everything queued and stops the voice mid-word. */
     stopSpeaking(): void;
+    /** True when this moment gets the livelier host being tried out. */
+    lively(): boolean;
+    /** Shows the mood of the line about to be spoken. */
+    showMood(mood: HostMood): void;
 }
+
+/** How each mood changes the delivery, kept slight so one voice carries from line to line. */
+const MOOD_DELIVERY: Record<HostMood, string> = {
+    easy: "",
+    smug: "A little pleased with yourself, a small private grin. Same voice, same pace.",
+    suspicious: "Lightly suspicious, one eyebrow up, a touch slower. Same voice, no drama.",
+    delighted: "Quietly delighted, a real smile you can hear. Same voice, no shouting.",
+    teasing: "Teasing a friend, warm and a little sly. Same voice, same pace.",
+    impressed: "Genuinely impressed, a small lift of surprise. Same voice, no gushing.",
+};
+
+/** What the livelier host is told on top of everything else. */
+const LIVELY_INSTRUCTIONS: string = [
+    `How you feel: write [[mood: word]] first in every reply you speak, choosing one word from ${HOST_MOODS.join(", ")}. It colours how the line is said and how you look. It never changes what's true, what you rule, or what you may reveal, and the word itself is never spoken. Use easy only for plain information. When someone tries a trick, picks up a clue, guesses, or gets close, let it show, and try not to use the same mood twice in a row.`,
+    "Your memory: once or twice in a game, when it fits, bring back something a player actually said earlier in the Earlier lines, in a few words. Only what's really there; never make one up, and never bring back anything that gives away a secret.",
+].join("\n");
 
 /** Most lines of conversation the host remembers. */
 const HISTORY_LIMIT: number = 40;
@@ -117,6 +138,7 @@ export class Host {
     private readonly pending: string[] = [];
     private wakeTimer: NodeJS.Timeout | null = null;
     private turn: AbortController | null = null;
+    private mood: HostMood = "easy";
     private readonly replies: RateWindow = new RateWindow(REPLIES_PER_MINUTE, 60000);
 
     /**
@@ -245,15 +267,20 @@ export class Host {
             log("host", `sent no text (${timing})`);
             return false;
         }
+        this.mood = "easy";
         const rest: string = this.applyRulings(reply, speakerId);
         const spoken: string = rest.trimStart().startsWith(QUIET_MARKER) === true ? "" : shorten(cleanSpeech(rest));
         if (spoken === "") {
             log("host", `stayed quiet (${timing})`);
             return true;
         }
-        log("host", `said ${spoken.length} characters (${timing})`);
+        log("host", `said ${spoken.length} characters${this.stage.lively() === true ? `, ${this.mood}` : ""} (${timing})`);
         this.stage.setThinking(false);
-        this.stage.say(spoken, this.persona.style);
+        const delivery: string = this.stage.lively() === true ? MOOD_DELIVERY[this.mood] : "";
+        if (this.stage.lively() === true) {
+            this.stage.showMood(this.mood);
+        }
+        this.stage.say(spoken, `${this.persona.style} ${delivery}`.trim());
         this.remember(`${this.persona.name}: ${spoken}`);
         return true;
     }
@@ -269,8 +296,14 @@ export class Host {
         let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
         while (match !== null) {
             const ruling: string = match[1] ?? "";
-            log("host", "made a ruling");
-            this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
+            const detail: string = (match[2] ?? "").toLowerCase();
+            if (ruling === "mood") {
+                this.mood = isHostMood(detail) === true ? detail : "easy";
+            }
+            if (ruling !== "mood") {
+                log("host", "made a ruling");
+                this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
+            }
             rest = rest.slice(match[0].length);
             match = RULING_PATTERN.exec(rest);
         }
@@ -297,7 +330,8 @@ export class Host {
             this.persona.character,
             "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet) and any [[ruling]] you are told you may make, which goes first and is never read aloud.",
             this.stage.brief(),
-        ].join("\n\n");
+            this.stage.lively() === true ? LIVELY_INSTRUCTIONS : "",
+        ].filter((part: string) => part !== "").join("\n\n");
     }
 
     /**

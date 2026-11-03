@@ -35,6 +35,8 @@ export interface RunningGame {
     event(event: RoomEvent): void;
     /** True when the current phase allows this ruling from the host. */
     allowsRuling(ruling: string): boolean;
+    /** True when the host may speak up unprompted right now. */
+    hostMayInterject(): boolean;
     /** What the host needs to know right now, safe for it to act on. */
     brief(): string;
     scene(): Scene;
@@ -114,6 +116,14 @@ export class GameSession<State> implements RunningGame {
      */
     public allowsRuling(ruling: string): boolean {
         return this.phase()?.hostRulings?.[ruling] !== undefined;
+    }
+
+    /**
+     * Whether the host may speak up unprompted: the phase allows it and the game is still going.
+     * @returns true when it may.
+     */
+    public hostMayInterject(): boolean {
+        return this.phase()?.hostMayInterject === true && this.outcome() === null;
     }
 
     /**

@@ -2,6 +2,7 @@
 // frames carry audio: phone to room is raw 24 kHz 16-bit mono PCM, room to screen is encoded
 // host speech. Both stages reduce messages into local state; the room is the only writer.
 
+import type { HostMood } from "./hostMood.ts";
 import type { ControlInput, PhoneView } from "./controls.ts";
 import type { Scene } from "./scene.ts";
 import type { NavAction, ShellView } from "./shell.ts";
@@ -42,7 +43,7 @@ export type RoomToScreenMessage =
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }
     | { type: "audioCancel" }
-    | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string }
+    | { type: "hostState"; thinking: boolean; speaking: boolean; hostName: string; mood: HostMood | null }
     | { type: "shell"; view: ShellView }
     | { type: "edge" }
     | { type: "lean"; x: number; y: number }

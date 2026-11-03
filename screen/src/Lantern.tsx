@@ -3,6 +3,7 @@
 // its voice. Loudness changes many times a second, so it writes CSS variables, not React state.
 
 import { useEffect, useRef, type CSSProperties, type ReactElement, type RefObject } from "react";
+import type { HostMood } from "../../shared/hostMood.ts";
 import type { HostSpeaker } from "./speaker.ts";
 
 /** How recent a microphone reading must be to count as someone talking. */
@@ -23,13 +24,15 @@ interface LanternProps {
     speaking: boolean;
     /** Where it's looking, from -1 (left) to 1 (right). */
     look: number;
+    /** How the current line feels, if it has a mood. */
+    mood?: HostMood | null;
 }
 
 /** The lantern. */
 export function Lantern(props: LanternProps): ReactElement {
     const rootRef = useRef<SVGSVGElement | null>(null);
     const thinkingSinceRef = useRef<number>(0);
-    const { micRef, speakerRef, awake, thinking, speaking, look } = props;
+    const { micRef, speakerRef, awake, thinking, speaking, look, mood } = props;
     if (thinking === false) {
         thinkingSinceRef.current = 0;
     }
@@ -58,7 +61,7 @@ export function Lantern(props: LanternProps): ReactElement {
     }, [micRef, speakerRef, awake, thinking, speaking]);
 
     return (
-        <svg ref={rootRef} className="lantern" data-state="asleep" viewBox="0 0 200 290" style={{ "--look": look } as CSSProperties} aria-hidden="true">
+        <svg ref={rootRef} className="lantern" data-state="asleep" data-mood={mood ?? "easy"} viewBox="0 0 200 290" style={{ "--look": look } as CSSProperties} aria-hidden="true">
             <path className="light-pool" d="M-70 284 L28 262 L172 262 L270 284 L190 296 L10 296 Z" />
             <g className="lantern-body">
                 <path className="brass-dark" d="M100 6 c-27 1 -42 21 -39 44 l10 -1 c-2 -18 11 -33 29 -33 c18 0 31 15 29 33 l10 1 c3 -23 -12 -43 -39 -44z" />

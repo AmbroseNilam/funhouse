@@ -40,9 +40,10 @@ export class RoomDirectory {
 
     /**
      * Opens a new room with an unused code.
+     * @param lively true to try the livelier host in this room.
      * @returns the room, or null when the server is at its limit.
      */
-    public create(): Room | null {
+    public create(lively: boolean = false): Room | null {
         if (this.rooms.size >= MAX_ROOMS) {
             return null;
         }
@@ -50,7 +51,7 @@ export class RoomDirectory {
         while (this.rooms.has(code) === true) {
             code = makeRoomCode();
         }
-        const room: Room = new Room(code, this.publicUrl);
+        const room: Room = new Room(code, this.publicUrl, lively);
         this.rooms.set(code, room);
         log(`room ${code}`, `opened (${this.rooms.size} open)`);
         return room;

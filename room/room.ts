@@ -25,6 +25,7 @@ import { streamSpark } from "../providers/meta/spark.ts";
 import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
+import type { HostMood } from "../shared/hostMood.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -77,8 +78,30 @@ const WAKE_DELAY_MILLISECONDS: Record<"speech" | "join" | "leave" | "screen", nu
  */
 const ACKNOWLEDGE_AFTER_MILLISECONDS: number = 800;
 
+/** The same wait for the livelier host, which reacts sooner. */
+const LIVELY_ACKNOWLEDGE_AFTER_MILLISECONDS: number = 500;
+
 /** Chance an eligible turn gets an acknowledgement, so they stay occasional. */
 const ACKNOWLEDGE_CHANCE: number = 0.6;
+
+/**
+/** The one game the livelier host is tried in, in rooms opened for it: moods, callbacks, quicker reactions and now and then speaking up. */
+const LIVELY_GAME: string = "twentyDoors";
+
+/** How long nothing may have happened before the host may speak up. */
+const LULL_MILLISECONDS: number = 30000;
+
+/** Least time between two times the host speaks up. With no room mic it can't tell if the table is deep in talk, so this stays rare. */
+const LULL_GAP_MILLISECONDS: number = 150000;
+
+/** Most times the host speaks up in one game. */
+const LULL_LIMIT: number = 3;
+
+/** How often a room checks for a lull. */
+const LULL_CHECK_MILLISECONDS: number = 5000;
+
+/** How long a mood stays on the lantern's face after the line ends. */
+const MOOD_LINGER_MILLISECONDS: number = 1500;
 
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
@@ -260,6 +283,13 @@ export class Room implements HostStage {
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
+    private hostMood: HostMood | null = null;
+    private moodTimer: NodeJS.Timeout | null = null;
+    private lastActivityAt: number = 0;
+    private lastLullAt: number = 0;
+    private lullsThisGame: number = 0;
+    private readonly livelyRoom: boolean;
+    private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
     private hostTurnText: string = "";
     private readonly acknowledgements: Uint8Array[] = [];
@@ -273,9 +303,12 @@ export class Room implements HostStage {
      * Creates an empty room.
      * @param code the room code players type or scan.
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
+     * @param livelyRoom true when the room was opened to try the livelier host.
      */
-    public constructor(code: string, publicUrl: string) {
+    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false) {
         this.code = code;
+        this.livelyRoom = livelyRoom;
+        this.lullTimer = livelyRoom === true ? setInterval(() => { this.checkLull(); }, LULL_CHECK_MILLISECONDS).unref() : null;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
         this.voice = new HostVoice(this.speech, this.voiceOutput());
@@ -297,6 +330,12 @@ export class Room implements HostStage {
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();
+        if (this.lullTimer !== null) {
+            clearInterval(this.lullTimer);
+        }
+        if (this.moodTimer !== null) {
+            clearTimeout(this.moodTimer);
+        }
     }
 
     /**
@@ -520,6 +559,27 @@ export class Room implements HostStage {
         this.voice.say(text, this.host.persona.voice, style);
     }
 
+    /**
+     * Whether this moment gets the livelier host.
+     * @returns true in a room opened for it, in the game it's being tried in.
+     */
+    public lively(): boolean {
+        return this.livelyRoom === true && this.game?.manifest.id === LIVELY_GAME;
+    }
+
+    /**
+     * Puts the mood of the next line on the lantern's face.
+     * @param mood the mood.
+     */
+    public showMood(mood: HostMood): void {
+        if (this.moodTimer !== null) {
+            clearTimeout(this.moodTimer);
+            this.moodTimer = null;
+        }
+        this.hostMood = mood;
+        this.broadcastHostState();
+    }
+
     /** Silences the host at once. */
     public stopSpeaking(): void {
         this.voice.stop();
@@ -650,6 +710,7 @@ export class Room implements HostStage {
      * @param action what.
      */
     private onNav(player: Player, action: NavAction): void {
+        this.lastActivityAt = Date.now();
         if (this.game !== null && this.gamePlayerIds.has(player.playerId) === false) {
             return;
         }
@@ -808,6 +869,9 @@ export class Room implements HostStage {
         log(this.scope(), `starting ${installed.manifest.name} with ${count}`);
         this.caption = null;
         this.game = installed.create(this.gameStage());
+        this.lastActivityAt = Date.now();
+        this.lastLullAt = 0;
+        this.lullsThisGame = 0;
         this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
         this.gameDecided = false;
         this.shell.gameStarted(installed.manifest.id);
@@ -1023,6 +1087,7 @@ export class Room implements HostStage {
      * @param player the player.
      */
     private startPress(player: Player): void {
+        this.lastActivityAt = Date.now();
         player.partial = "";
         this.setHint(player, "");
         this.cancelAcknowledgement();
@@ -1253,6 +1318,7 @@ export class Room implements HostStage {
      */
     private onHeard(player: Player, heard: string): void {
         const said: string = heard.slice(0, MAX_HEARD_CHARACTERS);
+        this.lastActivityAt = Date.now();
         const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
         this.record(event);
         this.lastSpeakerId = player.playerId;
@@ -1285,7 +1351,7 @@ export class Room implements HostStage {
      * @param said what the player said so far.
      */
     private scheduleAcknowledgement(said: string): void {
-        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1;
+        const addressed: boolean = said.toLowerCase().includes(this.host.persona.name.toLowerCase()) === true || this.players.size === 1 || this.lively() === true;
         if (addressed === false || this.acknowledgements.length === 0) {
             return;
         }
@@ -1314,7 +1380,51 @@ export class Room implements HostStage {
             this.acknowledgedLastTurn = true;
             log(this.scope(), `acknowledged with "${ACKNOWLEDGEMENTS[index] ?? ""}"`);
             this.voice.sayRecorded(pcm);
-        }, ACKNOWLEDGE_AFTER_MILLISECONDS);
+        }, this.lively() === true ? LIVELY_ACKNOWLEDGE_AFTER_MILLISECONDS : ACKNOWLEDGE_AFTER_MILLISECONDS);
+    }
+
+    /**
+     * Clears the lantern's mood a moment after the host stops talking.
+     * @param speaking whether the host is talking now.
+     */
+    private letMoodFade(speaking: boolean): void {
+        if (speaking === true || this.hostMood === null) {
+            return;
+        }
+        this.moodTimer = setTimeout(() => {
+            this.moodTimer = null;
+            this.hostMood = null;
+            this.broadcastHostState();
+        }, MOOD_LINGER_MILLISECONDS);
+    }
+
+    /**
+     * Lets the host speak up after a lull, rarely: only in a phase that allows it, with no phone held
+     * and the voice idle, and it picks whoever has gone longest without talking to it. The host can't
+     * hear the table, so it's told not to claim the room is silent, and it may still choose to say nothing.
+     */
+    private checkLull(): void {
+        const now: number = Date.now();
+        const present: Player[] = [...this.players.values()].filter((player: Player) => player.connected === true);
+        const holding: boolean = present.some((player: Player) => player.holdingToTalk === true || player.speaking === true);
+        const busy: boolean = this.paused === true || holding === true || this.hostThinking === true || this.voice.isBusy() === true;
+        const tooSoon: boolean = now - this.lastActivityAt < LULL_MILLISECONDS || now - this.lastLullAt < LULL_GAP_MILLISECONDS;
+        if (this.lively() === false || this.game?.hostMayInterject() !== true || busy === true || tooSoon === true || this.lullsThisGame >= LULL_LIMIT) {
+            return;
+        }
+        const quietest: Player | undefined = [...present].sort((first: Player, second: Player) => first.lastPressAt - second.lastPressAt)[0];
+        if (quietest === undefined) {
+            return;
+        }
+        this.lastLullAt = now;
+        this.lullsThisGame += 1;
+        log(this.scope(), `spoke up to ${quietest.playerId} after a lull`);
+        const prompt: string = [
+            "(Nobody has spoken to you for a while. You can't hear the table, so they may be busy talking; don't say the room is quiet.",
+            `In one short line, put ${quietest.name} on the spot by name, starting with the name, about this game: for instance that they haven't asked you anything.`,
+            "No ruling. Or reply (quiet) if it wouldn't help.)",
+        ].join(" ");
+        this.host.notice(prompt, WAKE_DELAY_MILLISECONDS.screen);
     }
 
     /** Cancels a pending acknowledgement. */
@@ -1350,7 +1460,9 @@ export class Room implements HostStage {
             cancelled: (): void => { this.broadcastToScreens({ type: "audioCancel" }); },
             speakingChanged: (speaking: boolean): void => {
                 this.hostSpeaking = speaking;
+                this.lastActivityAt = Date.now();
                 this.broadcastHostState();
+                this.letMoodFade(speaking);
             },
         };
     }
@@ -1457,7 +1569,7 @@ export class Room implements HostStage {
      * @returns the message.
      */
     private hostStateMessage(): RoomToScreenMessage {
-        return { type: "hostState", thinking: this.hostThinking, speaking: this.hostSpeaking, hostName: this.host.persona.name };
+        return { type: "hostState", thinking: this.hostThinking, speaking: this.hostSpeaking, hostName: this.host.persona.name, mood: this.hostMood };
     }
 
     /** Tells screens and phones what the host is doing. */

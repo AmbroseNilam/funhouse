@@ -10,6 +10,7 @@ import { HOST_NAME } from "../../shared/brand.ts";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
+import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
 import { SeatStrip } from "./SeatStrip.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
@@ -23,6 +24,7 @@ interface ScreenState {
     roomCode: string;
     qrDataUrl: string;
     hostThinking: boolean;
+    hostMood: HostMood | null;
     hostSpeaking: boolean;
     hostName: string;
     connected: boolean;
@@ -60,7 +62,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -92,7 +94,7 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
         return { ...state, shell: message.view };
     }
     if (message.type === "hostState") {
-        return { ...state, hostThinking: message.thinking, hostSpeaking: message.speaking, hostName: message.hostName };
+        return { ...state, hostThinking: message.thinking, hostSpeaking: message.speaking, hostName: message.hostName, hostMood: message.mood };
     }
     return state;
 }
@@ -392,7 +394,7 @@ export function App(): ReactElement {
     if (state.roomClosed === true) {
         return (
             <main className="tv on-home">
-                <button className="sound-gate" onClick={() => { location.assign("/screen/"); }} autoFocus>
+                <button className="sound-gate" onClick={() => { location.assign(new URLSearchParams(location.search).get("lively") === "1" ? "/screen/?lively=1" : "/screen/"); }} autoFocus>
                     <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
                     <span className="gate-title">This room has closed</span>
                     <span className="gate-detail">A new room gets a new code, so everyone will need to join again.</span>
@@ -429,7 +431,15 @@ export function App(): ReactElement {
             {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             <div className="table-edge" />
             <div className="host-spot">
-                <Lantern micRef={micRef} speakerRef={speakerRef} awake={state.started} thinking={state.hostThinking} speaking={state.hostSpeaking} look={look} />
+                <Lantern
+                    micRef={micRef}
+                    speakerRef={speakerRef}
+                    awake={state.started}
+                    thinking={state.hostThinking}
+                    speaking={state.hostSpeaking}
+                    look={look}
+                    mood={state.hostMood}
+                />
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
