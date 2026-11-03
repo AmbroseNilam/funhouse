@@ -58,8 +58,8 @@ export interface TwentyDoorsState {
     secret: string;
     doorsOpened: number;
     asked: AskedQuestion[];
-    /** The latest thing a player said, waiting for a ruling. */
-    heard: { playerId: string; text: string } | null;
+    /** The latest thing each player said that's still waiting for a ruling, oldest first. */
+    unruled: { playerId: string; text: string }[];
     won: boolean;
     finder: string | null;
     /** The picture of the secret, drawn in secret for the reveal. */
@@ -84,19 +84,21 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
      * @returns the step.
      */
     const finish = (state: TwentyDoorsState, won: boolean, finder: string | null, text: string): Step<TwentyDoorsState> => {
-        return { state: { ...state, phase: "end", won, finder, heard: null }, facts: [publicFact("game-over", text)], nextPhaseId: "end", timers: { painting: PAINTING_WAIT_SECONDS } };
+        return { state: { ...state, phase: "end", won, finder, unruled: [] }, facts: [publicFact("game-over", text)], nextPhaseId: "end", timers: { painting: PAINTING_WAIT_SECONDS } };
     };
 
     /**
      * Opens a door for a ruling, and ends the game on the last one.
      * @param state the state.
      * @param answer how the screen shows the ruling.
+     * @param playerId who the host was answering; their line is used, or else the oldest waiting.
      * @returns the step.
      */
-    const openDoor = (state: TwentyDoorsState, answer: string): Step<TwentyDoorsState> => {
+    const openDoor = (state: TwentyDoorsState, answer: string, playerId: string | null): Step<TwentyDoorsState> => {
         const doorsOpened: number = state.doorsOpened + 1;
-        const entry: AskedQuestion = { asker: state.heard === null ? "Someone" : nameOf(state, state.heard.playerId), question: state.heard?.text ?? "", answer };
-        const next: TwentyDoorsState = { ...state, doorsOpened, asked: [...state.asked, entry], heard: null };
+        const line: { playerId: string; text: string } | undefined = state.unruled.find((candidate) => candidate.playerId === playerId) ?? state.unruled[0];
+        const entry: AskedQuestion = { asker: line === undefined ? "Someone" : nameOf(state, line.playerId), question: line?.text ?? "", answer };
+        const next: TwentyDoorsState = { ...state, doorsOpened, asked: [...state.asked, entry], unruled: state.unruled.filter((candidate) => candidate !== line) };
         if (doorsOpened >= DOOR_COUNT) {
             return finish(next, false, null, `That was the last door. They're out. The secret was ${state.secret}.`);
         }
@@ -109,7 +111,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
 
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
             const category: { name: string; fallback: string } = CATEGORIES[Math.floor(random() * CATEGORIES.length)] ?? { name: "an animal", fallback: "platypus" };
-            const state: TwentyDoorsState = { phase: "choosing", stoppedWaitingForPicture: false, players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], heard: null, won: false, finder: null, revealPicture: null };
+            const state: TwentyDoorsState = { phase: "choosing", stoppedWaitingForPicture: false, players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
             return {
                 state,
                 facts: [],
@@ -164,20 +166,22 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                 return { state: { ...state, revealPicture: event.src }, facts: [] };
             }
             if (event.type === "speechEnded" && state.phase === "asking") {
-                return { state: { ...state, heard: { playerId: event.playerId, text: event.text } }, facts: [] };
+                const others = state.unruled.filter((candidate) => candidate.playerId !== event.playerId);
+                return { state: { ...state, unruled: [...others, { playerId: event.playerId, text: event.text }] }, facts: [] };
             }
             if (event.type !== "hostRuled" || state.phase !== "asking") {
                 return { state, facts: [] };
             }
-            if (state.heard === null && event.ruling !== "giveup") {
+            if (state.unruled.length === 0 && event.ruling !== "giveup") {
                 return { state, facts: [] };
             }
             const answer: string | undefined = DOOR_RULINGS[event.ruling];
             if (answer !== undefined) {
-                return openDoor(state, answer);
+                return openDoor(state, answer, event.playerId);
             }
             if (event.ruling === "correct") {
-                const finder: string = state.heard === null ? "Someone" : nameOf(state, state.heard.playerId);
+                const finderId: string | undefined = event.playerId ?? state.unruled[0]?.playerId;
+                const finder: string = finderId === undefined ? "Someone" : nameOf(state, finderId);
                 return finish(state, true, finder, `${finder} found it after ${state.doorsOpened} doors. The secret was ${state.secret}. Announce it.`);
             }
             if (event.ruling === "giveup") {
