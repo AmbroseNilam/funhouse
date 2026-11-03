@@ -1,5 +1,6 @@
 // Operational log lines for the room: one line per notable event, timestamped, to stderr so
-// `podman logs` shows them. Player speech is logged as heard; this is a private server.
+// `podman logs` shows them. Logs say what happened and how long it took. They never hold what
+// anyone said, what the host replied, or a player's name; use the player's id instead.
 
 /**
  * Writes one log line.

@@ -406,7 +406,7 @@ export class Room implements HostStage {
             return;
         }
         if (this.game.allowsRuling(ruling) === false) {
-            log(this.scope(), `ignored ruling ${ruling}`);
+            log(this.scope(), "ignored a ruling the moment doesn't allow");
             return;
         }
         this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: speakerId });
@@ -501,7 +501,7 @@ export class Room implements HostStage {
         const player: Player = { playerId, name, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
-        log(this.scope(), `${name} joined as ${playerId}`);
+        log(this.scope(), `${playerId} joined`);
         this.shell.seatsChanged();
         this.welcome(player);
         this.broadcastScene();
@@ -538,7 +538,7 @@ export class Room implements HostStage {
         if (previous !== socket) {
             previous.close(4000, "resumed elsewhere");
         }
-        log(this.scope(), `${player.name} rejoined ${player.playerId}`);
+        log(this.scope(), `${player.playerId} rejoined`);
         this.welcome(player);
         this.broadcastScene();
         this.broadcastShell();
@@ -704,7 +704,7 @@ export class Room implements HostStage {
         const wanted: string = gameId.trim().toLowerCase();
         const installed: InstalledGame | undefined = GAMES.find((game: InstalledGame) => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted);
         if (installed === undefined || this.game !== null) {
-            log(this.scope(), `can't start "${gameId}"`);
+            log(this.scope(), "couldn't start a game by that name");
             return;
         }
         const count: number = this.players.size;
@@ -828,7 +828,7 @@ export class Room implements HostStage {
         player.standby = null;
         this.clearStandbyTimer(player);
         const grace: number = this.game !== null && this.game.outcome() === null ? GAME_REJOIN_GRACE_MILLISECONDS : REJOIN_GRACE_MILLISECONDS;
-        log(this.scope(), `${player.name} disconnected (code ${code}); holding seat ${grace / 1000} s`);
+        log(this.scope(), `${player.playerId} disconnected (code ${code}); holding seat ${grace / 1000} s`);
         this.broadcastScene();
         this.broadcastShell();
         this.refreshPhones();
@@ -854,7 +854,7 @@ export class Room implements HostStage {
         const left: RoomEvent = { type: "playerLeft", at: Date.now(), playerId: player.playerId };
         this.record(left);
         this.game?.event(left);
-        log(this.scope(), `${player.name} left`);
+        log(this.scope(), `${player.playerId} left`);
         if (this.players.size > 0) {
             this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
         }
@@ -881,7 +881,7 @@ export class Room implements HostStage {
         }
         const previous: string = player.name;
         player.name = name;
-        log(this.scope(), `${previous} is now ${name}`);
+        log(this.scope(), `${player.playerId} changed their name`);
         this.welcome(player);
         this.broadcastScene();
         this.broadcastShell();
@@ -929,7 +929,7 @@ export class Room implements HostStage {
         this.setHint(player, "");
         this.cancelAcknowledgement();
         if (this.hostSpeaking === true || this.hostThinking === true) {
-            log(this.scope(), `${player.name} cut in`);
+            log(this.scope(), `${player.playerId} cut in`);
         }
         this.host.interrupt(this.hostSpeaking);
         const session: TranscribeSession = player.standby ?? this.openTranscribe(player, "PUSH_TO_TALK");
@@ -1063,7 +1063,7 @@ export class Room implements HostStage {
                 }
             },
             onSpeechComplete: (_turnId: string, text: string): void => { this.onSpeechEnded(player, session, text); },
-            onError: (message: string): void => { log(this.scope(), `transcribe error for ${player.name}: ${message}`); },
+            onError: (message: string): void => { log(this.scope(), `transcribe error for ${player.playerId}: ${message}`); },
             onClose: (): void => {
                 if (player.standby === session) {
                     player.standby = null;
@@ -1074,13 +1074,13 @@ export class Room implements HostStage {
                     this.prepareStandby(player);
                 }
                 if (player.awaitingFinal.delete(session) === true) {
-                    log(this.scope(), `lost a press from ${player.name}`);
+                    log(this.scope(), `lost a press from ${player.playerId}`);
                     this.onNotHeard(player);
                 }
             },
         });
         session.open().catch((error: unknown) => {
-            log(this.scope(), `transcribe open failed for ${player.name}: ${error instanceof Error ? error.message : String(error)}`);
+            log(this.scope(), `transcribe open failed for ${player.playerId}: ${error instanceof Error ? error.message : String(error)}`);
             if (player.transcribe === session) {
                 player.transcribe = null;
             }
@@ -1126,7 +1126,7 @@ export class Room implements HostStage {
         }
         const said: string = text.trim();
         const sinceRelease: string = player.releasedAt === 0 ? "" : ` (${Date.now() - player.releasedAt} ms after release)`;
-        log(this.scope(), said === "" ? `heard nothing from ${player.name}${sinceRelease}` : `heard ${player.name}: "${said}"${sinceRelease}`);
+        log(this.scope(), said === "" ? `heard nothing from ${player.playerId}${sinceRelease}` : `heard ${player.playerId}${sinceRelease}`);
         if (said === "") {
             this.record({ type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said });
             this.onNotHeard(player);

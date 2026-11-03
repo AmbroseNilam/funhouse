@@ -214,7 +214,7 @@ export class HostVoice {
             for await (const chunk of this.speech.speak({ text, voice, style, signal })) {
                 if (first === true) {
                     first = false;
-                    log("voice", `first audio byte after ${Date.now() - startedAt} ms for "${text.slice(0, 40)}"`);
+                    log("voice", `first audio byte after ${Date.now() - startedAt} ms`);
                 }
                 line.push(chunk);
             }

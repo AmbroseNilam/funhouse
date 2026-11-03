@@ -28,7 +28,8 @@ export function readMetaKey(): string {
  * @param body JSON-serializable request body.
  * @param signal aborts the request when the caller no longer wants the answer.
  * @returns the successful response, left unread so callers can stream it.
- * @throws Error with status and a short body excerpt when the API rejects the call.
+ * @throws Error with the status when the API rejects the call. The body stays out of it, since
+ * an error can quote what was sent, and errors reach the logs.
  */
 export async function postJson(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
     const response: Response = await fetch(`${META_BASE_URL}${path}`, {
@@ -38,8 +39,8 @@ export async function postJson(path: string, body: unknown, signal?: AbortSignal
         body: JSON.stringify(body),
     });
     if (response.ok === false) {
-        const excerpt: string = (await response.text()).slice(0, 500);
-        throw new Error(`Meta API ${path} responded ${response.status}: ${excerpt}`);
+        await response.body?.cancel();
+        throw new Error(`Meta API ${path} responded ${response.status}.`);
     }
     return response;
 }

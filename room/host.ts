@@ -237,7 +237,7 @@ export class Host {
             log("host", `stayed quiet (${timing})`);
             return true;
         }
-        log("host", `said "${spoken}" (${timing})`);
+        log("host", `said ${spoken.length} characters (${timing})`);
         this.stage.setThinking(false);
         this.stage.say(spoken, this.persona.style);
         this.remember(`${this.persona.name}: ${spoken}`);
@@ -255,7 +255,7 @@ export class Host {
         let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
         while (match !== null) {
             const ruling: string = match[1] ?? "";
-            log("host", `ruled ${ruling}${match[2] === undefined ? "" : `: ${match[2]}`}`);
+            log("host", "made a ruling");
             this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
             rest = rest.slice(match[0].length);
             match = RULING_PATTERN.exec(rest);
