@@ -18,7 +18,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
     phases: [
         {
             id: "topic",
-            hostBrief: "Ask what topic they would like to be quizzed on. When anyone names a subject, broad or narrow, rule it straight away; never ask them to narrow it down or refuse it for being odd, unless it isn't fit for the table. Chat that doesn't name a subject gets no ruling; gently ask again.",
+            hostBrief: "Ask what topic they would like to be quizzed on. When anyone names a subject, broad or narrow, rule it straight away; never ask them to narrow it down or refuse it for being odd, unless it isn't fit for the table. If they ask you to pick, choose a fun subject yourself and rule it. Other chat gets no ruling; gently ask again.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,
             silenceSeconds: 0,
@@ -39,6 +39,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
                 "Read the question exactly as written when the game tells you to. Then judge each spoken answer with a ruling and a few words.",
                 "Never reveal the answer, not even when an answer is wrong or close; say it only when the game tells you to.",
                 "Chat that isn't an answer gets no ruling, and you never rule on your own announcements or on a question you have just read.",
+                "There are no turns: anyone can answer at any time, so never say whose go it is or who should answer next.",
             ].join(" "),
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,

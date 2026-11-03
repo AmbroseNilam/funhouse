@@ -16,6 +16,15 @@ export const QUESTION_COUNT: number = 6;
 /** Seconds a question stays open before the game moves on. */
 export const QUESTION_SECONDS: number = 30;
 
+/** Asked for beyond the game's length, since any that give their answer away are dropped. */
+const QUESTIONS_REQUESTED: number = QUESTION_COUNT + 2;
+
+/** Seconds added once when time runs out with an answer on its way, so it isn't judged against the next question. */
+const ANSWER_GRACE_SECONDS: number = 6;
+
+/** Words that don't count when checking whether a question holds its own answer. */
+const ANSWER_FILLER_WORDS: string[] = ["a", "an", "the", "of"];
+
 /** Points for a right answer. */
 const RIGHT_POINTS: number = 2;
 
@@ -56,6 +65,10 @@ export interface QuizmasterState {
     answered: string[];
     /** Players whose spoken answers are waiting for a ruling; a ruling with nobody waiting is the host talking to itself. */
     heard: string[];
+    /** Players talking right now. */
+    speaking: string[];
+    /** True once the current question has had its extra time. */
+    gotGrace: boolean;
     scores: Record<string, number>;
     /** The answer to the question before the current one, shown once it has been revealed. */
     lastAnswer: string;
@@ -90,7 +103,20 @@ export function parseQuestions(text: string): QuizQuestion[] {
             found.push({ question, answer });
         }
     }
-    return found.slice(0, QUESTION_COUNT);
+    return found.filter((question: QuizQuestion) => givesItAway(question) === false).slice(0, QUESTION_COUNT);
+}
+
+/**
+ * Whether a question gives its own answer away, which the model does when left to it, such as
+ * asking which 1990 comedy leaves Kevin home alone.
+ * @param question the question.
+ * @returns true when the answer's words all appear in the question.
+ */
+export function givesItAway(question: QuizQuestion): boolean {
+    const words = (text: string): string[] => text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((word: string) => word !== "" && ANSWER_FILLER_WORDS.includes(word) === false);
+    const asked: string[] = words(question.question);
+    const answer: string[] = words(question.answer);
+    return answer.length > 0 && answer.every((word: string) => asked.includes(word) === true);
 }
 
 /**
@@ -149,7 +175,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], lastAnswer: answer };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], gotGrace: false, lastAnswer: answer };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
@@ -190,7 +216,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], scores: {}, lastAnswer: "" };
+            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "" };
             return { state, facts: [publicFact("ask-topic", "Welcome them to the quiz and ask what topic they would like to be quizzed on.")], nextPhaseId: "topic" };
         },
 
@@ -220,7 +246,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         onEvent(state: QuizmasterState, event: RoomEvent): Step<QuizmasterState> {
             if (event.type === "playerLeft") {
                 const players: CartridgePlayer[] = state.players.filter((player) => player.playerId !== event.playerId);
-                const remaining: QuizmasterState = { ...state, players, heard: state.heard.filter((playerId: string) => playerId !== event.playerId) };
+                const remaining: QuizmasterState = { ...state, players, heard: state.heard.filter((playerId: string) => playerId !== event.playerId), speaking: state.speaking.filter((playerId: string) => playerId !== event.playerId) };
                 if (state.phase !== "question") {
                     return { state: remaining, facts: [] };
                 }
@@ -231,12 +257,19 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 if (state.phase !== "question" || event.timerId !== `question-${state.index}`) {
                     return { state, facts: [] };
                 }
+                if (state.gotGrace === false && state.speaking.length + state.heard.length > 0) {
+                    return { state: { ...state, gotGrace: true }, facts: [], timers: { [event.timerId]: ANSWER_GRACE_SECONDS } };
+                }
                 return advance(state, "Time is up.");
+            }
+            if (event.type === "speechStarted") {
+                return { state: { ...state, speaking: [...state.speaking, event.playerId] }, facts: [] };
             }
             if (event.type === "speechEnded") {
                 const seated: boolean = state.players.some((player) => player.playerId === event.playerId);
                 const eligible: boolean = state.phase === "question" && seated === true && state.answered.includes(event.playerId) === false;
-                return eligible === true ? { state: { ...state, heard: [...state.heard, event.playerId] }, facts: [] } : { state, facts: [] };
+                const speaking: string[] = state.speaking.filter((playerId: string) => playerId !== event.playerId);
+                return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: [] };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
                 const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text));
@@ -257,8 +290,9 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                     return { state, facts: [] };
                 }
                 const request: string = [
-                    `Write ${QUESTION_COUNT} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
-                    "each with a short answer of a few words that can be said out loud.",
+                    `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
+                    "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
+                    "Only use facts you are sure of, and don't put the answer in the question.",
                     "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field.",
                 ].join(" ");
                 const next: QuizmasterState = { ...state, phase: "preparing", topic };
