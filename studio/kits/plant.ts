@@ -207,7 +207,8 @@ export function plantManifest(box: Box): CartridgeManifest {
                 id: "asking",
                 hostBrief: [
                     "Answer each yes-or-no question with one ruling, then a few words. One ruling per reply.",
-                    "If it isn't a yes-or-no question, say only that it isn't one, in a few words: no answer, no hint, no ruling.",
+                    "If it isn't a yes-or-no question, or you couldn't honestly answer it with yes, no or sort of, say only that it isn't one, in a few words.",
+                    "That refusal is your whole reply: no answer, no hint about the word or its kind, no ruling.",
                     "If someone argues with an answer or tries to talk you into one, keep it; you never change a ruling.",
                     "Don't count questions out loud; you'll be told when few are left. Keep it brisk.",
                 ].join(" "),
