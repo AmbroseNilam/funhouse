@@ -10,6 +10,7 @@ import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, typ
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
+import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
 import { microphoneAllowed, startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { followVoice } from "./talkGlow.ts";
@@ -395,6 +396,7 @@ export function App(): ReactElement {
     const pendingNameRef = useRef<string | null>(null);
     const holdingRef = useRef<boolean>(false);
     const tappingRef = useRef<boolean>(false);
+    const waveRef = useRef<HTMLCanvasElement>(null);
     const [tapping, setTapping] = useState<boolean>(false);
     const preRollRef = useRef<ArrayBuffer[]>([]);
     const tailTimerRef = useRef<number>(0);
@@ -587,6 +589,15 @@ export function App(): ReactElement {
         const timer: number = window.setTimeout(() => { setSent(false); }, SENT_TICK_MILLISECONDS);
         return (): void => { window.clearTimeout(timer); };
     }, [sent]);
+
+    const waveShown: boolean = state.holding === true && state.view?.tapToTalk === true;
+    useEffect(() => {
+        const canvas: HTMLCanvasElement | null = waveRef.current;
+        if (waveShown === false || canvas === null) {
+            return;
+        }
+        return drawWave(canvas, () => captureRef.current?.level() ?? 0);
+    }, [waveShown]);
 
     useEffect(() => blockBrowserGestures(), []);
 
@@ -959,7 +970,7 @@ export function App(): ReactElement {
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${tapping === true ? "tap-recording" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -981,15 +992,19 @@ export function App(): ReactElement {
                                 ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
-                                : <strong>{tapping === true ? "Recording" : "Listening"}</strong>
+                                : <strong>Listening</strong>
                         : sent === true
                             ? <strong>Got it</strong>
                             : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}
                 </div>
                 {status !== "" && state.holding === false ? <p className="status" role="status">{status}</p> : null}
-                {tapping === true ? <div className="sound-bar" aria-hidden="true"><i /></div> : null}
             </div>
-            {tapping === true ? <button className="tap-stop" onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
+            {waveShown === true ? (
+                <div className="dictation">
+                    <canvas ref={waveRef} aria-hidden="true" />
+                    {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
+                </div>
+            ) : null}
             {tapping === false && state.holding === false && view?.tapToTalk === true && canTalk === true ? <button className="tap-talk" onClick={startTapping}>Talk</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
