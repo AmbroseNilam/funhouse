@@ -255,9 +255,6 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
  * @returns the line.
  */
 function controlLine(pad: PadView): string {
-    if (pad.watching === true) {
-        return "Watching";
-    }
     if (pad.driving === true) {
         return "You have the controller";
     }
@@ -839,7 +836,7 @@ export function App(): ReactElement {
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
             {turn !== null ? <p className="turn-line">{turn.line}</p> : null}
-            {pad !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
+            {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>

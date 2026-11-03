@@ -144,17 +144,25 @@
     .blocks .image { margin: 0; }
     .blocks .image img { max-height: calc(360 * var(--u)); width: auto; rotate: -1.2deg; box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; animation: reveal-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .play-column { position: absolute; left: calc(80 * var(--u)); right: calc(420 * var(--u)); top: calc(40 * var(--u)); bottom: calc(300 * var(--u)); display: flex; flex-direction: column; gap: calc(16 * var(--u)); }
+    .turn-label { flex: none; margin: 0; font-size: calc(32 * var(--u)); font-weight: 600; color: var(--paper); text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
+    .place-cards { position: absolute; z-index: 3; left: calc(320 * var(--u)); right: calc(80 * var(--u)); bottom: calc(14 * var(--u)); display: flex; align-items: flex-end; justify-content: flex-start; gap: calc(12 * var(--u)); pointer-events: none; }
+    .place-cards li { position: relative; flex: 0 1 auto; min-width: 0; padding: calc(8 * var(--u)) calc(18 * var(--u)); color: var(--paper); font-size: calc(30 * var(--u)); font-weight: 600; line-height: 1.15; white-space: nowrap; rotate: -1deg; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; transition: translate 140ms ease-out, opacity 200ms ease-out, box-shadow 140ms ease-out; }
+    .place-cards li:nth-child(even) { rotate: 1deg; }
+    .place-cards .short-name { display: block; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
+    .place-cards.crowded li { padding: calc(8 * var(--u)) calc(10 * var(--u)); font-size: calc(28 * var(--u)); }
+    .place-cards.crowded .short-name { max-width: 6ch; }
+    .place-cards .full-name { display: none; max-width: calc(620 * var(--u)); overflow: hidden; text-overflow: ellipsis; }
+    .place-cards .lifted { z-index: 1; flex: none; translate: 0 calc(-22 * var(--u)); rotate: 0deg; box-shadow: 0 0 0 calc(4 * var(--u)) var(--lamp), calc(6 * var(--u)) calc(10 * var(--u)) 0 #000; }
+    .place-cards .lifted .short-name { display: none; }
+    .place-cards .lifted .full-name { display: block; }
+    .place-cards .up { box-shadow: 0 0 0 calc(4 * var(--u)) var(--lamp), calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
+    .place-cards .away { opacity: 0.45; box-shadow: none; outline: calc(2 * var(--u)) dashed var(--paper); outline-offset: calc(-2 * var(--u)); }
+    .place-cards .done { translate: 0 calc(6 * var(--u)); box-shadow: none; opacity: 0.8; padding-right: calc(46 * var(--u)); }
+    .place-cards .tick { display: none; position: absolute; right: calc(16 * var(--u)); top: 22%; width: calc(12 * var(--u)); height: calc(22 * var(--u)); border: solid var(--paper); border-width: 0 calc(5 * var(--u)) calc(5 * var(--u)) 0; rotate: 40deg; }
+    .place-cards .done .tick { display: block; }
+    .place-cards .driving::before { content: ""; position: absolute; left: 50%; top: calc(-9 * var(--u)); width: calc(16 * var(--u)); height: calc(16 * var(--u)); translate: -50% 0; rotate: 45deg; background: var(--lamp); box-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
+    .place-cards .watching-count { flex: none; align-self: center; padding: 0; background: none; box-shadow: none; rotate: 0deg; font-size: calc(28 * var(--u)); font-weight: 500; color: var(--paper); text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
     .play-column .blocks { position: relative; left: auto; right: auto; top: auto; bottom: auto; flex: 1; min-height: 0; }
-    .seat-strip { flex: none; display: flex; flex-wrap: wrap; gap: calc(10 * var(--u)) calc(14 * var(--u)); }
-    .seat-strip li { display: flex; align-items: baseline; gap: calc(10 * var(--u)); padding: calc(6 * var(--u)) calc(16 * var(--u)); color: var(--paper); font-size: calc(28 * var(--u)); line-height: 1.2; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; transition: translate 120ms ease-out, box-shadow 120ms ease-out; }
-    .seat-strip strong { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-    .seat-strip small { font-size: calc(28 * var(--u)); white-space: nowrap; }
-    .seat-strip .talking { translate: 0 calc(-4 * var(--u)); box-shadow: 0 0 0 calc(4 * var(--u)) var(--lamp), calc(6 * var(--u)) calc(8 * var(--u)) 0 #000; }
-    .seat-strip .away, .seat-strip .watching { opacity: 0.78; box-shadow: none; }
-    .seat-strip .touched { translate: 0 calc(-8 * var(--u)); box-shadow: 0 0 0 calc(4 * var(--u)) var(--paper), calc(6 * var(--u)) calc(10 * var(--u)) 0 #000; }
-    .seat-strip .up { box-shadow: 0 0 0 calc(4 * var(--u)) var(--lamp), calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
-    .seat-strip .done { opacity: 0.78; }
-    .seat-strip .turn-label { align-self: center; padding: 0 calc(6 * var(--u)); box-shadow: none; font-weight: 600; text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
     .corner-tag { position: absolute; right: calc(80 * var(--u)); top: calc(50 * var(--u)); text-align: right; }
     .corner-tag strong { display: block; font-size: calc(44 * var(--u)); font-weight: 600; letter-spacing: 0.08em; line-height: 1.1; }
     .corner-tag small { color: var(--paper); font-size: calc(24 * var(--u)); }

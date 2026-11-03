@@ -13,7 +13,7 @@ import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
-import { SeatStrip } from "./SeatStrip.tsx";
+import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
@@ -424,7 +424,6 @@ export function App(): ReactElement {
     const shell: ShellView | null = state.shell;
     const seats: Seat[] = shell?.seats ?? [];
     const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
-    const touchedSeat: Seat | undefined = seats.find((seat: Seat) => seat.playerId === touchedId);
     const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
     const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
     const stageMood: string = playing === true ? mood : "room";
@@ -437,7 +436,7 @@ export function App(): ReactElement {
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
                     <div className="play-column">
-                        <SeatStrip seats={seats} turn={state.turn} touchedId={touchedId} />
+                        {state.turn !== null ? <p className="turn-label">{state.turn.label}</p> : null}
                         <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
                     </div>
                     {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
@@ -446,6 +445,7 @@ export function App(): ReactElement {
             ) : null}
             {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             <div className="table-edge" />
+            {state.started === true ? <PlaceCards seats={seats} turn={playing === true ? state.turn : null} touchedId={touchedId} /> : null}
             <div className="host-spot">
                 <Lantern
                     micRef={micRef}
@@ -459,8 +459,7 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {touchedSeat !== undefined && playing === false && state.started === true ? <p className="arrival touched-seat" style={{ background: touchedSeat.colour }}>{touchedSeat.name}</p> : null}
-            {arrival !== null && touchedSeat === undefined && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
+            {arrival !== null && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>
