@@ -125,7 +125,11 @@ if (questionsAsked(screen) !== beforeLobby) {
 if (questionsAsked(screen) < 3) {
     throw new Error(`Expected at least three questions counted, saw ${questionsAsked(screen)}.`);
 }
+const beforeVague: number = questionsAsked(screen);
+const vagueLines: number = screen.hostLines.length;
 await say(plant, "Would you be annoyed if you couldn't find one?");
+const vagueRuled: boolean = questionsAsked(screen) !== beforeVague;
+console.warn(`The Plant's vague question was ${vagueRuled === true ? "ruled, and spent a question" : "not ruled"}. The host said: ${screen.hostLines.slice(vagueLines).join(" | ")}`);
 const beforeFound: string[] = screen.hostLines.slice(gameStart);
 await say(second, `Is it a ${word.toLowerCase()}?`);
 await waitFor(() => squash(screen.title()) === squash(word), "the vote, with the word on the TV");
