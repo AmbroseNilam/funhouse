@@ -1,7 +1,8 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
-import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type CSSProperties, type ReactElement } from "react";
+import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
@@ -87,15 +88,18 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
  */
 function Countdown(props: { seconds: number; running: boolean; label?: string }): ReactElement {
     const [left, setLeft] = useState<number>(props.seconds);
+    const leftRef = useRef<number>(props.seconds);
+    leftRef.current = left;
+    useEffect(() => { setLeft(props.seconds); }, [props.seconds]);
     useEffect(() => {
-        setLeft(props.seconds);
         if (props.running === false) {
             return;
         }
         const startedAt: number = Date.now();
-        const timer: number = window.setInterval(() => { setLeft(Math.max(0, props.seconds - Math.floor((Date.now() - startedAt) / 1000))); }, 250);
+        const from: number = leftRef.current;
+        const timer: number = window.setInterval(() => { setLeft(Math.max(0, from - Math.floor((Date.now() - startedAt) / 1000))); }, 250);
         return (): void => { window.clearInterval(timer); };
-    }, [props.seconds, props.running]);
+    }, [props.running, props.seconds]);
     return <div className="timer"><span>{Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}</span>{props.label !== undefined ? <small>{props.label}</small> : null}</div>;
 }
 
@@ -147,6 +151,8 @@ export function App(): ReactElement {
     const soundsRef = useRef<ConsoleSounds | null>(null);
     const leanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const previousShellRef = useRef<ShellView | null>(null);
+    const screenRef = useRef<string>("");
+    const wasOverRef = useRef<boolean>(false);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
     useEffect(() => {
@@ -193,6 +199,12 @@ export function App(): ReactElement {
                 if (message === null) {
                     return;
                 }
+                if (message.type === "edge") {
+                    soundsRef.current?.edge();
+                    const focused: Element | null = document.querySelector(".focused");
+                    focused?.animate([{ translate: "0 0" }, { translate: `${leanRef.current.x * 14}px ${leanRef.current.y * 14}px` }, { translate: "0 0" }], { duration: 220, easing: "ease-out" });
+                    return;
+                }
                 if (message.type === "rejected") {
                     stopped = true;
                     dispatch({ type: "turnedAway" });
@@ -219,6 +231,14 @@ export function App(): ReactElement {
                     speakerRef.current?.lineEnded();
                     return;
                 }
+                if (message.type === "shell" && message.view.screen !== screenRef.current && "startViewTransition" in document && soundsRef.current !== null) {
+                    screenRef.current = message.view.screen;
+                    document.startViewTransition(() => { flushSync(() => { dispatch({ type: "message", message }); }); });
+                    return;
+                }
+                if (message.type === "shell") {
+                    screenRef.current = message.view.screen;
+                }
                 dispatch({ type: "message", message });
             };
         };
@@ -239,6 +259,7 @@ export function App(): ReactElement {
         const sounds: ConsoleSounds = new ConsoleSounds();
         soundsRef.current = sounds;
         dispatch({ type: "started" });
+        document.documentElement.requestFullscreen().catch(() => { /* a browser may refuse, and the page works either way */ });
         sounds.start().then(() => { sounds.light(); }).catch((error: unknown) => { console.error("sounds failed:", error); });
         speaker.start().then(() => {
             speakerRef.current = speaker;
@@ -260,6 +281,47 @@ export function App(): ReactElement {
         return (): void => { cancelled = true; };
     }, [state.joinUrl]);
 
+    useEffect(() => {
+        const previous: ShellView | null = previousShellRef.current;
+        const shell: ShellView | null = state.shell;
+        previousShellRef.current = shell;
+        const sounds: ConsoleSounds | null = soundsRef.current;
+        if (previous === null || shell === null || sounds === null) {
+            return;
+        }
+        if (previous.screen !== shell.screen) {
+            const backing: boolean = shell.screen === "home" || (previous.screen === "howTo" && shell.screen === "pause") || (previous.screen === "pause" && shell.screen === "play");
+            if (backing === true) {
+                sounds.back();
+                return;
+            }
+            sounds.select();
+            return;
+        }
+        if (shell.seats.length > previous.seats.length) {
+            sounds.sitDown();
+        }
+        if (previous.focus !== shell.focus) {
+            sounds.tick(shell.focus);
+        }
+    }, [state.shell]);
+
+    const mood: string = state.scene?.mood ?? "neutral";
+    const isOver: boolean = state.shell?.gameOver === true;
+    useEffect(() => {
+        if (isOver === true && wasOverRef.current === false) {
+            if (mood === "victory") {
+                soundsRef.current?.win();
+            }
+            if (mood !== "victory") {
+                soundsRef.current?.lose();
+            }
+        }
+        wasOverRef.current = isOver;
+    }, [isOver, mood]);
+
+    useEffect(() => { soundsRef.current?.duck(state.hostSpeaking); }, [state.hostSpeaking]);
+
     if (phoneGate === true) {
         return (
             <main className="phone-gate">
@@ -280,30 +342,6 @@ export function App(): ReactElement {
         );
     }
 
-    useEffect(() => {
-        const previous: ShellView | null = previousShellRef.current;
-        const shell: ShellView | null = state.shell;
-        previousShellRef.current = shell;
-        const sounds: ConsoleSounds | null = soundsRef.current;
-        if (previous === null || shell === null || sounds === null) {
-            return;
-        }
-        if (previous.screen !== shell.screen) {
-            const backing: boolean = shell.screen === "home" || (previous.screen === "howTo" && shell.screen === "pause") || (previous.screen === "pause" && shell.screen === "play");
-            if (backing === true) {
-                sounds.back();
-                return;
-            }
-            sounds.select();
-            return;
-        }
-        if (previous.focus !== shell.focus) {
-            sounds.tick(shell.focus);
-        }
-    }, [state.shell]);
-
-    useEffect(() => { soundsRef.current?.duck(state.hostSpeaking); }, [state.hostSpeaking]);
-
     const caption: { speaker: string; text: string; final: boolean } | null = (() => {
         const block = state.scene?.blocks.find((candidate: SceneBlock) => candidate.type === "caption");
         return block?.type === "caption" ? { speaker: block.speaker, text: block.text, final: block.final } : null;
@@ -313,31 +351,33 @@ export function App(): ReactElement {
     const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
     const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
     const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
-    const mood: string = playing === true ? state.scene?.mood ?? "neutral" : "room";
+    const stageMood: string = playing === true ? mood : "room";
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
     const backdrop: string | undefined = state.scene?.backdrop ?? game?.art;
+    const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
     return (
-        <main ref={rootRef} className={`tv mood-${mood} on-${shell?.screen ?? "home"}`} data-connected={state.connected}>
+        <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
             {playing === true ? (
                 <section className="screen play-screen">
-                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" /> : null}
+                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
                     <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
                     {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
-                    <aside className="corner-tag"><strong>{state.roomCode}</strong><small>Join with this code</small></aside>
+                    <aside className="corner-tag"><strong>{state.roomCode}</strong><small>{joinHost}</small></aside>
                 </section>
             ) : null}
-            {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} /> : null}
+            {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            <div className="table-edge" />
             <div className="host-spot">
                 <Lantern micRef={micRef} speakerRef={speakerRef} awake={state.started} thinking={state.hostThinking} speaking={state.hostSpeaking} look={look} />
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} /> : null}
-            {state.connected === false && state.started === true ? <p className="reconnecting">Finding the room again…</p> : null}
+            {state.connected === false && state.started === true ? <p className="reconnecting">Finding the table…</p> : null}
             {state.started === false ? (
-                <button className="sound-gate" disabled={state.connected === false} onClick={start}>
+                <button className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>
                     <Lantern micRef={micRef} speakerRef={speakerRef} awake={false} thinking={false} speaking={false} look={0} />
-                    <span className="gate-title">Click to light the lantern</span>
-                    <span className="gate-detail">{state.connected === true ? `${HOST_NAME} hosts out loud, so this needs sound.` : "Finding the room…"}</span>
+                    <span className="gate-title">Light the lantern</span>
+                    <span className="gate-detail">{state.connected === true ? `${HOST_NAME} hosts out loud, so this needs sound.` : "Finding the table…"}</span>
                 </button>
             ) : null}
         </main>

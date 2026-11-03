@@ -15,18 +15,26 @@ const DUCK_UP_SECONDS: number = 0.27;
 /** Fewest milliseconds between ticks. */
 const TICK_GAP_MILLISECONDS: number = 70;
 
-/** A pentatonic scale, so any run of ticks sounds fine. */
-const TICK_NOTES: number[] = [440, 494, 587, 659, 740, 880, 988, 1175];
+/** Where a tick's noise is centred. */
+const TICK_CENTRE_HERTZ: number = 1800;
+
+/** How long a tick lasts. */
+const TICK_SECONDS: number = 0.025;
 
 /** Plays the console's sounds on one screen. */
 export class ConsoleSounds {
     private readonly context: AudioContext = new AudioContext({ sampleRate: 48000 });
     private readonly master: GainNode = this.context.createGain();
     private lastTickAt: number = 0;
+    private readonly noise: AudioBuffer = this.context.createBuffer(1, 2400, 48000);
 
     /** Connects everything; call from the click that turned sound on. */
     public constructor() {
         this.master.gain.value = MASTER_GAIN;
+        const samples: Float32Array = this.noise.getChannelData(0);
+        for (let index = 0; index < samples.length; index += 1) {
+            samples[index] = Math.random() * 2 - 1;
+        }
         this.master.connect(this.context.destination);
     }
 
@@ -45,7 +53,7 @@ export class ConsoleSounds {
     }
 
     /**
-     * A small wooden tick as the highlight moves, higher further along.
+     * A small wooden tick as the highlight moves: a burst of filtered noise, brighter further along.
      * @param position which item it landed on.
      */
     public tick(position: number): void {
@@ -54,12 +62,26 @@ export class ConsoleSounds {
             return;
         }
         this.lastTickAt = now;
-        const note: number = TICK_NOTES[Math.min(position, TICK_NOTES.length - 1)] ?? 440;
-        this.tone(note * (1 + (Math.random() - 0.5) * 0.04), note * 0.7, 0.03, 0.9, "triangle");
+        const start: number = this.context.currentTime;
+        const noise: AudioBufferSourceNode = this.context.createBufferSource();
+        noise.buffer = this.noise;
+        const filter: BiquadFilterNode = this.context.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = TICK_CENTRE_HERTZ * (1 + Math.min(position, 6) * 0.06) * (1 + (Math.random() - 0.5) * 0.06);
+        filter.Q.value = 6;
+        const gain: GainNode = this.context.createGain();
+        gain.gain.setValueAtTime(1.6, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + TICK_SECONDS);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.master);
+        noise.start(start);
+        noise.stop(start + TICK_SECONDS);
     }
 
-    /** A rising two-note choice. */
+    /** A wooden thunk and a rising two-note choice. */
     public select(): void {
+        this.tone(170, 90, 0.08, 1, "sine");
         this.tone(523, 540, 0.07, 0.8, "triangle");
         this.tone(784, 800, 0.11, 0.7, "triangle", 0.05);
     }
@@ -73,6 +95,22 @@ export class ConsoleSounds {
     /** A soft low thud at the end of a shelf. */
     public edge(): void {
         this.tone(130, 80, 0.09, 1, "sine");
+    }
+
+    /** Someone pulled up a chair. */
+    public sitDown(): void {
+        this.tone(220, 180, 0.09, 0.8, "sine");
+        this.tone(440, 450, 0.1, 0.5, "triangle", 0.07);
+    }
+
+    /** A small rising fanfare. */
+    public win(): void {
+        [523, 659, 784, 1047].forEach((note: number, index: number) => { this.tone(note, note, 0.22, 0.8, "triangle", index * 0.11); });
+    }
+
+    /** A small falling shrug. */
+    public lose(): void {
+        [392, 330, 262].forEach((note: number, index: number) => { this.tone(note, note * 0.97, 0.26, 0.7, "triangle", index * 0.14); });
     }
 
     /** The match being struck when the lantern lights. */

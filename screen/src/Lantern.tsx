@@ -1,8 +1,8 @@
 // The host: a small brass lantern with a face behind the glass. It sleeps until the sound comes
-// on, leans toward what you're looking at, and its mouth follows the loudest voice in the room.
-// Loudness changes many times a second, so it writes CSS variables rather than re-rendering.
+// on, leans toward what you're looking at, and its mouth and the pool of light under it follow
+// its voice. Loudness changes many times a second, so it writes CSS variables, not React state.
 
-import { useEffect, useRef, type ReactElement, type RefObject } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactElement, type RefObject } from "react";
 import type { HostSpeaker } from "./speaker.ts";
 
 /** How recent a microphone reading must be to count as someone talking. */
@@ -58,22 +58,24 @@ export function Lantern(props: LanternProps): ReactElement {
     }, [micRef, speakerRef, awake, thinking, speaking]);
 
     return (
-        <svg ref={rootRef} className="lantern" data-state="asleep" viewBox="0 0 200 290" style={{ "--look": look } as React.CSSProperties} aria-hidden="true">
-            <path className="lantern-shadow" d="M38 280 q62 -14 128 -1 q4 6 -6 8 q-58 7 -118 1 q-10 -3 -4 -8z" />
+        <svg ref={rootRef} className="lantern" data-state="asleep" viewBox="0 0 200 290" style={{ "--look": look } as CSSProperties} aria-hidden="true">
+            <path className="light-pool" d="M-70 284 L28 262 L172 262 L270 284 L190 296 L10 296 Z" />
             <g className="lantern-body">
-                <path className="brass-dark" d="M100 8 c-26 1 -40 20 -38 42 l9 -1 c-1 -17 11 -32 29 -32 c18 0 30 15 29 32 l9 1 c2 -22 -12 -41 -38 -42z" />
-                <path className="brass" d="M58 52 l84 -1 l16 26 l-115 2z" />
-                <rect className="glass" x="46" y="78" width="108" height="150" rx="5" />
+                <path className="brass-dark" d="M100 6 c-27 1 -42 21 -39 44 l10 -1 c-2 -18 11 -33 29 -33 c18 0 31 15 29 33 l10 1 c3 -23 -12 -43 -39 -44z" />
+                <path className="brass" d="M64 50 l72 -1 l26 34 l-124 1z" />
+                <path className="glass" d="M62 84 L138 84 L160 118 L160 204 L140 234 L60 234 L40 204 L40 118 Z" />
                 <g className="face">
-                    <ellipse className="eye eye-left" cx="79" cy="130" rx="9" ry="12" />
-                    <ellipse className="eye eye-right" cx="121" cy="129" rx="9" ry="12" />
-                    <path className="sleep-eyes" d="M68 132 q11 8 22 0 M110 131 q11 8 22 0" />
-                    <ellipse className="mouth" cx="100" cy="178" rx="15" ry="11" />
-                    <path className="smile" d="M84 172 q16 13 33 -1" />
+                    <path className="brow brow-left" d="M64 118 q13 -8 27 -2" />
+                    <path className="brow brow-right" d="M109 116 q14 -6 27 2" />
+                    <ellipse className="eye" cx="79" cy="139" rx="11" ry="14" />
+                    <ellipse className="eye" cx="121" cy="138" rx="11" ry="14" />
+                    <path className="sleep-eyes" d="M66 141 q13 9 26 0 M108 140 q13 9 26 0" />
+                    <ellipse className="mouth" cx="100" cy="186" rx="17" ry="13" />
+                    <path className="smile" d="M83 180 q17 15 35 -1" />
                 </g>
-                <path className="brass-dark" d="M46 78 l0 150 l8 0 l0 -150z M146 78 l0 150 l8 0 l0 -150z M95 78 l0 22 l10 0 l0 -22z" />
-                <path className="brass" d="M36 226 l128 1 l6 24 q-68 8 -140 0z" />
-                <path className="brass-dark" d="M30 251 q70 8 140 0 l3 14 q-73 9 -146 0z" />
+                <path className="cage" d="M62 84 L40 118 L40 204 L60 234 M138 84 L160 118 L160 204 L140 234 M40 118 L160 118 M42 206 L158 206" />
+                <path className="brass" d="M50 232 L150 232 L172 256 Q100 266 28 256 Z" />
+                <path className="brass-dark" d="M26 256 Q100 266 174 256 L178 272 Q100 284 22 272 Z" />
             </g>
         </svg>
     );
