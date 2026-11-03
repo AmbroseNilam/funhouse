@@ -175,7 +175,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], gotGrace: false, lastAnswer: answer };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],

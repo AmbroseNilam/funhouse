@@ -83,6 +83,10 @@ export interface HostStage {
     stopSpeaking(): void;
     /** True when this moment gets the livelier host being tried out. */
     lively(): boolean;
+    /** True when the moment allows this ruling, so a ruling can be told from a player's name. */
+    mayRule(ruling: string): boolean;
+    /** The id of the player with this name, or null. */
+    playerIdNamed(name: string): string | null;
     /** The model this room's replies come from. */
     replyModel(): string;
     /** Shows the mood of the line about to be spoken. */
@@ -128,8 +132,8 @@ const QUIET_MARKER: string = "(quiet)";
 /** Matches one ruling in a reply, such as [[no]] or [[start: quizmaster]]. Two questions at once can put one mid-reply. */
 const RULING_PATTERN: RegExp = /\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]\]/;
 
-/** A ruling with a name in it, which the faster model sometimes writes, such as [[Sam: right]]. */
-const NAMED_RULING_PATTERN: RegExp = /\[\[\s*([^\]:,]+?)\s*[:,]\s*([a-zA-Z]+)\s*\]\]/g;
+/** A ruling with a name in it, which the faster model sometimes writes, such as [[Sam, right]]. */
+const NAMED_RULING_PATTERN: RegExp = /\[\[\s*([^\]:,]+?)\s*,\s*([a-zA-Z]+)\s*\]\]/g;
 
 /** Room for Spark's hidden reasoning plus a spoken reply. A brief with rulings reasons longer, and running out means no reply at all. */
 const REPLY_TOKEN_LIMIT: number = 1500;
@@ -326,7 +330,7 @@ export class Host {
      * @returns what is left to say.
      */
     private applyRulings(reply: string, speakerId: string | null): string {
-        let rest: string = this.withoutNameInRuling(reply);
+        let rest: string = reply.replace(NAMED_RULING_PATTERN, "[[$1: $2]]");
         let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
         while (match !== null) {
             const ruling: string = match[1] ?? "";
@@ -335,24 +339,20 @@ export class Host {
                 this.mood = isHostMood(detail) === true ? detail : "easy";
             }
             if (ruling !== "mood") {
-                this.rulingMood = RULING_MOOD[ruling] ?? this.rulingMood;
+                const namedId: string | null = this.stage.mayRule(detail) === true && this.stage.mayRule(ruling) === false ? this.stage.playerIdNamed(ruling) : null;
+                this.rulingMood = RULING_MOOD[namedId === null ? ruling : detail] ?? this.rulingMood;
                 log("host", "made a ruling");
-                this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
+                if (namedId !== null) {
+                    this.stage.applyRuling(detail, "", namedId);
+                }
+                if (namedId === null) {
+                    this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
+                }
             }
             rest = `${rest.slice(0, match.index)} ${rest.slice(match.index + match[0].length)}`;
             match = RULING_PATTERN.exec(rest);
         }
         return rest;
-    }
-
-    /**
-     * Takes players' names out of rulings, so the rulings still count.
-     * @param reply the whole reply.
-     * @returns the reply with plain rulings.
-     */
-    private withoutNameInRuling(reply: string): string {
-        const names: string[] = this.stage.playerNames().map((name: string) => name.toLowerCase());
-        return reply.replace(NAMED_RULING_PATTERN, (whole: string, name: string, ruling: string) => (names.includes(name.toLowerCase()) === true ? `[[${ruling}]]` : whole));
     }
 
     /**

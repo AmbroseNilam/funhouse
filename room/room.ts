@@ -747,6 +747,24 @@ export class Room implements HostStage {
     }
 
     /**
+     * Whether the moment allows this ruling.
+     * @param ruling the ruling.
+     * @returns true when the game allows it.
+     */
+    public mayRule(ruling: string): boolean {
+        return this.game?.allowsRuling(ruling) === true;
+    }
+
+    /**
+     * Finds a player by name.
+     * @param name the name, in any case.
+     * @returns the player's id, or null.
+     */
+    public playerIdNamed(name: string): string | null {
+        return [...this.players.values()].find((player: Player) => player.name.toLowerCase() === name.toLowerCase())?.playerId ?? null;
+    }
+
+    /**
      * The model this room's replies come from.
      * @returns the model's name.
      */
@@ -1535,7 +1553,9 @@ export class Room implements HostStage {
         const session: TranscribeSession = new TranscribeSession({ mode, keywords: this.keywords() }, {
             onSpeechStart: (): void => {
                 player.speaking = true;
-                this.record({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
+                const started: RoomEvent = { type: "speechStarted", at: Date.now(), playerId: player.playerId };
+                this.record(started);
+                this.game?.event(started);
                 this.broadcastScene();
             },
             onTranscript: (text: string, isFinal: boolean): void => {
