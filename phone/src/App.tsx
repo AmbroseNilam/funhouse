@@ -86,8 +86,14 @@ const PRE_ROLL_FRAMES: number = 4;
 /** How long a phone buzzes when its turn comes. */
 const TURN_BUZZ_MILLISECONDS: number = 40;
 
-/** How long a hold can go without real sound before the phone says it can't hear the mic. */
-const MIC_SILENCE_LIMIT_MILLISECONDS: number = 1200;
+/** How long a hold can go with no audio arriving at all before the phone says the mic has stopped. */
+const MIC_STALL_LIMIT_MILLISECONDS: number = 1000;
+
+/** How long a hold can stay purely silent before the phone asks them to speak up. */
+const MIC_QUIET_LIMIT_MILLISECONDS: number = 3000;
+
+/** How often a hold checks on the microphone. */
+const MIC_WATCH_MILLISECONDS: number = 400;
 
 /** How long the microphone keeps sending after release, so last words survive. */
 const TAIL_MILLISECONDS: number = 300;
@@ -384,8 +390,8 @@ export function App(): ReactElement {
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic">("closed");
     const [micRetried, setMicRetried] = useState<boolean>(false);
-    const [micSilent, setMicSilent] = useState<boolean>(false);
-    const micSilentRef = useRef<boolean>(false);
+    const [micSilent, setMicSilent] = useState<"" | "stopped" | "quiet">("");
+    const micSilentRef = useRef<"" | "stopped" | "quiet">("");
     const [invited, setInvited] = useState<string>("");
 
     useEffect(() => {
@@ -517,31 +523,34 @@ export function App(): ReactElement {
         return keepScreenOn();
     }, [joined]);
 
-    // A held mic that sends only silence is broken, usually after the phone was away, so say so and reopen it.
+    // Says so when a hold isn't reaching anything. A stopped mic is reopened once. Pure silence may only mean a quiet
+    // room, so it just asks them to speak, and any sound during the hold ends the worry for that hold.
     useEffect(() => {
         if (state.holding === false) {
-            micSilentRef.current = false;
-            setMicSilent(false);
+            micSilentRef.current = "";
+            setMicSilent("");
             return;
         }
         const startedAt: number = Date.now();
         let reopened: boolean = false;
         const watch: number = window.setInterval(() => {
             const heldFor: number = Date.now() - startedAt;
-            if (heldFor < MIC_SILENCE_LIMIT_MILLISECONDS || startingMicrophoneRef.current !== null) {
+            if (startingMicrophoneRef.current !== null) {
                 return;
             }
             const capture: MicrophoneCapture | null = captureRef.current;
-            const hearingSound: boolean = capture !== null && capture.isLive() === true && capture.silentFor() < MIC_SILENCE_LIMIT_MILLISECONDS / 2;
-            micSilentRef.current = hearingSound === false;
-            setMicSilent(hearingSound === false);
-            if (hearingSound === false && reopened === false) {
+            const stopped: boolean = capture === null || capture.isLive() === false || capture.stalledFor() >= MIC_STALL_LIMIT_MILLISECONDS;
+            const nothingYet: boolean = capture !== null && capture.silentFor() >= heldFor && heldFor >= MIC_QUIET_LIMIT_MILLISECONDS;
+            const worry: "" | "stopped" | "quiet" = stopped === true && heldFor >= MIC_STALL_LIMIT_MILLISECONDS ? "stopped" : nothingYet === true ? "quiet" : "";
+            micSilentRef.current = worry;
+            setMicSilent(worry);
+            if (worry === "stopped" && reopened === false) {
                 reopened = true;
                 capture?.stop();
                 captureRef.current = null;
                 void ensureMicrophone();
             }
-        }, MIC_SILENCE_LIMIT_MILLISECONDS / 2);
+        }, MIC_WATCH_MILLISECONDS);
         return (): void => { window.clearInterval(watch); };
         // Only starting or ending a hold should restart this watch.
     }, [state.holding]);
@@ -672,7 +681,7 @@ export function App(): ReactElement {
     /** Stops talking, keeping the microphone on a moment so the last word isn't cut. */
     const stopTalking = (): void => {
         dispatch({ type: "holding", holding: false });
-        setSent(micSilentRef.current === false);
+        setSent(micSilentRef.current === "");
         send({ type: "released" });
         tailTimerRef.current = window.setTimeout(() => {
             holdingRef.current = false;
@@ -892,8 +901,10 @@ export function App(): ReactElement {
                 <div className="thumb" aria-hidden="true" />
                 <div className="line" aria-live="polite">
                     {state.holding === true
-                        ? micSilent === true
+                        ? micSilent === "stopped"
                             ? <><strong>Can't hear your mic</strong><small>Let go and try again</small></>
+                            : micSilent === "quiet" && view?.hearing === ""
+                                ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
                                 : <strong>Listening</strong>
