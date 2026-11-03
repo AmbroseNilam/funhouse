@@ -179,20 +179,26 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
 }
 
 /**
- * A turn as the TV and phones show it: the people it names, by name, on one line with its label.
- * The TV highlights their place cards and other phones say "Waiting for" them, so their ids are
- * shown even though ids themselves are left out of the string search.
+ * A turn as the TV and phones show it. A turn for one player singles them out: the TV highlights
+ * their place card and other phones say "Waiting for" them, so their name is shown on one line
+ * with the label. A turn for everyone singles nobody out, so its names are shown each on their own,
+ * never beside the label.
  * @param turn the turn, or null.
  * @param players who is at the table.
- * @returns the line, or an empty string when there is no turn.
+ * @returns the lines, empty when there is no turn.
  */
-export function turnAsShown(turn: Turn | null, players: readonly CartridgePlayer[]): string {
+export function turnAsShown(turn: Turn | null, players: readonly CartridgePlayer[]): string[] {
     if (turn === null) {
-        return "";
+        return [];
     }
-    const named: string[] = turn.kind === "one" ? [turn.playerId] : turn.kind === "everyone" ? [...turn.playerIds, ...turn.doneIds] : [];
-    const names: string[] = named.map((playerId: string) => players.find((player: CartridgePlayer) => player.playerId === playerId)?.name ?? playerId);
-    return [turn.label, ...names].join(" ");
+    const nameOf = (playerId: string): string => players.find((player: CartridgePlayer) => player.playerId === playerId)?.name ?? playerId;
+    if (turn.kind === "one") {
+        return [`${turn.label} ${nameOf(turn.playerId)}`];
+    }
+    if (turn.kind === "everyone") {
+        return [turn.label, ...[...turn.playerIds, ...turn.doneIds].map(nameOf)];
+    }
+    return [turn.label];
 }
 
 /**
