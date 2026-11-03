@@ -663,7 +663,14 @@ export class Room implements HostStage {
     private shellStage(): ShellStage {
         return {
             games: (): ShelfGame[] => GAMES.map((game: InstalledGame) => this.shelfGame(game)),
-            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected }: Player) => ({ playerId, name, colour, connected })),
+            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk }: Player) => ({
+                playerId,
+                name,
+                colour,
+                connected,
+                talking: holdingToTalk,
+                watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
+            })),
             startGame: (gameId: string): void => { this.startGame(gameId); },
             endGame: (): void => { this.endGame(); },
             gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
@@ -990,6 +997,7 @@ export class Room implements HostStage {
             return;
         }
         player.holdingToTalk = down;
+        this.broadcastShell();
         if (down === true) {
             this.startPress(player);
             return;
@@ -1031,6 +1039,7 @@ export class Room implements HostStage {
         setTimeout(() => {
             if (player.transcribe === session) {
                 player.holdingToTalk = false;
+                this.broadcastShell();
                 this.finishPress(player);
             }
         }, PRESS_LIMIT_MILLISECONDS).unref();
@@ -1431,7 +1440,7 @@ export class Room implements HostStage {
         if (this.game === null || this.gamePlayerIds.has(player.playerId) === true) {
             return pad;
         }
-        return { ...pad, axis: null, canDrive: false, canSelect: false, backLabel: null };
+        return { ...pad, axis: null, canDrive: false, canSelect: false, backLabel: null, watching: true };
     }
 
     /**

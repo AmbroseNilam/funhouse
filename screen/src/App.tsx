@@ -11,6 +11,7 @@ import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
 import { Lantern } from "./Lantern.tsx";
+import { SeatStrip } from "./SeatStrip.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
@@ -419,6 +420,7 @@ export function App(): ReactElement {
             {playing === true ? (
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
+                    <SeatStrip seats={seats} />
                     <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
                     {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
                     <aside className="corner-tag"><strong>{state.roomCode}</strong><small>{joinHost}</small></aside>

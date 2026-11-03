@@ -67,6 +67,9 @@
 
     .surface { --level: 0; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
     .pad-screen { transition: background 120ms ease-out; }
+    .control-line { flex: none; margin: 0 16px 6px; text-align: center; font-size: 15px; line-height: 1.25; color: var(--paper); overflow-wrap: anywhere; }
+    .pad-screen.at-rest { background: color-mix(in srgb, var(--seat) 35%, var(--ink)); }
+    .at-rest .thumb, .at-rest .bands { display: none; }
     .pad-screen.talking { background: color-mix(in srgb, var(--seat) 45%, var(--ink)); }
     .bands { position: absolute; left: var(--thumb-x); top: var(--thumb-y); opacity: 0; transition: opacity 220ms ease-out; pointer-events: none; }
     .talking .bands { opacity: 0.85; transition-duration: 120ms; }

@@ -209,6 +209,9 @@ function writeLearned(learned: Set<string>): void {
  * @returns the headline and a smaller line under it.
  */
 function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean): { big: string; small: string } {
+    if (pad.watching === true) {
+        return { big: "You're watching this game", small: canTalk === true ? "You'll be in the next one. Press and hold to talk." : "You'll be in the next one" };
+    }
     if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
     }
@@ -220,6 +223,9 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     }
     if (waiting !== "") {
         return { big: waiting, small: "" };
+    }
+    if (canTalk === false && pad.axis === null) {
+        return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
     const talkLine: string = canTalk === true ? "Press and hold to talk" : "";
     if (pad.axis === null) {
@@ -233,7 +239,25 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     }
     return pad.canDrive === true
         ? { big: `${pad.driverName} has the controller`, small: "Slide to take over" }
-        : { big: `${pad.driverName} is choosing`, small: talkLine };
+        : { big: `${pad.driverName} is choosing`, small: talkLine !== "" ? talkLine : "You can take over when they stop" };
+}
+
+/**
+ * Says who holds the controller, from this phone's side.
+ * @param pad how the surface behaves.
+ * @returns the line.
+ */
+function controlLine(pad: PadView): string {
+    if (pad.watching === true) {
+        return "Watching";
+    }
+    if (pad.driving === true) {
+        return "You have the controller";
+    }
+    if (pad.controllerFree === true) {
+        return pad.axis === null ? "Nobody has the controller" : "Nobody has the controller. Slide to take it";
+    }
+    return `${pad.driverName} has the controller`;
 }
 
 /**
@@ -568,6 +592,11 @@ export function App(): ReactElement {
         }
     };
 
+    /** Answers a touch that can't do anything right now by drawing the eye to the line that says why. */
+    const nudgeLine = (): void => {
+        surfaceRef.current?.querySelector(".line")?.animate([{ opacity: 1 }, { opacity: 0.45 }, { opacity: 1 }], { duration: 240, easing: "ease-out" });
+    };
+
     /** Starts talking: the room first, then the audio kept from just before the hold. */
     const startTalking = (): void => {
         window.clearTimeout(tailTimerRef.current);
@@ -641,6 +670,7 @@ export function App(): ReactElement {
             lifted: (): void => { surface.classList.remove("touched"); },
             step: (delta: number): void => {
                 if (padRef.current?.canDrive === false) {
+                    nudgeLine();
                     return;
                 }
                 send({ type: "nav", action: { kind: "step", delta } });
@@ -660,9 +690,14 @@ export function App(): ReactElement {
                 if (padRef.current?.canSelect === true) {
                     send({ type: "nav", action: { kind: "select" } });
                     learn("tap");
+                    return;
                 }
+                nudgeLine();
             },
             holdStart: (): void => {
+                if (canTalkRef.current === false) {
+                    nudgeLine();
+                }
                 if (canTalkRef.current === false) {
                     return;
                 }
@@ -768,11 +803,12 @@ export function App(): ReactElement {
     const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk);
     const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
-    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" ? "Your mic is off" : "";
+    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
     const status: string = problem !== "" ? problem : view?.status ?? "";
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
+    const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""}`} style={seatStyle}>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -780,6 +816,7 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
+            {pad !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>

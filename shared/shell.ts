@@ -29,6 +29,10 @@ export interface Seat {
     colour: string;
     connected: boolean;
     driving: boolean;
+    /** True while they're holding to talk. */
+    talking: boolean;
+    /** True when they joined after this game began, so they're only watching it. */
+    watching: boolean;
 }
 
 /** Everything the TV needs to draw the console. */
@@ -55,6 +59,10 @@ export interface PadView {
     canNext: boolean;
     driving: boolean;
     driverName: string;
+    /** True when nobody who's here holds the controller. */
+    controllerFree: boolean;
+    /** True when this person joined after the game began, so they're only watching it. */
+    watching: boolean;
     /** True when this phone's swipes would count now: it's driving, or the controller is free. */
     canDrive: boolean;
     /** What the back corner does here, or null when it does nothing. */

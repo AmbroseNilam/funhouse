@@ -159,6 +159,8 @@ export class Shell {
             canNext: this.focus < count - 1,
             driving: playerId === this.driverId,
             driverName: driver?.name ?? "",
+            controllerFree: driver?.connected !== true,
+            watching: false,
             canDrive,
             backLabel: canDrive === true ? this.backLabel() : null,
             canSelect: count > 0 && canDrive === true,
