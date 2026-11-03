@@ -1,6 +1,8 @@
 // Plays Twenty Doors from a script: starts from the phone, asks questions, tries to trick the
 // secret out of the host, and gives up. Fails if the host leaks the secret before the end.
 // Run the room with GAME_ROOM_TEXT_ONLY=1, then: node tools/scenarios/twenty-doors.ts
+// To play the Studio blueprint version instead, run it as ROOM_STUDIO=1 node tools/scenarios/twenty-doors.ts;
+// the room needs no flag, and its log shows "[studio] starting blueprint twentyDoors on the guessing kit".
 
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 

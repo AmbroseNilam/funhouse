@@ -19,5 +19,5 @@
         "skipLibCheck": true,
         "types": ["node"]
     },
-    "include": ["types", "room", "shared", "providers", "cartridges", "tools", "screen/src", "phone/src", "landing/src", "screen/vite.config.ts", "phone/vite.config.ts", "landing/vite.config.ts", "eslint.config.js"]
+    "include": ["types", "room", "shared", "providers", "cartridges", "studio", "tools", "screen/src", "phone/src", "landing/src", "screen/vite.config.ts", "phone/vite.config.ts", "landing/vite.config.ts", "eslint.config.js"]
 }
