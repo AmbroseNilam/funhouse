@@ -53,6 +53,8 @@ export interface ShellView {
     seats: Seat[];
     /** True once a game has been decided and is showing its result. */
     gameOver: boolean;
+    /** True when every seat in a running game has dropped, so the game waits for them. */
+    steppedOut: boolean;
 }
 
 /** What a phone needs to know to behave as a controller. */

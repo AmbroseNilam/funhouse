@@ -233,6 +233,9 @@ const REJOIN_GRACE_MILLISECONDS: number = 120000;
 /** The same during a game: a locked phone mustn't lose its seat, and every phase has a timer. */
 const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
 
+/** How long every seat must be gone before the game waits, so one person's reload isn't a pause. */
+const STEP_OUT_AFTER_MILLISECONDS: number = 10000;
+
 /** Bytes between the samples measured for loudness; every fourth sample is plenty. */
 const LEVEL_SAMPLE_STRIDE_BYTES: number = 8;
 
@@ -302,6 +305,13 @@ export class Room implements HostStage {
     private lastRemarkAt: number = 0;
     private gameDecided: boolean = false;
     private paused: boolean = false;
+    /** Paused from the phone menu; only someone at the menu undoes this. */
+    private menuPaused: boolean = false;
+    /** Every seat in the running game has dropped, and the game waits for them. */
+    private steppedOut: boolean = false;
+    private stepOutTimer: NodeJS.Timeout | null = null;
+    /** Every phone connected, seated or still typing a name. */
+    private readonly phones: Set<WebSocket> = new Set();
     /** Who was seated when the game began; anyone later watches and can't drive. */
     private gamePlayerIds: Set<string> = new Set();
     private readonly drawings: Map<string, Drawing> = new Map();
@@ -359,6 +369,27 @@ export class Room implements HostStage {
         return this.screens.size === 0 && this.players.size === 0;
     }
 
+    /**
+     * True when anyone holds a seat, connected or not.
+     * @returns whether the room has players.
+     */
+    public hasPlayers(): boolean {
+        return this.players.size > 0;
+    }
+
+    /** Tells every screen and phone the room is gone, so none of them waits on it or tries to come back. */
+    public turnEveryoneAway(): void {
+        for (const screen of this.screens) {
+            this.sendToScreen(screen, { type: "rejected", reason: "roomClosed" });
+            screen.close(4004, "roomClosed");
+        }
+        const rejected: RoomToPhoneMessage = { type: "rejected", reason: "unknownRoom" };
+        for (const phone of this.phones) {
+            phone.send(JSON.stringify(rejected));
+            phone.close(4004, "unknownRoom");
+        }
+    }
+
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
@@ -366,6 +397,9 @@ export class Room implements HostStage {
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();
+        if (this.stepOutTimer !== null) {
+            clearTimeout(this.stepOutTimer);
+        }
         for (const player of this.players.values()) {
             if (player.phoneDownTimer !== null) {
                 clearTimeout(player.phoneDownTimer);
@@ -429,7 +463,7 @@ export class Room implements HostStage {
                 return;
             }
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
-            this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
+            this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen);
         });
         this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
         this.sendToScreen(socket, this.hostStateMessage());
@@ -441,6 +475,8 @@ export class Room implements HostStage {
      * @param socket the phone's WebSocket.
      */
     public attachPhone(socket: WebSocket): void {
+        this.phones.add(socket);
+        socket.on("close", () => { this.phones.delete(socket); });
         let player: Player | null = null;
         let lastRenameAt: number = 0;
         const textRate: RateWindow = new RateWindow(TEXT_MESSAGES_PER_SECOND, 1000);
@@ -756,6 +792,7 @@ export class Room implements HostStage {
             previous.close(4000, "resumed elsewhere");
         }
         log(this.scope(), `${player.playerId} rejoined`);
+        this.checkSteppedOut();
         this.welcome(player);
         this.broadcastScene();
         this.broadcastShell();
@@ -823,7 +860,8 @@ export class Room implements HostStage {
             gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
             focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
             refused: (reason: string): void => { this.host.notice(`(Game: ${reason} Say so in a few words.)`, WAKE_DELAY_MILLISECONDS.screen); },
-            driverChanged: (name: string): void => { this.host.notice(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            driverChanged: (name: string): void => { this.noticeIfAnyoneIsThere(`(${name} has the controller now. Mention it in a few words.)`, WAKE_DELAY_MILLISECONDS.leave); },
+            steppedOut: (): boolean => this.steppedOut,
             paused: (paused: boolean): void => { this.setPaused(paused); },
             gameAction: (playerId: string, actionId: string): void => { this.game?.input(playerId, actionId); },
             edge: (): void => { this.broadcastToScreens({ type: "edge" }); },
@@ -835,10 +873,64 @@ export class Room implements HostStage {
     }
 
     /**
-     * Pauses or resumes for real: the host stops, timers hold, and phones go quiet.
+     * Records a pause or resume from the phone menu.
      * @param paused true to pause.
      */
     private setPaused(paused: boolean): void {
+        this.menuPaused = paused;
+        this.applyPause();
+    }
+
+    /**
+     * Passes something to the host, unless the game is waiting for an empty table.
+     * @param line the note.
+     * @param delayMilliseconds how long the host waits before acting on it.
+     */
+    private noticeIfAnyoneIsThere(line: string, delayMilliseconds: number): void {
+        if (this.steppedOut === true) {
+            return;
+        }
+        this.host.notice(line, delayMilliseconds);
+    }
+
+    /** Makes the game wait once every seat has been gone a moment, and carries on as soon as one is back. */
+    private checkSteppedOut(): void {
+        const seats: Player[] = [...this.gamePlayerIds].flatMap((playerId: string) => this.players.get(playerId) ?? []);
+        const allGone: boolean = this.game !== null && this.game.outcome() === null && seats.length > 0 && seats.every((seat: Player) => seat.connected === false);
+        if (allGone === true) {
+            if (this.steppedOut === false && this.stepOutTimer === null) {
+                this.stepOutTimer = setTimeout(() => {
+                    this.stepOutTimer = null;
+                    this.setSteppedOut(true);
+                }, STEP_OUT_AFTER_MILLISECONDS);
+            }
+            return;
+        }
+        if (this.stepOutTimer !== null) {
+            clearTimeout(this.stepOutTimer);
+            this.stepOutTimer = null;
+        }
+        this.setSteppedOut(false);
+    }
+
+    /**
+     * Records whether the table is empty and tells the room.
+     * @param steppedOut true when every seat is gone.
+     */
+    private setSteppedOut(steppedOut: boolean): void {
+        if (this.steppedOut === steppedOut) {
+            return;
+        }
+        this.steppedOut = steppedOut;
+        log(this.scope(), steppedOut === true ? "everyone stepped out" : "the game has stopped waiting");
+        this.applyPause();
+        this.broadcastShell();
+        this.refreshPhones();
+    }
+
+    /** Pauses or resumes for real: the host stops, timers hold, and phones go quiet. */
+    private applyPause(): void {
+        const paused: boolean = this.menuPaused === true || this.steppedOut === true;
         if (this.paused === paused) {
             return;
         }
@@ -978,6 +1070,7 @@ export class Room implements HostStage {
         this.game = null;
         this.caption = null;
         this.shell.gameEnded();
+        this.checkSteppedOut();
         this.broadcastScene();
     }
 
@@ -987,12 +1080,13 @@ export class Room implements HostStage {
      */
     private gameStage(): GameStage {
         return {
-            tellHost: (line: string): void => { this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen); },
+            tellHost: (line: string): void => { this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen); },
             changed: (): void => {
                 this.broadcastScene();
                 if (this.gameDecided === false && this.game?.outcome() !== null) {
                     this.gameDecided = true;
                     this.shell.gameDecided();
+                    this.checkSteppedOut();
                 }
                 this.refreshPhones();
             },
@@ -1083,6 +1177,7 @@ export class Room implements HostStage {
         this.broadcastShell();
         this.refreshPhones();
         player.leaveTimer = setTimeout(() => { this.removePlayer(player); }, grace);
+        this.checkSteppedOut();
     }
 
     /**
@@ -1109,8 +1204,13 @@ export class Room implements HostStage {
         this.record(left);
         this.game?.event(left);
         log(this.scope(), `${player.playerId} left`);
+        // With no seats left nobody could ever play on, because seats are fixed when a game starts.
+        if ([...this.gamePlayerIds].some((playerId: string) => this.players.has(playerId)) === false) {
+            this.endGame();
+        }
+        this.checkSteppedOut();
         if (this.players.size > 0) {
-            this.host.notice(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
+            this.noticeIfAnyoneIsThere(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
         }
         this.shell.seatsChanged();
         this.broadcastScene();
