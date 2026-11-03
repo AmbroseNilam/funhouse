@@ -2,6 +2,7 @@
     "name": "game-room",
     "version": "0.1.0",
     "private": true,
+    "license": "MIT",
     "description": "Funhouse: game night, and nobody has to host. Phones join by QR code; the host listens, talks, draws, and keeps secrets.",
     "type": "module",
     "engines": {

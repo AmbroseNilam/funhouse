@@ -45,8 +45,8 @@ const MAX_MESSAGE_BYTES: number = 7680;
 /** The site's own address, the only web page allowed to open these sockets. */
 const PUBLIC_ORIGIN: string = new URL(PUBLIC_URL).origin;
 
-/** An address the site used to live at; visits there are sent to the current one. */
-const OLD_HOST: string = "your-domain.example";
+/** An address the site used to live at, if any; visits there are sent to the current one. */
+const OLD_HOST: string | undefined = process.env.OLD_HOST;
 
 /** Headers on every page, so it can't be framed, sniffed or made to load anything else. */
 const SECURITY_HEADERS: Record<string, string> = {
@@ -168,7 +168,7 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
     for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
         response.setHeader(name, value);
     }
-    if (request.headers.host === OLD_HOST) {
+    if (OLD_HOST !== undefined && request.headers.host === OLD_HOST) {
         response.writeHead(301, { location: `${PUBLIC_ORIGIN}${request.url ?? "/"}` }).end();
         return;
     }

@@ -36,7 +36,7 @@ lantern, icons and share image are drawn in code, with no AI art in them.
 | `cartridges/` | Games. Each has a manifest, a rules core, and simulated-player tests. |
 | `providers/` | Meta and OpenAI clients. Provider details never leak past this folder. |
 | `tools/` | Latency probes and the `verify.py` guard. |
-| `deploy/` | Containerfile and the rootless Podman pod definition. |
+| `deploy/` | Containerfile for running the room anywhere. |
 
 ## Run
 
@@ -62,6 +62,10 @@ To check the code:
 ```sh
 npm run check            # verify.py, typecheck, lint, tests
 ```
+
+## License
+
+MIT. See `LICENSE`. Fraunces is under the SIL Open Font License. Paintings are AI-generated; see Credits.
 
 ## Conventions
 
