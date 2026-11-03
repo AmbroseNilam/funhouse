@@ -83,6 +83,8 @@ export interface HostStage {
     stopSpeaking(): void;
     /** True when this moment gets the livelier host being tried out. */
     lively(): boolean;
+    /** The model this room's replies come from. */
+    replyModel(): string;
     /** Shows the mood of the line about to be spoken. */
     showMood(mood: HostMood): void;
     /** One line on how much each person has talked, for this host only. */
@@ -125,6 +127,9 @@ const QUIET_MARKER: string = "(quiet)";
 
 /** Matches one ruling at the start of a reply, such as [[no]] or [[start: quizmaster]]. */
 const RULING_PATTERN: RegExp = /^\s*\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]\]/;
+
+/** A ruling with a name in it, which the faster model sometimes writes, such as [[Sam: right]]. */
+const NAMED_RULING_PATTERN: RegExp = /^\s*\[\[\s*([^\]:,]+?)\s*[:,]\s*([a-zA-Z]+)\s*\]\]/;
 
 /** Room for Spark's hidden reasoning plus a spoken reply. A brief with rulings reasons longer, and running out means no reply at all. */
 const REPLY_TOKEN_LIMIT: number = 1500;
@@ -271,7 +276,7 @@ export class Host {
             { role: "system", content: this.systemPrompt() },
             { role: "user", content: this.turnPrompt(earlier, lines) },
         ];
-        for await (const delta of streamSparkWithBackup(messages, { signal, maxTokens: REPLY_TOKEN_LIMIT }, REPLY_BACKUP_AFTER_MILLISECONDS, () => BUDGET.spend("spark"))) {
+        for await (const delta of streamSparkWithBackup(messages, { signal, maxTokens: REPLY_TOKEN_LIMIT, model: this.stage.replyModel() }, REPLY_BACKUP_AFTER_MILLISECONDS, () => BUDGET.spend("spark"))) {
             if (firstTextAt === 0) {
                 firstTextAt = Date.now();
             }
@@ -321,7 +326,7 @@ export class Host {
      * @returns what is left to say.
      */
     private applyRulings(reply: string, speakerId: string | null): string {
-        let rest: string = reply;
+        let rest: string = this.withoutNameInRuling(reply);
         let match: RegExpExecArray | null = RULING_PATTERN.exec(rest);
         while (match !== null) {
             const ruling: string = match[1] ?? "";
@@ -338,6 +343,20 @@ export class Host {
             match = RULING_PATTERN.exec(rest);
         }
         return rest;
+    }
+
+    /**
+     * Takes a player's name out of a ruling at the start of a reply, so the ruling still counts.
+     * @param reply the whole reply.
+     * @returns the reply, with a plain ruling at the start.
+     */
+    private withoutNameInRuling(reply: string): string {
+        const match: RegExpExecArray | null = NAMED_RULING_PATTERN.exec(reply);
+        const named: boolean = this.stage.playerNames().some((name: string) => name.toLowerCase() === match?.[1]?.toLowerCase());
+        if (match === null || named === false) {
+            return reply;
+        }
+        return `[[${match[2] ?? ""}]]${reply.slice(match[0].length)}`;
     }
 
     /**
@@ -358,7 +377,7 @@ export class Host {
     private systemPrompt(): string {
         return [
             this.persona.character,
-            "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet) and any [[ruling]] you are told you may make, which goes first and is never read aloud.",
+            "Everything you write is read aloud word for word, so no lists, markdown, emoji, stage directions or brackets, except the exact reply (quiet) and any [[ruling]] you are told you may make, which goes first and is never read aloud. Write a ruling exactly as you were told, with no name in it.",
             this.stage.brief(),
             this.stage.lively() === true ? LIVELY_INSTRUCTIONS : "",
         ].filter((part: string) => part !== "").join("\n\n");

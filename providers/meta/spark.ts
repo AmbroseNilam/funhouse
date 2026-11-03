@@ -7,6 +7,9 @@ import { postJson, readServerSentEvents } from "./client.ts";
 /** Default host model. */
 export const SPARK_MODEL: string = "muse-spark-1.3";
 
+/** Tried in rooms opened with ?fast=1. On 15 scripted turns, first text took 1.4 s against 2.9 s, with rulings about as accurate. */
+export const FAST_SPARK_MODEL: string = "muse-spark-1.2";
+
 /** One chat message. */
 export interface SparkMessage {
     role: "system" | "user" | "assistant";

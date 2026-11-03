@@ -41,7 +41,7 @@ export class FakeScreen {
     public code: string = "";
     public thinking: boolean = false;
     public readonly hostLines: string[] = [];
-    private readonly socket: WebSocket = new WebSocket(`${ROOM_URL}/ws/screen${process.env.ROOM_CODE === undefined ? "" : `?room=${process.env.ROOM_CODE}`}`);
+    private readonly socket: WebSocket = new WebSocket(`${ROOM_URL}/ws/screen${process.env.ROOM_CODE === undefined ? `?${process.env.ROOM_SWITCHES ?? ""}` : `?room=${process.env.ROOM_CODE}`}`);
 
     /** Opens the screen and turns its sound on. */
     public constructor() {

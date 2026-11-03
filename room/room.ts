@@ -14,6 +14,7 @@ import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
+import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -349,6 +350,7 @@ export class Room implements HostStage {
     private lullsThisGame: number = 0;
     private readonly livelyRoom: boolean;
     private readonly tapToTalk: boolean;
+    private readonly fastReplies: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
     /** When the TV's voice may last have been heard, from its last stop and the guard after it. */
@@ -367,11 +369,13 @@ export class Room implements HostStage {
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
      * @param livelyRoom true when the room was opened to try the livelier host.
      * @param tapToTalk true when the room was opened to try tap-to-talk.
+     * @param fastReplies true when the room was opened to try the faster reply model.
      */
-    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false, tapToTalk: boolean = false) {
+    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false) {
         this.code = code;
         this.livelyRoom = livelyRoom;
         this.tapToTalk = tapToTalk;
+        this.fastReplies = fastReplies;
         this.lullTimer = livelyRoom === true ? setInterval(() => { this.checkLull(); }, LULL_CHECK_MILLISECONDS).unref() : null;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
@@ -707,6 +711,14 @@ export class Room implements HostStage {
      */
     public lively(): boolean {
         return this.livelyRoom === true && this.game?.manifest.id === LIVELY_GAME;
+    }
+
+    /**
+     * The model this room's replies come from.
+     * @returns the model's name.
+     */
+    public replyModel(): string {
+        return this.fastReplies === true ? FAST_SPARK_MODEL : SPARK_MODEL;
     }
 
     /**
