@@ -55,8 +55,8 @@ if (new URLSearchParams(location.search).get("fps") === "1") {
 /** How long a touched phone's seat stays lifted on the TV. */
 const TOUCH_SHOWN_MILLISECONDS: number = 700;
 
-/** How long someone's arrival stays on the TV. */
-const ARRIVAL_MILLISECONDS: number = 3000;
+/** How long a new arrival's seat stays lifted on the TV. */
+const ARRIVAL_MILLISECONDS: number = 1500;
 
 /** Longest wait between reconnect attempts. */
 const MAX_RECONNECT_DELAY_MILLISECONDS: number = 5000;
@@ -150,7 +150,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <Countdown key={index} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
     }
     if (block.type === "tally") {
-        return <table key={index} className="tally"><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
+        return <table key={index} className={`tally ${block.rows.length > 6 ? "many" : ""}`}><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
     }
     if (block.type === "progress") {
         const marks: number[] = Array.from({ length: block.max }, (_unused: unknown, position: number) => position);
@@ -177,8 +177,6 @@ export function App(): ReactElement {
     const previousShellRef = useRef<ShellView | null>(null);
     const screenRef = useRef<string>("");
     const wasOverRef = useRef<boolean>(false);
-    const arrivalTimerRef = useRef<number>(0);
-    const [arrival, setArrival] = useState<Seat | null>(null);
     const [touchedId, setTouchedId] = useState<string | null>(null);
     const touchTimerRef = useRef<number>(0);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
@@ -350,9 +348,9 @@ export function App(): ReactElement {
         const newcomer: Seat | undefined = shell.seats.find((seat: Seat) => previous.seats.some((before: Seat) => before.playerId === seat.playerId) === false);
         if (newcomer !== undefined) {
             sounds.sitDown();
-            setArrival(newcomer);
-            window.clearTimeout(arrivalTimerRef.current);
-            arrivalTimerRef.current = window.setTimeout(() => { setArrival(null); }, ARRIVAL_MILLISECONDS);
+            setTouchedId(newcomer.playerId);
+            window.clearTimeout(touchTimerRef.current);
+            touchTimerRef.current = window.setTimeout(() => { setTouchedId(null); }, ARRIVAL_MILLISECONDS);
         }
         if (previous.screen !== shell.screen) {
             const backing: boolean = shell.screen === "home" || (previous.screen === "howTo" && shell.screen === "pause") || (previous.screen === "pause" && shell.screen === "play");
@@ -459,7 +457,6 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {(shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {arrival !== null && state.started === true ? <p key={arrival.playerId} className="arrival" style={{ background: arrival.colour }}>{arrival.name} sat down</p> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

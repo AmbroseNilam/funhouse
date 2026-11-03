@@ -64,7 +64,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
   At an edge it rubberbands 12px. This is what makes it feel connected.
 - **Focus:** scale 1.07 plus a lifted hard shadow and a lamp edge. Never colour alone.
 - **Reading at distance (at 1080p, scaled to viewport):** body 32, floor 28, captions 46. Safe area
-  80 sides and 60 top and bottom. Captions: two lines at most, name on speaker change.
+  80 sides and 60 top and bottom; place cards stand on the table edge, which sits inside the bottom margin. Captions: two lines at most, name on speaker change.
 - **Driver:** one person drives, first joiner by default. Their name hangs off the focus. After 5s
   idle, anyone's swipe takes over. Anyone may talk at any time. If the driver leaves, the next person
   takes over and the host says so.

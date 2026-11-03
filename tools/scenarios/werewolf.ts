@@ -29,8 +29,7 @@ if (seats.filter((seat: Seat) => seat.role === "werewolf").length !== 1) {
 }
 const hasFinished = (): boolean => screen.title().endsWith("wins");
 const isOut = (seat: Seat): boolean => {
-    const roster = screen.scene?.blocks.find((block) => block.type === "roster");
-    return roster?.type === "roster" && roster.players.some((entry) => entry.name === seat.name && entry.badge === "out");
+    return screen.shell?.seats.some((entry) => entry.name === seat.name && entry.out === true) === true;
 };
 
 let day: number = 1;

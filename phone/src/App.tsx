@@ -213,9 +213,10 @@ function writeLearned(learned: Set<string>): void {
  * @param learned the gestures already done.
  * @param waiting what the game says to wait for, if anything.
  * @param canTalk whether the microphone may open right now.
+ * @param micOff whether this phone's microphone is refused or broken, so talking can't be taught.
  * @returns the headline and a smaller line under it.
  */
-function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean): { big: string; small: string } {
+function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean): { big: string; small: string } {
     if (pad.watching === true) {
         return { big: "You're watching this game", small: canTalk === true ? "You'll be in the next one. Press and hold to talk." : "You'll be in the next one" };
     }
@@ -225,16 +226,16 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.canSelect === true && pad.axis !== null && learned.has("tap") === false) {
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
-    if (canTalk === true && learned.has("hold") === false) {
+    if (canTalk === true && micOff === false && learned.has("hold") === false) {
         return { big: "Press and hold to talk", small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
-        return { big: waiting, small: "" };
+        return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
     }
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
-    const talkLine: string = canTalk === true ? "Press and hold to talk" : "";
+    const talkLine: string = canTalk === false ? "" : micOff === true ? "Turn on your mic from the menu" : "Press and hold to talk";
     if (pad.axis === null) {
         return { big: "", small: talkLine };
     }
@@ -307,7 +308,7 @@ function CodeScreen(): ReactElement {
  * @param props the secret.
  * @returns the element.
  */
-function SecretCard(props: { title: string; body: string }): ReactElement {
+function SecretCard(props: { title: string; lines: string[] }): ReactElement {
     const [peeking, setPeeking] = useState<boolean>(false);
     return (
         <button
@@ -318,7 +319,7 @@ function SecretCard(props: { title: string; body: string }): ReactElement {
             onPointerLeave={() => { setPeeking(false); }}
         >
             {peeking === true
-                ? <>{props.title !== "" ? <strong>{props.title}</strong> : null}<span>{props.body}</span></>
+                ? <>{props.title !== "" ? <strong>{props.title}</strong> : null}{props.lines.map((line: string) => <span key={line}>{line}</span>)}</>
                 : <em>Press and hold to peek</em>}
         </button>
     );
@@ -337,7 +338,7 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
     }
     if (control.type === "roleCard") {
         return control.secret === true
-            ? <SecretCard key={index} title={control.title} body={control.body} />
+            ? null
             : <section key={index} className="paper"><h2>{control.title}</h2><p>{control.body}</p></section>;
     }
     if (control.type === "buttons" || control.type === "choice") {
@@ -357,7 +358,7 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
         );
     }
     if (control.tone === "secret") {
-        return <SecretCard key={index} title="" body={control.text} />;
+        return null;
     }
     return <p key={index} className={`paper note ${control.tone}`}>{control.text}</p>;
 }
@@ -445,6 +446,9 @@ export function App(): ReactElement {
                     pendingNameRef.current = null;
                     setSameName(null);
                     writeSeat({ playerId: message.playerId, resumeToken: message.resumeToken, name: message.name, roomCode: message.roomCode });
+                    if (document.visibilityState !== "visible") {
+                        socket.send(JSON.stringify({ type: "presence", away: true } satisfies PhoneMessage));
+                    }
                 }
                 dispatch({ type: "message", message });
             };
@@ -827,11 +831,19 @@ export function App(): ReactElement {
     const pad: PadView | null = view?.pad ?? null;
     const controls: Control[] = view?.controls ?? [];
     const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
-    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk);
-    const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
+    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok");
+    const secretTitle: string = controls.flatMap((control: Control) => (control.type === "roleCard" && control.secret === true ? [control.title] : []))[0] ?? "";
+    const secretLines: string[] = controls.flatMap((control: Control) => {
+        if (control.type === "roleCard" && control.secret === true) {
+            return [control.body];
+        }
+        return control.type === "notice" && control.tone === "secret" ? [control.text] : [];
+    });
+    const secretCard: ReactElement | null = secretLines.length > 0 ? <SecretCard key="secret" title={secretTitle} lines={secretLines} /> : null;
+    const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
-    const status: string = problem !== "" ? problem : view?.status ?? "";
+    const status: string = problem !== "" ? problem : view?.status === line.big ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;

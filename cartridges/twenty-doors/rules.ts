@@ -10,6 +10,9 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { TWENTY_DOORS_MANIFEST } from "./manifest.ts";
 
+/** How long the reveal says the picture is still coming, in seconds. */
+const PAINTING_WAIT_SECONDS: number = 20;
+
 /** Doors the group gets. */
 export const DOOR_COUNT: number = 20;
 
@@ -47,6 +50,8 @@ export interface AskedQuestion {
 /** The whole game, immutable between steps. */
 export interface TwentyDoorsState {
     phase: "choosing" | "asking" | "end";
+    /** True once a picture has taken too long; a drawing may never arrive. */
+    stoppedWaitingForPicture: boolean;
     players: CartridgePlayer[];
     category: string;
     fallback: string;
@@ -79,7 +84,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
      * @returns the step.
      */
     const finish = (state: TwentyDoorsState, won: boolean, finder: string | null, text: string): Step<TwentyDoorsState> => {
-        return { state: { ...state, phase: "end", won, finder, heard: null }, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
+        return { state: { ...state, phase: "end", won, finder, heard: null }, facts: [publicFact("game-over", text)], nextPhaseId: "end", timers: { painting: PAINTING_WAIT_SECONDS } };
     };
 
     /**
@@ -104,7 +109,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
 
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
             const category: { name: string; fallback: string } = CATEGORIES[Math.floor(random() * CATEGORIES.length)] ?? { name: "an animal", fallback: "platypus" };
-            const state: TwentyDoorsState = { phase: "choosing", players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], heard: null, won: false, finder: null, revealPicture: null };
+            const state: TwentyDoorsState = { phase: "choosing", stoppedWaitingForPicture: false, players, category: category.name, fallback: category.fallback, secret: "", doorsOpened: 0, asked: [], heard: null, won: false, finder: null, revealPicture: null };
             return {
                 state,
                 facts: [],
@@ -152,6 +157,9 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
                     draws: [{ id: "reveal", prompt: `A warm storybook painting of ${secret}, seen through an open wooden door, glowing light, rich color, no text or letters.` }],
                 };
             }
+            if (event.type === "timerFired" && event.timerId === "painting") {
+                return { state: { ...state, stoppedWaitingForPicture: true }, facts: [] };
+            }
             if (event.type === "drawingReady" && event.id === "reveal") {
                 return { state: { ...state, revealPicture: event.src }, facts: [] };
             }
@@ -184,7 +192,12 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
             }
             if (state.phase === "end") {
                 const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
-                blocks.push(state.revealPicture === null ? { type: "text", text: "Still painting it…", emphasis: "whisper" } : { type: "image", src: state.revealPicture });
+                if (state.revealPicture !== null) {
+                    blocks.push({ type: "image", src: state.revealPicture });
+                }
+                if (state.revealPicture === null && state.stoppedWaitingForPicture === false) {
+                    blocks.push({ type: "text", text: "Still painting it…", emphasis: "whisper" });
+                }
                 blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };
             }

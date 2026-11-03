@@ -89,14 +89,14 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                         {index === shell.focus && empty === false ? <DriverFlag seat={driver} /> : null}
                     </div>
                 ))}
-                <div className={`box table-box ${shell.focus === shell.games.length && empty === false ? "focused leaning" : ""}`} style={{ height: `${BOX_SHAPES[3]?.height ?? 80}%`, rotate: `${BOX_SHAPES[3]?.tilt ?? 0}deg`, flexGrow: BOX_SHAPES[3]?.width ?? 1 }}>
+                {empty === true ? null : <div className={`box table-box ${shell.focus === shell.games.length ? "focused leaning" : ""}`} style={{ height: `${BOX_SHAPES[3]?.height ?? 80}%`, rotate: `${BOX_SHAPES[3]?.tilt ?? 0}deg`, flexGrow: BOX_SHAPES[3]?.width ?? 1 }}>
                     <ul className="table-names">
                         {shell.seats.slice(0, TABLE_BOX_NAMES).map((seat: Seat) => <li key={seat.playerId} style={{ background: seat.colour }}>{seat.name}</li>)}
                         {shell.seats.length > TABLE_BOX_NAMES ? <li className="more">and {shell.seats.length - TABLE_BOX_NAMES} more</li> : null}
                     </ul>
                     <span className="box-name">At the table</span>
-                    {shell.focus === shell.games.length && empty === false ? <DriverFlag seat={driver} /> : null}
-                </div>
+                    {shell.focus === shell.games.length ? <DriverFlag seat={driver} /> : null}
+                </div>}
             </div>
             <div className="plank" />
             <JoinTag qr={props.qr} code={props.code} big={empty} joinHost={props.joinHost} />
@@ -140,11 +140,11 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
                 {shell.seats.map((seat: Seat) => (
                     <li key={seat.playerId} className={seat.connected === false ? "away" : ""} style={{ background: seat.colour }}>
                         <strong>{seat.name}</strong>
-                        <small>{seat.connected === false ? "Phone's asleep" : seat.driving === true ? "Has the controller" : "Sitting down"}</small>
+                        <small>{seat.connected === false ? "Phone's asleep" : seat.driving === true ? "Has the controller" : ""}</small>
                     </li>
                 ))}
             </ul>
-            <p className="players-hint">{HOST_NAME} can hear everyone. Whoever slides next takes the controller. Anyone else can scan in.</p>
+            <p className="players-hint">Hold your phone to talk to {HOST_NAME}. Whoever slides next takes the controller. Anyone else can scan in.</p>
             <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
             <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
         </section>

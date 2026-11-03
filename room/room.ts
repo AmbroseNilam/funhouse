@@ -115,6 +115,9 @@ const MOOD_LINGER_MILLISECONDS: number = 1500;
 /** How long a phone must be away from the app before the TV says so. */
 const PHONE_DOWN_AFTER_MILLISECONDS: number = 3000;
 
+/** Least time between the host being told someone joined, so it doesn't greet every arrival. */
+const JOIN_NOTICE_GAP_MILLISECONDS: number = 30000;
+
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
 
@@ -307,6 +310,8 @@ export class Room implements HostStage {
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
     private hostMood: HostMood | null = null;
+    private lastJoinNoticeAt: number = 0;
+    private lastOutKey: string = "";
     private releasedAt: number = 0;
     private replyClockAt: number = 0;
     private lastLullPlayerId: string | null = null;
@@ -683,7 +688,12 @@ export class Room implements HostStage {
         this.broadcastShell();
         this.refreshPhones();
         this.prepareStandby(player);
-        this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+        if (Date.now() - this.lastJoinNoticeAt >= JOIN_NOTICE_GAP_MILLISECONDS) {
+            this.lastJoinNoticeAt = Date.now();
+            this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+            return player;
+        }
+        this.host.remark(`(${name} joined the room)`);
         return player;
     }
 
@@ -778,6 +788,7 @@ export class Room implements HostStage {
                 connected,
                 talking: holdingToTalk,
                 phoneDown,
+                out: this.game?.outIds().includes(playerId) === true,
                 watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
             })),
             startGame: (gameId: string): void => { this.startGame(gameId); },
@@ -1488,7 +1499,7 @@ export class Room implements HostStage {
      * @param player who let go.
      */
     private onReleased(player: Player): void {
-        if (this.lively() === false || player.holdingToTalk === false) {
+        if (this.lively() === false || player.holdingToTalk === false || this.paused === true) {
             return;
         }
         this.releasedAt = Date.now();
@@ -1688,7 +1699,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.padFor(player), turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), turn: this.phoneTurn(player) };
     }
 
     /**
@@ -1782,6 +1793,11 @@ export class Room implements HostStage {
 
     /** Sends the current scene to every screen. */
     private broadcastScene(): void {
+        const outKey: string = (this.game?.outIds() ?? []).join(",");
+        if (outKey !== this.lastOutKey) {
+            this.lastOutKey = outKey;
+            this.broadcastShell();
+        }
         this.broadcastToScreens({ type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
     }
 

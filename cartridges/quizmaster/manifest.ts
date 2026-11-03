@@ -18,7 +18,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
     phases: [
         {
             id: "topic",
-            hostBrief: "Ask what topic they would like to be quizzed on. When one is named, rule it. Chat that doesn't name a topic gets no ruling; gently ask again.",
+            hostBrief: "Ask what topic they would like to be quizzed on. When anyone names a subject, broad or narrow, rule it straight away; never ask them to narrow it down or refuse it for being odd, unless it isn't fit for the table. Chat that doesn't name a subject gets no ruling; gently ask again.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,
             silenceSeconds: 0,

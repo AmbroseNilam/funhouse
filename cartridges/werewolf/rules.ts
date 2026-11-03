@@ -363,7 +363,17 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (state.phase === "night") {
                 return [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }];
             }
-            return [{ type: "waiting", text: "Talk it out" }];
+            if (state.phase === "dawn") {
+                return [{ type: "waiting", text: "Listen for what happened" }];
+            }
+            if (state.phase === "end") {
+                return [{ type: "waiting", text: "That's the game" }];
+            }
+            return state.phase === "discussion" ? [{ type: "waiting", text: "Talk it out" }] : [];
+        },
+
+        outOf(state: WerewolfState): string[] {
+            return state.seats.filter((seat) => seat.alive === false).map((seat) => seat.playerId);
         },
 
         turn(state: WerewolfState): Turn | null {
@@ -407,12 +417,11 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      * @returns the scene.
      */
     function baseScene(state: WerewolfState): Scene {
-        const roster = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: state.phase === "night", ...(seat.alive === false ? { badge: "out" } : {}) }));
         if (state.phase === "night") {
-            return { mood: "night", transition: "dim", blocks: [{ type: "title", text: "Night falls", kicker: `Round ${state.round}` }, { type: "text", text: "Everyone, eyes closed.", emphasis: "whisper" }, { type: "roster", players: roster }] };
+            return { mood: "night", transition: "dim", blocks: [{ type: "title", text: "Night falls", kicker: `Round ${state.round}` }, { type: "text", text: "Everyone, eyes closed.", emphasis: "whisper" }] };
         }
         if (state.phase === "discussion") {
-            const blocks: Scene["blocks"] = [{ type: "title", text: "Who is the werewolf?", kicker: `Day ${state.round}` }, { type: "roster", players: roster }];
+            const blocks: Scene["blocks"] = [{ type: "title", text: "Who is the werewolf?", kicker: `Day ${state.round}` }];
             if (state.variants.dayTimer === true) {
                 blocks.push({ type: "timer", seconds: DISCUSSION_SECONDS, label: "to decide", running: true });
             }
@@ -420,13 +429,13 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         }
         if (state.phase === "vote") {
             const rows = alive(state).map((seat) => ({ label: seat.name, count: Object.values(state.dayVotes).filter((vote) => vote === seat.playerId).length }));
-            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }] };
+            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }, { type: "timer", seconds: VOTE_SECONDS, label: "to vote", running: true }] };
         }
         if (state.phase === "end") {
             const revealed = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: false, badge: seat.role }));
             return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks: [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win" }, { type: "roster", players: revealed }] };
         }
-        return { mood: state.phase === "dawn" ? "dawn" : "neutral", transition: "fade", blocks: [{ type: "title", text: state.phase === "dawn" ? "Dawn" : "Look at your phone", kicker: `Round ${state.round}` }, { type: "roster", players: roster }] };
+        return { mood: state.phase === "dawn" ? "dawn" : "neutral", transition: "fade", blocks: [{ type: "title", text: state.phase === "dawn" ? "Dawn" : "Look at your phone", kicker: `Round ${state.round}` }] };
     }
 
     /**

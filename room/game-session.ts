@@ -34,6 +34,8 @@ export interface RunningGame {
     input(playerId: string, value: string): void;
     /** Something happened in the room that the rules may care about. */
     event(event: RoomEvent): void;
+    /** Who is out of the game but still at the table. */
+    outIds(): string[];
     /** Whose turn it is, if the game says. */
     turn(): Turn | null;
     /** True when the current phase allows this ruling from the host. */
@@ -113,6 +115,14 @@ export class GameSession<State> implements RunningGame {
     }
 
     /**
+     * Who is out of the game but still at the table.
+     * @returns their ids.
+     */
+    public outIds(): string[] {
+        return this.state === null ? [] : this.cartridge.outOf?.(this.state) ?? [];
+    }
+
+    /**
      * Whose turn it is, once the game has begun and if it says.
      * @returns the turn, or null.
      */
@@ -177,7 +187,8 @@ export class GameSession<State> implements RunningGame {
         if (this.state === null) {
             return [{ type: "waiting", text: "Getting the game ready." }];
         }
-        const whispered: Control[] = (this.whispers.get(playerId) ?? []).map((text: string) => ({ type: "notice", text, tone: "secret" }));
+        const whispers: string[] = this.cartridge.outcome(this.state) === null ? this.whispers.get(playerId) ?? [] : [];
+        const whispered: Control[] = whispers.map((text: string) => ({ type: "notice", text, tone: "secret" }));
         return [...this.cartridge.privateControls(this.state, playerId), ...whispered];
     }
 

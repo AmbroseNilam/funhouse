@@ -82,6 +82,8 @@ export interface Cartridge<State> {
     init(players: CartridgePlayer[], variants: Record<string, boolean>): Step<State>;
     /** The current phase id. */
     phaseOf(state: State): string;
+    /** Who is out of the game but still at the table. Pure. Left out means nobody. */
+    outOf?(state: State): string[];
     /** Whose turn it is. Pure, and it never changes the rules. Left out, or returning null, shows no turn at all. */
     turn?(state: State): Turn | null;
     /** The role id of a player, used to look up listening modes. */
