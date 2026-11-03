@@ -7,6 +7,7 @@
 
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
+import type { Turn } from "../shared/turn.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
 import { appears, appearsAsWord, squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
 
@@ -178,6 +179,23 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
 }
 
 /**
+ * A turn as the TV and phones show it: the people it names, by name, on one line with its label.
+ * The TV highlights their place cards and other phones say "Waiting for" them, so their ids are
+ * shown even though ids themselves are left out of the string search.
+ * @param turn the turn, or null.
+ * @param players who is at the table.
+ * @returns the line, or an empty string when there is no turn.
+ */
+export function turnAsShown(turn: Turn | null, players: readonly CartridgePlayer[]): string {
+    if (turn === null) {
+        return "";
+    }
+    const named: string[] = turn.kind === "one" ? [turn.playerId] : turn.kind === "everyone" ? [...turn.playerIds, ...turn.doneIds] : [];
+    const names: string[] = named.map((playerId: string) => players.find((player: CartridgePlayer) => player.playerId === playerId)?.name ?? playerId);
+    return [turn.label, ...names].join(" ");
+}
+
+/**
  * What every viewer sees right now, whole: the TV, each phone (which sees the TV too), and the
  * host. Facts are what the step just emitted, routed the way the room routes them. Kept as the
  * data itself, not just its words, so a difference in a number or a highlight counts.
@@ -188,7 +206,8 @@ export function findUnexplained(facts: readonly ScopedFact[]): string[] {
  * @returns each viewer's view, by viewer.
  */
 export function viewsOf<State>(cartridge: Cartridge<State>, state: State, players: readonly CartridgePlayer[], facts: readonly ScopedFact[]): Map<string, unknown[]> {
-    const screen: unknown[] = [cartridge.publicScene(state), cartridge.turn?.(state) ?? null, facts.filter((fact: ScopedFact) => fact.scope.kind === "public")];
+    const turn: Turn | null = cartridge.turn?.(state) ?? null;
+    const screen: unknown[] = [cartridge.publicScene(state), turn, turnAsShown(turn, players), facts.filter((fact: ScopedFact) => fact.scope.kind === "public")];
     const views: Map<string, unknown[]> = new Map([["screen", screen]]);
     const phase: PhaseSpec | undefined = cartridge.manifest.phases.find((candidate: PhaseSpec) => candidate.id === cartridge.phaseOf(state));
     const told: ScopedFact[] = facts.filter((fact: ScopedFact) => fact.scope.kind === "public" || fact.scope.kind === "host");

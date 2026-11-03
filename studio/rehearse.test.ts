@@ -11,6 +11,7 @@ import type { Cartridge, CartridgePlayer, Step } from "../shared/cartridge.ts";
 import type { Control } from "../shared/controls.ts";
 import type { Scene } from "../shared/scene.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
+import type { Turn } from "../shared/turn.ts";
 import type { Scope, ScopedFact } from "../shared/visibility.ts";
 import type { GuessingBlueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
@@ -241,6 +242,10 @@ describe("rehearsal catches planted faults", () => {
             },
         }));
         assert.match(rehearseMany(badged, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a roster badge saying Plant on the Plant's name");
+        const turned = (seed: number): KitGame<PlantState> => faulty(leadingQuestions(seed), (rules: Cartridge<PlantState>) => ({
+            turn: (state: PlantState): Turn | null => (state.phase === "asking" ? { kind: "one", playerId: state.plantId, label: "Plant turn" } : rules.turn?.(state) ?? null),
+        }));
+        assert.match(rehearseMany(turned, plantPersonas(), [1]).problems.join("\n"), /who the Plant is reached the screen/, "a turn that names the Plant, shown as their name");
     });
 
     it("no word made by gluing a block's kind to its text", () => {
