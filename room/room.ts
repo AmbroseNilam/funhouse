@@ -268,7 +268,11 @@ export class Room implements HostStage {
         }
         this.woken = true;
         this.speech.warm();
-        this.renderAcknowledgements().then(async () => { await this.renderRemarks(); }).catch((error: unknown) => { log(this.scope(), `recorded lines unavailable: ${error instanceof Error ? error.message : String(error)}`); });
+        const renderLines = async (): Promise<void> => {
+            await this.renderAcknowledgements();
+            await this.renderRemarks();
+        };
+        renderLines().catch((error: unknown) => { log(this.scope(), `recorded lines unavailable: ${error instanceof Error ? error.message : String(error)}`); });
     }
 
     /**

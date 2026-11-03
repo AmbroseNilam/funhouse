@@ -2,7 +2,7 @@
 // who's at the table, and the pause menu. Nothing here decides anything. Text is written for
 // reading across a room, and every screen is driven only from the phone.
 
-import type { CSSProperties, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 

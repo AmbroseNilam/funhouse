@@ -184,7 +184,7 @@
     .pause-card .steps li::before { color: var(--wine); }
 
     /* Before the lantern is lit */
-    .sound-gate { position: absolute; inset: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(12 * var(--u)); border: 0; font: inherit; font-variation-settings: inherit; color: var(--paper); background: var(--ink); cursor: pointer; }
+    .sound-gate { position: absolute; z-index: 5; inset: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(12 * var(--u)); border: 0; font: inherit; font-variation-settings: inherit; color: var(--paper); background: var(--ink); cursor: pointer; }
     .sound-gate:disabled { cursor: wait; }
     .sound-gate:focus-visible { outline: none; }
     .sound-gate .lantern { width: calc(260 * var(--u)); height: calc(377 * var(--u)); margin-bottom: calc(24 * var(--u)); }

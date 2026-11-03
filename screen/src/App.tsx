@@ -1,7 +1,7 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
-import { useEffect, useReducer, useRef, useState, type CSSProperties, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
