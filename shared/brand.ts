@@ -1,4 +1,6 @@
-// The names of things. Both are still being decided, so nothing else spells them out.
+// The names of things. Both are still being decided, so code doesn't spell them out. To rename
+// the product, also change the three index.html files, landing/public/brand/manifest.webmanifest
+// and tools/brand/share.html, then run tools/brand/make.sh.
 
 /** What the product is called. */
 export const PRODUCT_NAME: string = "Game Room";
