@@ -9,6 +9,8 @@ import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Drawing } from "../providers/meta/image.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
+import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import { studioShelf } from "../studio/shelf.ts";
 import { RoomDirectory } from "./directory.ts";
 import { AddressLimits, BUDGET } from "./limits.ts";
 import type { Room } from "./room.ts";
@@ -87,7 +89,10 @@ const HEARTBEAT_MILLISECONDS: number = 15000;
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
-const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL);
+/** With GAME_ROOM_STUDIO_SHELF=1 the shelf holds the blueprint versions of games in place of the hand-written ones, so a scenario can prove a blueprint plays the same. */
+const SHELF: InstalledGame[] = process.env.GAME_ROOM_STUDIO_SHELF === "1" ? studioShelf(GAMES) : GAMES;
+
+const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, SHELF);
 const limits: AddressLimits = new AddressLimits();
 setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 

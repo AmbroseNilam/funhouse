@@ -35,6 +35,7 @@ lantern, icons and share image are drawn in code, with no AI art in them.
 | `phone/` | The private stage, a web page opened from the QR code. Microphone capture lives here. |
 | `cartridges/` | Games. Each has a manifest, a rules core, and simulated-player tests. |
 | `providers/` | Meta and OpenAI clients. Provider details never leak past this folder. |
+| `studio/` | Games as data: blueprints, the interpreter that runs them, and the rehearsal harness. Research notes under `studio/research/`. |
 | `tools/` | Latency probes and the `verify.py` guard. |
 | `deploy/` | Containerfile for running the room anywhere. |
 

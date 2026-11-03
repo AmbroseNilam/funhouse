@@ -20,7 +20,7 @@ import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenla
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { OpenAiSpeech } from "../providers/openai/speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
-import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import type { InstalledGame } from "../cartridges/index.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { recordedLine } from "./lineBank.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
@@ -330,21 +330,41 @@ export class Room implements HostStage {
     /** True when the previous addressed turn got an acknowledgement; two in a row never play. */
     private acknowledgedLastTurn: boolean = false;
     private acknowledgeTimer: NodeJS.Timeout | null = null;
+    /** What is on this room's shelf; a room may gain games while it is open. */
+    private readonly games: InstalledGame[];
 
     /**
      * Creates an empty room.
      * @param code the room code players type or scan.
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
+     * @param games what is on the shelf to begin with, in shelf order.
      * @param livelyRoom true when the room was opened to try the livelier host.
      */
-    public constructor(code: string, publicUrl: string, livelyRoom: boolean = false) {
+    public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false) {
         this.code = code;
+        this.games = [...games];
         this.livelyRoom = livelyRoom;
         this.lullTimer = livelyRoom === true ? setInterval(() => { this.checkLull(); }, LULL_CHECK_MILLISECONDS).unref() : null;
         this.joinUrl = `${publicUrl.replace(/\/$/, "")}/phone/?room=${code}`;
         this.host = new Host(this, PLACEHOLDER_PERSONA);
         this.voice = new HostVoice(this.speech, this.voiceOutput());
         this.shell = new Shell(this.shellStage());
+    }
+
+    /**
+     * Puts a game on this room's shelf, replacing one with the same id, so a game a creator keeps
+     * can be played without restarting the room. A game in progress is not affected.
+     * @param game the game.
+     */
+    public install(game: InstalledGame): void {
+        const index: number = this.games.findIndex((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id);
+        if (index === -1) {
+            this.games.push(game);
+        }
+        if (index !== -1) {
+            this.games[index] = game;
+        }
+        this.broadcastShell();
     }
 
     /**
@@ -535,7 +555,7 @@ export class Room implements HostStage {
         if (this.game !== null) {
             return [this.game.brief(), this.turnBrief(), "If the group clearly wants to stop playing, write [[quit]] first."].filter((part: string) => part !== "").join("\n\n");
         }
-        const games: string[] = GAMES.map((game: InstalledGame) => {
+        const games: string[] = this.games.map((game: InstalledGame) => {
             const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
             return `- ${name} (id ${id}), ${minPlayers} to ${maxPlayers} players: ${game.pitch}`;
         });
@@ -789,7 +809,7 @@ export class Room implements HostStage {
      */
     private shellStage(): ShellStage {
         return {
-            games: (): ShelfGame[] => GAMES.map((game: InstalledGame) => this.shelfGame(game)),
+            games: (): ShelfGame[] => this.games.map((game: InstalledGame) => this.shelfGame(game)),
             seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk, phoneDown }: Player) => ({
                 playerId,
                 name,
@@ -899,7 +919,7 @@ export class Room implements HostStage {
     /** Records every game's remarks in the host's voice. */
     private async renderRemarks(): Promise<void> {
         const persona: HostPersona = this.host.persona;
-        for (const game of GAMES) {
+        for (const game of this.games) {
             const lines: { text: string; pcm: Uint8Array }[] = [];
             for (const text of game.remarks) {
                 const style: string = `${persona.style} Muttered aside, half to yourself.`;
@@ -920,7 +940,8 @@ export class Room implements HostStage {
      */
     private startGame(gameId: string): void {
         const wanted: string = gameId.trim().toLowerCase();
-        const installed: InstalledGame | undefined = GAMES.find((game: InstalledGame) => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted);
+        const matches = (game: InstalledGame): boolean => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted;
+        const installed: InstalledGame | undefined = this.games.find(matches);
         if (installed === undefined || this.game !== null) {
             log(this.scope(), "couldn't start a game by that name");
             return;
