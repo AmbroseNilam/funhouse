@@ -52,14 +52,20 @@ export class ElevenLabsSpeech implements TextToSpeech {
      */
     public async *speak(request: SpeechRequest): AsyncGenerator<Uint8Array> {
         const body: ReadableStream<Uint8Array> | null = await this.open(request);
-        if (body === null) {
-            if (request.signal?.aborted !== true) {
-                yield* this.fallback.speak(request);
+        let started: boolean = false;
+        try {
+            for await (const chunk of (body ?? []) as unknown as AsyncIterable<Uint8Array>) {
+                started = true;
+                yield chunk;
             }
-            return;
+        } catch (error: unknown) {
+            if (started === true || request.signal?.aborted === true) {
+                throw error;
+            }
+            console.warn("elevenlabs voice failed before any audio");
         }
-        for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
-            yield chunk;
+        if (started === false && request.signal?.aborted !== true) {
+            yield* this.fallback.speak(request);
         }
     }
 
