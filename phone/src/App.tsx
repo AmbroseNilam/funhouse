@@ -9,7 +9,8 @@ import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, typ
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
-import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
+import { micSteps } from "./micHelp.ts";
+import { microphoneAllowed, startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { followVoice } from "./talkGlow.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -119,13 +120,16 @@ interface PhoneState {
     roomCode: string;
     view: PhoneView | null;
     holding: boolean;
-    micError: string;
+    mic: MicState;
 }
+
+/** Whether the microphone can be used: fine or not yet opened, refused, or broken some other way. */
+type MicState = "ok" | "refused" | "failed";
 
 type PhoneAction =
     | { type: "message"; message: RoomToPhoneMessage }
     | { type: "holding"; holding: boolean }
-    | { type: "micError"; error: string }
+    | { type: "mic"; mic: MicState }
     | { type: "connection"; connected: boolean }
     | { type: "joining" };
 
@@ -141,7 +145,7 @@ function seatInThisRoom(): SavedSeat | null {
     return seat?.roomCode === ROOM_CODE ? seat : null;
 }
 
-const INITIAL_STATE: PhoneState = { stage: seatInThisRoom() === null ? "name" : "joining", connected: false, playerId: "", roomCode: ROOM_CODE, view: null, holding: false, micError: "" };
+const INITIAL_STATE: PhoneState = { stage: seatInThisRoom() === null ? "name" : "joining", connected: false, playerId: "", roomCode: ROOM_CODE, view: null, holding: false, mic: "ok" };
 
 /**
  * Pure reducer from room messages and local actions to phone state.
@@ -153,8 +157,8 @@ function reduce(state: PhoneState, action: PhoneAction): PhoneState {
     if (action.type === "holding") {
         return { ...state, holding: action.holding };
     }
-    if (action.type === "micError") {
-        return { ...state, micError: action.error };
+    if (action.type === "mic") {
+        return { ...state, mic: action.mic };
     }
     if (action.type === "connection") {
         return { ...state, connected: action.connected };
@@ -334,6 +338,8 @@ export function App(): ReactElement {
     const socketRef = useRef<WebSocket | null>(null);
     const captureRef = useRef<MicrophoneCapture | null>(null);
     const startingMicrophoneRef = useRef<Promise<void> | null>(null);
+    const micRef = useRef<MicState>(state.mic);
+    micRef.current = state.mic;
     const pendingNameRef = useRef<string | null>(null);
     const holdingRef = useRef<boolean>(false);
     const preRollRef = useRef<ArrayBuffer[]>([]);
@@ -345,7 +351,8 @@ export function App(): ReactElement {
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic">("closed");
+    const [micRetried, setMicRetried] = useState<boolean>(false);
     const [invited, setInvited] = useState<string>("");
 
     useEffect(() => {
@@ -506,9 +513,9 @@ export function App(): ReactElement {
                     preRollRef.current.shift();
                 }
             });
-            dispatch({ type: "micError", error: "" });
+            dispatch({ type: "mic", mic: "ok" });
         } catch (error: unknown) {
-            dispatch({ type: "micError", error: error instanceof DOMException && error.name === "NotAllowedError" ? "Allow the microphone in your browser to talk." : "Couldn't start the microphone." });
+            dispatch({ type: "mic", mic: error instanceof DOMException && error.name === "NotAllowedError" ? "refused" : "failed" });
         }
     };
 
@@ -534,6 +541,24 @@ export function App(): ReactElement {
             writeLearned(next);
             return next;
         });
+    };
+
+    /**
+     * Readies the microphone on any touch, but only when that can't put up a prompt mid-swipe. Otherwise it
+     * waits for a hold, and after a refusal it waits for the person to ask again.
+     */
+    const wakeMicrophone = (): void => {
+        if (captureRef.current !== null) {
+            void ensureMicrophone();
+            return;
+        }
+        if (micRef.current === "ok") {
+            void microphoneAllowed().then((allowed: boolean) => {
+                if (allowed === true) {
+                    void ensureMicrophone();
+                }
+            });
+        }
     };
 
     /** Starts talking: the room first, then the audio kept from just before the hold. */
@@ -575,6 +600,22 @@ export function App(): ReactElement {
         // Only a change in whether talking is allowed should end a turn.
     }, [canTalk]);
 
+    // Explains a microphone problem as soon as someone is seated, and clears the card once it's fixed.
+    useEffect(() => {
+        if (state.mic === "ok") {
+            setMenu((current) => (current === "mic" ? "closed" : current));
+            setMicRetried(false);
+            return;
+        }
+        if (holdingRef.current === true) {
+            stopTalking();
+        }
+        if (joined === true) {
+            setMenu((current) => (current === "closed" ? "mic" : current));
+        }
+        // Only a change in the microphone or being seated should open the card.
+    }, [state.mic, joined]);
+
     const showingSurface: boolean = state.stage === "joined" && movedAway === false;
     useEffect(() => {
         const surface: HTMLDivElement | null = surfaceRef.current;
@@ -588,7 +629,7 @@ export function App(): ReactElement {
                 surface.style.setProperty("--thumb-x", `${x - box.left}px`);
                 surface.style.setProperty("--thumb-y", `${y - box.top}px`);
                 surface.classList.add("touched");
-                void ensureMicrophone();
+                wakeMicrophone();
             },
             lifted: (): void => { surface.classList.remove("touched"); },
             step: (delta: number): void => {
@@ -615,9 +656,15 @@ export function App(): ReactElement {
                 }
             },
             holdStart: (): void => {
-                if (canTalkRef.current === true) {
-                    startTalking();
+                if (canTalkRef.current === false) {
+                    return;
                 }
+                if (micRef.current !== "ok") {
+                    setMenu("mic");
+                    return;
+                }
+                void ensureMicrophone();
+                startTalking();
             },
             holdEnd: (): void => {
                 if (holdingRef.current === true) {
@@ -714,7 +761,7 @@ export function App(): ReactElement {
     const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk);
     const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
-    const problem: string = state.connected === false ? "Connecting…" : state.micError !== "" ? state.micError : "";
+    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" ? "Your mic is off" : "";
     const status: string = problem !== "" ? problem : view?.status ?? "";
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     return (
@@ -745,11 +792,22 @@ export function App(): ReactElement {
                         {menu === "open" ? (
                             <>
                                 {invited !== "" ? <p className="invited">{invited}</p> : null}
+                                {state.mic !== "ok" ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
+                            </>
+                        ) : null}
+                        {menu === "mic" ? (
+                            <>
+                                <p>{micRetried === true ? "Still off." : "Your mic is off."} You can still swipe and tap. To talk:</p>
+                                {state.mic === "refused"
+                                    ? <ol className="mic-steps">{micSteps().map((step: string) => <li key={step}>{step}</li>)}</ol>
+                                    : <p className="mic-note">Another app may be using it. Close that app, then try again.</p>}
+                                <button className="primary" onClick={() => { void ensureMicrophone().then(() => { setMicRetried(true); }); }}>Try again</button>
+                                <button className="quiet" onClick={() => { setMenu("closed"); setMicRetried(false); }}>Keep playing without talking</button>
                             </>
                         ) : null}
                         {menu === "credits" ? (

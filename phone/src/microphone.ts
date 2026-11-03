@@ -21,6 +21,19 @@ export interface MicrophoneCapture {
 }
 
 /**
+ * Whether the browser says the microphone is already allowed, so opening it won't put up a prompt.
+ * @returns true only when it's sure; browsers that can't say give false.
+ */
+export async function microphoneAllowed(): Promise<boolean> {
+    try {
+        const status: PermissionStatus = await navigator.permissions.query({ name: "microphone" });
+        return status.state === "granted";
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Starts capturing and calls onFrame with each 24 kHz 16-bit mono PCM frame.
  * @param onFrame receives raw frame bytes.
  * @returns a handle to stop capture and release the microphone.
@@ -30,6 +43,8 @@ export async function startMicrophone(onFrame: (frame: ArrayBuffer) => void): Pr
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
     const context: AudioContext = new AudioContext();
+    // A hold starts on a timer rather than a tap, which some browsers won't count as permission to run audio.
+    context.resume().catch(() => { /* the next touch tries again */ });
     await context.audioWorklet.addModule("/phone/pcm-worklet.js");
     const source: MediaStreamAudioSourceNode = context.createMediaStreamSource(stream);
     const worklet: AudioWorkletNode = new AudioWorkletNode(context, "pcm-downsampler");
