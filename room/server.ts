@@ -65,7 +65,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     ].join("; "),
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
-    "permissions-policy": "microphone=(self), screen-wake-lock=(self), fullscreen=(self), web-share=(self), clipboard-write=(self), camera=(), geolocation=(), payment=()",
+    "permissions-policy": "microphone=(self), screen-wake-lock=(self), fullscreen=(self), web-share=(self), clipboard-write=(self), camera=(self), geolocation=(), payment=()",
     "strict-transport-security": "max-age=15552000",
 };
 

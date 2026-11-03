@@ -39,6 +39,8 @@
     .place-card input { background: none; border: 0; border-bottom: 2px solid var(--paper-ink); padding: 10px 0; box-shadow: none; font-size: 26px; }
     .place-card .primary { box-shadow: 3px 3px 0 var(--paper-ink); }
     .room-tag { color: var(--muted); font-size: 15px; }
+    .scanner video { flex: 1; min-height: 0; width: 100%; object-fit: cover; background: #000; box-shadow: 6px 6px 0 #000; }
+    .scanner p { font-size: 20px; line-height: 1.3; }
     .fine { color: var(--muted); font-size: 15px; line-height: 1.4; }
 
     .pad-screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--seat); }

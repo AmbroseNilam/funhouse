@@ -4,12 +4,13 @@
 // remembers its seat, so a refresh, a locked screen or a network blip returns to the same seat.
 
 import type { PhoneTurn } from "../../shared/turn.ts";
-import { useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
+import { startScanning, type ScanEnd } from "./scanner.ts";
 import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
 import { microphoneAllowed, startMicrophone, type MicrophoneCapture } from "./microphone.ts";
@@ -163,7 +164,7 @@ type PhoneAction =
     | { type: "joining" };
 
 /** The room this page is for: the one in the link, or else the one this phone last sat in. */
-const ROOM_CODE: string = (new URLSearchParams(location.search).get("room") ?? readSeat()?.roomCode ?? "").toUpperCase();
+const ROOM_CODE: string = new URLSearchParams(location.search).has("scan") === true ? "" : (new URLSearchParams(location.search).get("room") ?? readSeat()?.roomCode ?? "").toUpperCase();
 
 /**
  * The saved seat, if it belongs to this page's room.
@@ -293,14 +294,24 @@ function controlLine(pad: PadView): string {
  */
 function CodeScreen(): ReactElement {
     const [code, setCode] = useState<string>("");
+    const [scanning, setScanning] = useState<boolean>(new URLSearchParams(location.search).has("scan") === true);
+    const [scanNote, setScanNote] = useState<string>("");
+    const openRoom = useCallback((room: string): void => { location.assign(`/phone/?room=${encodeURIComponent(room)}`); }, []);
+    const endScan = useCallback((message: string): void => {
+        setScanNote(message);
+        setScanning(false);
+    }, []);
     const search: URLSearchParams = new URLSearchParams(location.search);
     const missing: string | null = search.get("missing");
     const full: string | null = search.get("full");
     const closed: string | null = search.get("closed");
+    if (scanning === true) {
+        return <CodeScanner onRoom={openRoom} onEnd={endScan} />;
+    }
     return (
         <main className="note-screen" data-scrolls>
             <small className="room-tag">{PRODUCT_NAME}</small>
-            <form className="place-card" onSubmit={(event) => { event.preventDefault(); location.assign(`/phone/?room=${encodeURIComponent(code)}`); }}>
+            <form className="place-card" onSubmit={(event) => { event.preventDefault(); openRoom(code); }}>
                 <label htmlFor="code-field">What's the code on the TV?</label>
                 {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
                 {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
@@ -317,9 +328,37 @@ function CodeScreen(): ReactElement {
                     spellCheck={false}
                     enterKeyHint="go"
                 />
+                {scanNote !== "" ? <p className="place-warning" role="alert">{scanNote}</p> : null}
                 <button className="primary" type="submit" disabled={code.length !== ROOM_CODE_LENGTH}>Sit down</button>
+                {"mediaDevices" in navigator === false ? null : <button className="plain" type="button" onClick={() => { setScanNote(""); setScanning(true); }}>Scan the code</button>}
             </form>
             <p className="fine">Hosting? Open this site on a TV or laptop.</p>
+        </main>
+    );
+}
+
+/**
+ * The camera, looking for the code on the TV.
+ * @param props onRoom gets the code; onEnd closes the camera, saying why if it couldn't be used.
+ * @returns the element.
+ */
+function CodeScanner(props: { onRoom: (room: string) => void; onEnd: (message: string) => void }): ReactElement {
+    const video = useRef<HTMLVideoElement>(null);
+    const [notOurs, setNotOurs] = useState<boolean>(false);
+    const { onRoom, onEnd } = props;
+    useEffect(() => {
+        if (video.current === null) {
+            return undefined;
+        }
+        return startScanning(video.current, onRoom, () => { setNotOurs(true); }, (end: ScanEnd) => {
+            onEnd(end === "refused" ? "The camera's off, so type the code instead." : "That camera won't open. Type the code instead.");
+        });
+    }, [onRoom, onEnd]);
+    return (
+        <main className="note-screen scanner">
+            <video ref={video} muted playsInline aria-label="Camera view" />
+            <p role="status">{notOurs === true ? "That code isn't one of ours. Point at the one on the TV." : "Point at the code on the TV."}</p>
+            <button className="primary" type="button" onClick={() => { onEnd(""); }}>Type it instead</button>
         </main>
     );
 }
@@ -636,9 +675,7 @@ export function App(): ReactElement {
                     preRollRef.current.shift();
                 }
             });
-            if (captureRef.current !== null) {
-                send({ type: "micSettings", ...captureRef.current.applied() });
-            }
+            send({ type: "micSettings", ...captureRef.current.applied() });
             dispatch({ type: "mic", mic: "ok" });
         } catch (error: unknown) {
             dispatch({ type: "mic", mic: error instanceof DOMException && error.name === "NotAllowedError" ? "refused" : "failed" });
