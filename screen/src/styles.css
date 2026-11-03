@@ -1,6 +1,6 @@
 /* The TV: a lantern-lit table. Everything is sized in units of a 1080p screen, so it reads the
    same from across a room on a TV or a laptop. Painted card and hard shadows, one typeface, and
-   lamp means live. Follows docs/DESIGN.md in the planning notes. */
+   lamp means live. Follows DESIGN.md. */
 
 @layer tokens, base, components, moods;
 

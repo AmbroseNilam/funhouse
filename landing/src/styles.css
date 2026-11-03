@@ -1,6 +1,6 @@
 /* The landing page, drawn as the TV's table: ink room, painted card and paper, hard offset
    shadows, one typeface. The same tokens as the TV, sized in pixels because this page scrolls.
-   Follows docs/DESIGN.md in the planning notes. */
+   Follows DESIGN.md. */
 
 @layer tokens, base, components;
 

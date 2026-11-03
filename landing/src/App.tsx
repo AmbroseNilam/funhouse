@@ -100,7 +100,7 @@ export function App(): ReactElement {
                         <figure className="shot-tv">
                             <img
                                 src="/landing/shots/tv.webp"
-                                alt={`The TV: a shelf of three game boxes, a card with the room code and QR, and ${HOST_NAME} the lantern saying hello`}
+                                alt={`The TV: a shelf of game boxes, a card with the room code and QR, and ${HOST_NAME} the lantern saying hello`}
                                 width="1600"
                                 height="900"
                             />
@@ -116,7 +116,7 @@ export function App(): ReactElement {
 
             <section className="shelf-section" aria-labelledby="games">
                 <h2 id="games">On the shelf tonight</h2>
-                <p className="plain">Three games, and nobody sits out to run them. Even Werewolf's narrator is me.</p>
+                <p className="plain">Pick one and play. Nobody sits out to run it, because that's my job.</p>
                 <ul className="shelf">
                     {GAMES.map((game: GameBox) => (
                         <li key={game.name} className="box">

@@ -1,5 +1,5 @@
 /* The phone: a coloured card held in the hand. One surface, big plain words, nothing that needs
-   aiming at. Follows docs/DESIGN.md in the planning notes: Fraunces, painted card, lamp means live. */
+   aiming at. Follows DESIGN.md: Fraunces, painted card, lamp means live. */
 
 @layer tokens, base, components;
 

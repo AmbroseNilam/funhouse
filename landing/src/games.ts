@@ -13,7 +13,7 @@ export interface GameBox {
     alt: string;
 }
 
-/** The three games, in the lobby's order. */
+/** The games, in the lobby's order. */
 export const GAMES: GameBox[] = [
     {
         name: "Twenty Doors",
