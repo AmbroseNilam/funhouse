@@ -21,7 +21,7 @@ shelf; the room has checked there are between four and eight of them.
 **Choosing.** The TV goes to the title, **Leading Questions**, and under it, large: *Look at your
 phone. Keep it to yourself.* Every phone shows a paper card that can be turned over, the same size
 and shape on every phone. Four say **You're asking** — *Someone here knows the word. Find it with
-yes-or-no questions.* Candle's says **You're the Plant** — *The word is on its way.* A moment later
+yes-or-no questions.* Candle's says **You're the Plant** — *Your word is coming.* A moment later
 it becomes *The word is Colander. Steer them to it with your questions, and don't get caught.* The
 TV's turn line says *Look at your phone* and names nobody. Every microphone is off.
 

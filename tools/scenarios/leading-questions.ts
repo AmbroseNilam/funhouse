@@ -76,7 +76,9 @@ async function say(seat: Seat, line: string): Promise<void> {
 
 await seats[0]?.phone.startGame(screen, "Leading Questions");
 await waitFor(() => seats.every((seat: Seat) => cardOf(seat.phone) !== undefined), "a card on every phone");
-await waitFor(() => seats.some((seat: Seat) => cardOf(seat.phone)?.body.startsWith("The word is ") === true), "the word on the Plant's card");
+/** The word on a card, only once the real word has arrived; the placeholder before it doesn't match. */
+const WORD_ON_CARD: RegExp = /^The word is (.+?)\. Steer them/;
+await waitFor(() => seats.some((seat: Seat) => WORD_ON_CARD.test(cardOf(seat.phone)?.body ?? "") === true), "the word on the Plant's card");
 for (const seat of seats) {
     seat.title = cardOf(seat.phone)?.title ?? "";
     seat.body = cardOf(seat.phone)?.body ?? "";
@@ -87,7 +89,10 @@ if (plants.length !== 1) {
 }
 const plant: Seat = plants[0] as Seat;
 const askers: Seat[] = seats.filter((seat: Seat) => seat !== plant);
-const word: string = plant.body.slice("The word is ".length).split(".")[0] ?? "";
+const word: string = WORD_ON_CARD.exec(plant.body)?.[1] ?? "";
+if (word === "") {
+    throw new Error("The Plant's card has no word on it.");
+}
 console.warn(`The Plant is ${plant.name}; the word is ${word}.`);
 if (askers.some((seat: Seat) => squash(seat.body).includes(squash(word)) === true) === true) {
     throw new Error("An asker's card shows the word.");

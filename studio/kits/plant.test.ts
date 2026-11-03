@@ -124,6 +124,18 @@ describe("leading questions: dealing and secrets", () => {
         assert.deepEqual(game.cartridge.turn?.(game.cartridge.init(FOUR, {}).state), { kind: "secret", label: "Look at your phone" });
     });
 
+    it("shows the Plant a placeholder that can't be read as the word until the word arrives", () => {
+        const game: KitGame<PlantState> = leadingQuestions(0);
+        const started: PlantState = game.cartridge.init(FOUR, {}).state;
+        const waiting: Control | undefined = game.cartridge.privateControls(started, "paper1")[0];
+        assert.ok(waiting?.type === "roleCard");
+        assert.equal(waiting.body.startsWith("The word is"), false);
+        const ready: PlantState = on(game, started, { type: "contentReady", at: 0, text: "" }).state;
+        const card: Control | undefined = game.cartridge.privateControls(ready, "paper1")[0];
+        assert.ok(card?.type === "roleCard");
+        assert.match(card.body, /^The word is Colander\. Steer them/);
+    });
+
     it("tells the host the word and never who the Plant is", () => {
         const { game, state } = startAsking(1);
         const brief: string = [game.cartridge.manifest.hostBrief, ...game.cartridge.hostFacts(state, { kind: "host" }).map((fact: ScopedFact) => fact.text)].join(" ");

@@ -550,7 +550,7 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
         privateControls(state: PlantState, playerId: string): Control[] {
             const isPlant: boolean = playerId === state.plantId;
             if (state.phase === "choosing" || state.phase === "asking") {
-                const plantBody: string = state.word === "" ? "The word is on its way." : `The word is ${state.word}. Steer them to it with your questions, and don't get caught.`;
+                const plantBody: string = state.word === "" ? "Your word is coming." : `The word is ${state.word}. Steer them to it with your questions, and don't get caught.`;
                 const card: Control = isPlant === true
                     ? { type: "roleCard", title: PLANT_CARD_TITLE, body: plantBody, secret: true }
                     : { type: "roleCard", title: ASKER_CARD_TITLE, body: "Someone here knows the word. Find it with yes-or-no questions.", secret: true };
