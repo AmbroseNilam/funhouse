@@ -11,6 +11,7 @@ import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel } from "./Console.tsx";
 import { Lantern } from "./Lantern.tsx";
+import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
 
@@ -36,6 +37,13 @@ type ScreenAction =
     | { type: "connection"; connected: boolean }
     | { type: "started" }
     | { type: "turnedAway" };
+
+/** True on a plug-in console with no mouse: it lights itself, and the browser must allow autoplay. */
+const ON_CONSOLE: boolean = new URLSearchParams(location.search).get("console") === "1";
+
+if (new URLSearchParams(location.search).get("fps") === "1") {
+    startFrameMeter();
+}
 
 /** How long someone's arrival stays on the TV. */
 const ARRIVAL_MILLISECONDS: number = 3000;
@@ -216,7 +224,9 @@ export function App(): ReactElement {
                     return;
                 }
                 if (message.type === "scene" && new URLSearchParams(location.search).get("room") !== message.roomCode) {
-                    history.replaceState(null, "", `?room=${message.roomCode}`);
+                    const search: URLSearchParams = new URLSearchParams(location.search);
+                    search.set("room", message.roomCode);
+                    history.replaceState(null, "", `?${search.toString()}`);
                 }
                 if (message.type === "audioCancel") {
                     speakerRef.current?.cancel();
@@ -238,7 +248,8 @@ export function App(): ReactElement {
                 }
                 if (message.type === "shell" && message.view.screen !== screenRef.current && "startViewTransition" in document && soundsRef.current !== null) {
                     screenRef.current = message.view.screen;
-                    document.startViewTransition(() => { flushSync(() => { dispatch({ type: "message", message }); }); });
+                    const transition: ViewTransition = document.startViewTransition(() => { flushSync(() => { dispatch({ type: "message", message }); }); });
+                    transition.ready.catch(() => { /* a hidden page can't animate, and the change still applies */ });
                     return;
                 }
                 if (message.type === "shell") {
@@ -264,7 +275,9 @@ export function App(): ReactElement {
         const sounds: ConsoleSounds = new ConsoleSounds();
         soundsRef.current = sounds;
         dispatch({ type: "started" });
-        document.documentElement.requestFullscreen().catch(() => { /* a browser may refuse, and the page works either way */ });
+        if (ON_CONSOLE === false) {
+            document.documentElement.requestFullscreen().catch(() => { /* a browser may refuse, and the page works either way */ });
+        }
         sounds.start().then(() => { sounds.light(); }).catch((error: unknown) => { console.error("sounds failed:", error); });
         speaker.start().then(() => {
             speakerRef.current = speaker;
@@ -285,6 +298,15 @@ export function App(): ReactElement {
         }).catch((error: unknown) => { console.error("QR render failed:", error); });
         return (): void => { cancelled = true; };
     }, [state.joinUrl]);
+
+    const connected: boolean = state.connected;
+    const started: boolean = state.started;
+    useEffect(() => {
+        if (ON_CONSOLE === true && connected === true && started === false) {
+            start();
+        }
+        // Only the moment it connects matters; start reads everything else when it runs.
+    }, [connected, started]);
 
     useEffect(() => {
         const previous: ShellView | null = previousShellRef.current;
