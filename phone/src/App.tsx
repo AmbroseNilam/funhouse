@@ -636,6 +636,9 @@ export function App(): ReactElement {
                     preRollRef.current.shift();
                 }
             });
+            if (captureRef.current !== null) {
+                send({ type: "micSettings", ...captureRef.current.applied() });
+            }
             dispatch({ type: "mic", mic: "ok" });
         } catch (error: unknown) {
             dispatch({ type: "mic", mic: error instanceof DOMException && error.name === "NotAllowedError" ? "refused" : "failed" });
