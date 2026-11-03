@@ -18,6 +18,7 @@ COPY --from=build /app/room ./room
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/providers ./providers
 COPY --from=build /app/cartridges ./cartridges
+COPY --from=build /app/studio ./studio
 COPY --from=build /app/screen/dist ./screen/dist
 COPY --from=build /app/phone/dist ./phone/dist
 COPY --from=build /app/landing/dist ./landing/dist
