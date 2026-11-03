@@ -9,6 +9,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Drawing } from "../providers/meta/image.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
 import { RoomDirectory } from "./directory.ts";
+import { AddressLimits, BUDGET } from "./limits.ts";
 import type { Room } from "./room.ts";
 
 /** Port the room listens on inside its pod. */
@@ -38,8 +39,40 @@ const MEDIA_TYPES: Record<string, string> = {
     ".json": "application/json",
 };
 
-/** Largest message a stage may send: well above one 3,840-byte audio frame or a short text. */
-const MAX_MESSAGE_BYTES: number = 65536;
+/** Largest message a stage may send: twice one 3,840-byte audio frame, or a short text. */
+const MAX_MESSAGE_BYTES: number = 7680;
+
+/** The site's own address, the only web page allowed to open these sockets. */
+const PUBLIC_ORIGIN: string = new URL(PUBLIC_URL).origin;
+
+/** An address the site used to live at; visits there are sent to the current one. */
+const OLD_HOST: string = "your-domain.example";
+
+/** Headers on every page, so it can't be framed, sniffed or made to load anything else. */
+const SECURITY_HEADERS: Record<string, string> = {
+    "content-security-policy": [
+        "default-src 'none'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "font-src 'self'",
+        "img-src 'self' data:",
+        `connect-src 'self' ${PUBLIC_ORIGIN.replace(/^http/, "ws")}`,
+        "manifest-src 'self'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ].join("; "),
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+    "permissions-policy": "microphone=(self), screen-wake-lock=(self), fullscreen=(self), web-share=(self), clipboard-write=(self), camera=(), geolocation=(), payment=()",
+    "strict-transport-security": "max-age=15552000",
+};
+
+/** How often bookkeeping for departed addresses is cleared. */
+const LIMITS_SWEEP_MILLISECONDS: number = 600000;
+
+/** The local test mode opens many rooms from one address. */
+const ROOM_LIMIT_ON: boolean = process.env.GAME_ROOM_TEXT_ONLY !== "1";
 
 /** How often the server checks on every connection. Cloudflare closes one after 100 s idle. */
 const HEARTBEAT_MILLISECONDS: number = 30000;
@@ -48,6 +81,36 @@ const HEARTBEAT_MILLISECONDS: number = 30000;
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
 const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL);
+const limits: AddressLimits = new AddressLimits();
+setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
+
+/**
+ * Who a request really came from. The tunnel is the only way in, and Cloudflare sets this header
+ * itself, so a visitor can't fake it. Locally it's absent and the socket address is used.
+ * @param request the request.
+ * @returns the address.
+ */
+function addressOf(request: IncomingMessage): string {
+    const forwarded: string | string[] | undefined = request.headers["cf-connecting-ip"];
+    return typeof forwarded === "string" ? forwarded : request.socket.remoteAddress ?? "unknown";
+}
+
+/**
+ * Opens a room for an address, if it and the day's budget allow.
+ * @param address who's asking.
+ * @returns the room, or null.
+ */
+function openRoom(address: string): Room | null {
+    const within: boolean = ROOM_LIMIT_ON === false || limits.mayOpenRoom(address, (code: string) => directory.find(code) !== undefined);
+    if (within === false || BUDGET.hasRoom() === false) {
+        return null;
+    }
+    const room: Room | null = directory.create();
+    if (room !== null) {
+        limits.roomOpened(address, room.code);
+    }
+    return room;
+}
 
 /**
  * Tells a stage it can't come in and hangs up.
@@ -102,13 +165,25 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
 }
 
 const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+        response.setHeader(name, value);
+    }
+    if (request.headers.host === OLD_HOST) {
+        response.writeHead(301, { location: `${PUBLIC_ORIGIN}${request.url ?? "/"}` }).end();
+        return;
+    }
     serveStatic(request, response).catch((error: unknown) => {
         console.error("static serve failed:", error instanceof Error ? error.message : String(error));
         response.writeHead(500).end();
     });
 });
 
-const sockets: WebSocketServer = new WebSocketServer({ server, maxPayload: MAX_MESSAGE_BYTES });
+const sockets: WebSocketServer = new WebSocketServer({
+    server,
+    maxPayload: MAX_MESSAGE_BYTES,
+    // Scripts send no Origin and could fake one anyway, and they're held to the same limits. This stops other websites using their visitors' browsers.
+    verifyClient: (info: { origin?: string }) => info.origin === undefined || info.origin === PUBLIC_ORIGIN,
+});
 
 /** Sockets that answered the last heartbeat. */
 const answered: WeakSet<WebSocket> = new WeakSet();
@@ -132,6 +207,12 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     socket.on("error", (error: Error) => { console.warn(`socket error: ${error.message}`); });
     answered.add(socket);
     socket.on("pong", () => { answered.add(socket); });
+    const address: string = addressOf(request);
+    if (limits.openSocket(address) === false) {
+        socket.close(1013, "too many connections");
+        return;
+    }
+    socket.on("close", () => { limits.closeSocket(address); });
     const url: URL | null = URL.canParse(request.url ?? "/", "http://room") === true ? new URL(request.url ?? "/", "http://room") : null;
     if (url === null) {
         socket.close(1008, "bad address");
@@ -139,7 +220,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     }
     const existing: Room | undefined = directory.find(url.searchParams.get("room") ?? "");
     if (url.pathname === "/ws/screen") {
-        const room: Room | null = existing ?? directory.create();
+        const room: Room | null = existing ?? openRoom(address);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;
@@ -148,7 +229,8 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         return;
     }
     if (url.pathname === "/ws/phone") {
-        if (existing === undefined) {
+        if (existing === undefined || limits.isBlocked(address) === true) {
+            limits.codeMissed(address);
             turnAway(socket, "unknownRoom");
             return;
         }

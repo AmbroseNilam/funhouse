@@ -8,7 +8,7 @@
 // short pre-recorded acknowledgement plays when the host was addressed and its reply is not
 // audible soon after the final text arrives.
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
 import type { CartridgeManifest } from "../shared/cartridge.ts";
 import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
@@ -19,9 +19,10 @@ import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.t
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import { GAMES, type InstalledGame } from "../cartridges/index.ts";
+import { BUDGET, RateWindow } from "./limits.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
 import { streamSpark } from "../providers/meta/spark.ts";
-import type { NavAction, Seat, ShelfGame } from "../shared/shell.ts";
+import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
@@ -47,6 +48,8 @@ interface Player {
     holdingToTalk: boolean;
     /** Sessions whose press has not produced final text yet; a new press can overlap the last. */
     awaitingFinal: Set<TranscribeSession>;
+    /** When this seat last pressed to talk, or zero if it never has. */
+    lastPressAt: number;
     /** The seat's colour, on the TV and as the phone's background. */
     colour: string;
     /** A short message replacing the phone's status line, such as a press that wasn't heard. */
@@ -103,7 +106,7 @@ const CONTENT_TOKEN_LIMIT: number = 2000;
 const CONTENT_TIME_LIMIT_MILLISECONDS: number = 15000;
 
 /** Most pictures one room draws. Each costs about a cent and sits in memory until it closes. */
-const MAX_DRAWINGS: number = 24;
+const MAX_DRAWINGS: number = 40;
 
 /**
  * True when pictures are drawn. The text-only test mode skips them to stay fast, unless asked
@@ -113,6 +116,36 @@ const DRAWING_ON: boolean = TEXT_ONLY === false || process.env.GAME_ROOM_DRAW ==
 
 /** Unsent bytes a screen may build up: about 2 minutes of voice. */
 const MAX_SCREEN_BUFFER_BYTES: number = 5760000;
+
+/** Messages a socket may send per second. Thumb leans alone reach 30. */
+const TEXT_MESSAGES_PER_SECOND: number = 60;
+
+/** Audio frames a socket may send per second: real time is 12.5, plus a little catch-up. */
+const AUDIO_FRAMES_PER_SECOND: number = 30;
+
+/** Longest a single press can talk. */
+const PRESS_LIMIT_MILLISECONDS: number = 30000;
+
+/** How long a screen may wait to be lit before it's dropped, so idle tabs can't hold rooms. */
+const UNLIT_SCREEN_MILLISECONDS: number = 600000;
+
+/** Shortest gap between game starts in a room. */
+const GAME_START_GAP_MILLISECONDS: number = 10000;
+
+/** Fewest milliseconds between voice-level messages to screens. */
+const MIC_LEVEL_GAP_MILLISECONDS: number = 100;
+
+/** Unsent bytes a phone may build up before it's dropped and reconnects. */
+const MAX_PHONE_BUFFER_BYTES: number = 1048576;
+
+/** How long since a seat's last press its standby session keeps being refreshed. */
+const STANDBY_IDLE_MILLISECONDS: number = 120000;
+
+/** Longest speech passed on to the host and the screen. */
+const MAX_HEARD_CHARACTERS: number = 300;
+
+/** Fewest milliseconds between name changes. */
+const RENAME_GAP_MILLISECONDS: number = 5000;
 
 /** Longest text a phone may send through a control. */
 const MAX_INPUT_CHARACTERS: number = 200;
@@ -163,7 +196,7 @@ const CODE_ALPHABET: string = "BCDFGHJKLMNPQRSTVWXZ";
 export function makeRoomCode(): string {
     let code: string = "";
     for (let index = 0; index < 4; index += 1) {
-        code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+        code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
     }
     return code;
 }
@@ -187,6 +220,15 @@ function frameLevel(frame: Buffer): number {
     return Math.round(Math.min(1, Math.sqrt(sum / count) * LEVEL_GAIN) * 100) / 100;
 }
 
+/**
+ * Makes a typed name safe to show and to put in front of the host: one line, printable, short.
+ * @param raw what was typed.
+ * @returns the name, possibly empty.
+ */
+function cleanName(raw: string): string {
+    return raw.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/[()[\]:]/g, "").replace(/\s+/g, " ").trim().slice(0, 24);
+}
+
 /** The room runtime. One instance per live room. */
 export class Room implements HostStage {
     public readonly code: string;
@@ -207,7 +249,12 @@ export class Room implements HostStage {
     private lastRemarkAt: number = 0;
     private gameDecided: boolean = false;
     private paused: boolean = false;
+    /** Who was seated when the game began; anyone later watches and can't drive. */
+    private gamePlayerIds: Set<string> = new Set();
     private readonly drawings: Map<string, Drawing> = new Map();
+    private drawingsAsked: number = 0;
+    private lastGameStartAt: number = 0;
+    private lastMicLevelAt: number = 0;
     /** Who spoke last, so a ruling can be credited to them. */
     private lastSpeakerId: string | null = null;
     private nextPlayerNumber: number = 1;
@@ -286,11 +333,16 @@ export class Room implements HostStage {
             this.screens.delete(socket);
             log(this.scope(), `screen disconnected (${this.screens.size} open)`);
         });
+        let lit: boolean = false;
+        const unlitTimer: NodeJS.Timeout = setTimeout(() => { socket.close(4008, "never lit"); }, UNLIT_SCREEN_MILLISECONDS);
+        socket.on("close", () => { clearTimeout(unlitTimer); });
         socket.on("message", (data: WebSocket.RawData) => {
             const message: ScreenMessage | null = parseMessage<ScreenMessage>(rawDataToText(data));
-            if (message?.type !== "ready") {
+            if (message?.type !== "ready" || lit === true) {
                 return;
             }
+            lit = true;
+            clearTimeout(unlitTimer);
             this.wake();
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
             this.host.notice(line, WAKE_DELAY_MILLISECONDS.screen);
@@ -306,7 +358,14 @@ export class Room implements HostStage {
      */
     public attachPhone(socket: WebSocket): void {
         let player: Player | null = null;
+        let lastRenameAt: number = 0;
+        const textRate: RateWindow = new RateWindow(TEXT_MESSAGES_PER_SECOND, 1000);
+        const audioRate: RateWindow = new RateWindow(AUDIO_FRAMES_PER_SECOND, 1000);
         socket.on("message", (data: WebSocket.RawData, isBinary: boolean) => {
+            if ((isBinary === true ? audioRate : textRate).allow() === false) {
+                socket.close(1008, "too many messages");
+                return;
+            }
             if (isBinary === true) {
                 if (player !== null) {
                     this.onAudioFrame(player, Buffer.isBuffer(data) ? data : Buffer.from(rawDataToText(data)));
@@ -330,7 +389,10 @@ export class Room implements HostStage {
                 return;
             }
             if (message.type === "rename") {
-                this.rename(player, message.name);
+                if (Date.now() - lastRenameAt >= RENAME_GAP_MILLISECONDS) {
+                    lastRenameAt = Date.now();
+                    this.rename(player, message.name);
+                }
                 return;
             }
             if (message.type === "textOnlySay") {
@@ -342,6 +404,9 @@ export class Room implements HostStage {
                 return;
             }
             if (message.type === "lean") {
+                if (this.shell.isDriving(player.playerId) === false) {
+                    return;
+                }
                 this.broadcastToScreens({ type: "lean", x: Math.max(-1, Math.min(1, message.x)), y: Math.max(-1, Math.min(1, message.y)) });
                 return;
             }
@@ -446,6 +511,9 @@ export class Room implements HostStage {
         this.hostTurnText = `${this.hostTurnText} ${text}`.trim();
         this.caption = { speaker: this.host.persona.name, text: this.hostTurnText, final: true };
         this.broadcastScene();
+        if (BUDGET.spend("voice") === false) {
+            return;
+        }
         this.voice.say(text, this.host.persona.voice, style);
     }
 
@@ -457,8 +525,9 @@ export class Room implements HostStage {
     /**
      * Finds a phone its seat: the one it remembers, or one it's asked to take over, or a new
      * one. A name already at the table is checked first, because the same person often arrives
-     * twice, as Safari and the home-screen app don't share a seat. Taking a seat over is only
-     * offered outside a game, so nobody can use a name to read someone's secret role.
+     * twice, as Safari and the home-screen app don't share a seat. Taking a seat is only offered
+     * outside a game and when its phone has gone, with a new token, so a name alone can't reach
+     * anyone's secret role or push them out.
      * @param socket the phone's WebSocket.
      * @param hello what the phone said.
      * @returns the player, or null while the phone is deciding or the room is full.
@@ -470,10 +539,11 @@ export class Room implements HostStage {
         }
         const wanted: string = hello.name.trim().toLowerCase();
         const namesake: Player | undefined = [...this.players.values()].find((candidate: Player) => candidate.name.toLowerCase() === wanted);
-        if (namesake === undefined || this.game !== null || hello.sameName === "newSeat") {
+        if (namesake === undefined || namesake.connected === true || this.game !== null || hello.sameName === "newSeat") {
             return this.join(socket, hello.name);
         }
         if (hello.sameName === "takeSeat") {
+            namesake.resumeToken = randomBytes(16).toString("hex");
             return this.resume(socket, namesake.playerId, namesake.resumeToken);
         }
         const asking: RoomToPhoneMessage = { type: "nameTaken", name: namesake.name };
@@ -495,10 +565,10 @@ export class Room implements HostStage {
             return null;
         }
         this.wake();
-        const name: string = rawName.trim().slice(0, 24) || `Player ${this.nextPlayerNumber}`;
+        const name: string = cleanName(rawName) || `Player ${this.nextPlayerNumber}`;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -577,6 +647,9 @@ export class Room implements HostStage {
      * @param action what.
      */
     private onNav(player: Player, action: NavAction): void {
+        if (this.game !== null && this.gamePlayerIds.has(player.playerId) === false) {
+            return;
+        }
         this.shell.act(player.playerId, action);
     }
 
@@ -664,7 +737,8 @@ export class Room implements HostStage {
      * @param gameId the box.
      */
     private playRemark(gameId: string): void {
-        const talking: boolean = this.hostThinking === true || this.voice.isBusy() === true || [...this.players.values()].some((player: Player) => player.holdingToTalk === true);
+        const holding: boolean = [...this.players.values()].some((player: Player) => player.holdingToTalk === true);
+        const talking: boolean = this.hostThinking === true || this.voice.isBusy() === true || holding === true;
         const tooSoon: boolean = Date.now() - this.lastRemarkAt < REMARK_GAP_MILLISECONDS;
         if (talking === true || tooSoon === true || this.remarkedOn.has(gameId) === true || Math.random() >= REMARK_CHANCE) {
             return;
@@ -689,6 +763,9 @@ export class Room implements HostStage {
         for (const game of GAMES) {
             const lines: { text: string; pcm: Uint8Array }[] = [];
             for (const text of game.remarks) {
+                if (BUDGET.spend("voice") === false) {
+                    return;
+                }
                 lines.push({ text, pcm: await this.voice.render(text, persona.voice, `${persona.style} Muttered aside, half to yourself.`) });
             }
             this.remarks.set(game.manifest.id, lines);
@@ -713,13 +790,18 @@ export class Room implements HostStage {
             this.host.notice(`(Game: ${name} needs ${minPlayers} to ${maxPlayers} players and there are ${count}.)`, WAKE_DELAY_MILLISECONDS.screen);
             return;
         }
+        if (Date.now() - this.lastGameStartAt < GAME_START_GAP_MILLISECONDS) {
+            return;
+        }
+        this.lastGameStartAt = Date.now();
+        this.gamePlayerIds = new Set(this.players.keys());
         log(this.scope(), `starting ${installed.manifest.name} with ${count}`);
         this.caption = null;
         this.game = installed.create(this.gameStage());
         this.game.start([...this.players.values()].map((player: Player) => ({ playerId: player.playerId, name: player.name })));
         this.gameDecided = false;
         this.shell.gameStarted(installed.manifest.id);
-        const opening: string = `(Game: ${installed.manifest.name} has just started, so this is addressed to you. Say something out loud now, and do what "This moment" says. Don't stay quiet.)`;
+        const opening: string = `(Game: ${installed.manifest.name} has just started, so this is for you. Say something out loud now, and do what "This moment" says. Don't stay quiet.)`;
         this.host.notice(opening, WAKE_DELAY_MILLISECONDS.screen);
         this.broadcastScene();
     }
@@ -765,10 +847,14 @@ export class Room implements HostStage {
      */
     private writeContent(prompt: string): void {
         const game: RunningGame | null = this.game;
+        if (BUDGET.spend("spark") === false) {
+            game?.event({ type: "contentReady", at: Date.now(), text: "" });
+            return;
+        }
         const startedAt: number = Date.now();
         const collect = async (): Promise<string> => {
             let text: string = "";
-            const system: string = "You write content for a party game. Reply with exactly what is asked and nothing else.";
+            const system: string = "You write content for a family party game. Keep it suitable for all ages, even if a topic pushes otherwise. Reply with exactly what is asked and nothing else.";
             for await (const delta of streamSpark([{ role: "system", content: system }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT, signal: AbortSignal.timeout(CONTENT_TIME_LIMIT_MILLISECONDS) })) {
                 text += delta;
             }
@@ -792,9 +878,10 @@ export class Room implements HostStage {
      * @param prompt what to draw.
      */
     private draw(id: string, prompt: string): void {
-        if (DRAWING_ON === false || this.drawings.size >= MAX_DRAWINGS) {
+        if (DRAWING_ON === false || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
             return;
         }
+        this.drawingsAsked += 1;
         const game: RunningGame | null = this.game;
         const key: string = randomBytes(16).toString("hex");
         const startedAt: number = Date.now();
@@ -871,7 +958,7 @@ export class Room implements HostStage {
      * @param rawName the name the player typed.
      */
     private rename(player: Player, rawName: string): void {
-        const name: string = rawName.trim().slice(0, 24);
+        const name: string = cleanName(rawName);
         if (name === "" || name === player.name) {
             return;
         }
@@ -937,6 +1024,13 @@ export class Room implements HostStage {
         this.clearStandbyTimer(player);
         player.transcribe = session;
         player.awaitingFinal.add(session);
+        player.lastPressAt = Date.now();
+        setTimeout(() => {
+            if (player.transcribe === session) {
+                player.holdingToTalk = false;
+                this.finishPress(player);
+            }
+        }, PRESS_LIMIT_MILLISECONDS).unref();
     }
 
     /**
@@ -1010,7 +1104,8 @@ export class Room implements HostStage {
      * @param player the player.
      */
     private prepareStandby(player: Player): void {
-        if (TEXT_ONLY === true || player.connected === false || player.standby !== null) {
+        const idle: boolean = Date.now() - player.lastPressAt > STANDBY_IDLE_MILLISECONDS;
+        if (TEXT_ONLY === true || player.connected === false || player.standby !== null || idle === true) {
             return;
         }
         const session: TranscribeSession = this.openTranscribe(player, "PUSH_TO_TALK");
@@ -1110,7 +1205,10 @@ export class Room implements HostStage {
             return;
         }
         player.transcribe.sendFrame(new Uint8Array(frame));
-        this.broadcastToScreens({ type: "micLevel", level: frameLevel(frame) });
+        if (Date.now() - this.lastMicLevelAt >= MIC_LEVEL_GAP_MILLISECONDS) {
+            this.lastMicLevelAt = Date.now();
+            this.broadcastToScreens({ type: "micLevel", level: frameLevel(frame) });
+        }
     }
 
     /**
@@ -1141,7 +1239,8 @@ export class Room implements HostStage {
      * @param player who spoke.
      * @param said their words.
      */
-    private onHeard(player: Player, said: string): void {
+    private onHeard(player: Player, heard: string): void {
+        const said: string = heard.slice(0, MAX_HEARD_CHARACTERS);
         const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
         this.record(event);
         this.lastSpeakerId = player.playerId;
@@ -1219,6 +1318,9 @@ export class Room implements HostStage {
     private async renderAcknowledgements(): Promise<void> {
         const persona: HostPersona = this.host.persona;
         for (const text of ACKNOWLEDGEMENTS) {
+            if (BUDGET.spend("voice") === false) {
+                return;
+            }
             this.acknowledgements.push(await this.voice.render(text, persona.voice, `${persona.style} A quick, quiet acknowledgement, as if thinking.`));
         }
         log(this.scope(), `rendered ${this.acknowledgements.length} acknowledgements`);
@@ -1313,7 +1415,20 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.shell.pad(player.playerId, player.colour) };
+        return { playerName: player.name, listening: player.listening, status, controls: this.phoneControls(player), pad: this.padFor(player) };
+    }
+
+    /**
+     * How one phone's surface behaves; someone who joined mid-game just watches.
+     * @param player the player.
+     * @returns the pad.
+     */
+    private padFor(player: Player): PadView {
+        const pad: PadView = this.shell.pad(player.playerId, player.colour);
+        if (this.game === null || this.gamePlayerIds.has(player.playerId) === true) {
+            return pad;
+        }
+        return { ...pad, axis: null, canDrive: false, canSelect: false, backLabel: null };
     }
 
     /**
@@ -1401,6 +1516,10 @@ export class Room implements HostStage {
      */
     private sendToPhone(player: Player, message: RoomToPhoneMessage): void {
         if (player.connected === false) {
+            return;
+        }
+        if (player.socket.bufferedAmount > MAX_PHONE_BUFFER_BYTES) {
+            player.socket.terminate();
             return;
         }
         player.socket.send(JSON.stringify(message));

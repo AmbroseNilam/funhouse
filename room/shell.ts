@@ -125,6 +125,15 @@ export class Shell {
     }
 
     /**
+     * Whether this person has the controller.
+     * @param playerId who.
+     * @returns true for the driver.
+     */
+    public isDriving(playerId: string): boolean {
+        return this.driverId === playerId;
+    }
+
+    /**
      * The whole console, for the TV.
      * @returns the view.
      */
