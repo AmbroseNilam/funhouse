@@ -19,7 +19,7 @@
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "verify": "python3 tools/verify.py",
-        "test": "node --test --experimental-strip-types 'cartridges/**/*.test.ts' 'shared/**/*.test.ts' 'room/**/*.test.ts'",
+        "test": "node --test --experimental-strip-types 'cartridges/**/*.test.ts' 'shared/**/*.test.ts' 'room/**/*.test.ts' 'studio/**/*.test.ts'",
         "check": "npm run verify && npm run typecheck && npm run lint && npm test"
     },
     "dependencies": {
