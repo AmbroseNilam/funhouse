@@ -67,8 +67,12 @@ export interface GuessingState {
     secret: string;
     count: Budget;
     said: SaidLine[];
-    /** The latest thing a player said, waiting for a ruling. */
-    heard: { playerId: string; text: string } | null;
+    /**
+     * The latest thing each player said that hasn't been ruled on, by player id. Kept per player
+     * because replies can overlap: a ruling answers the person the host was answering, not
+     * whoever spoke last.
+     */
+    heard: Record<string, string>;
     won: boolean;
     finder: string | null;
     revealPicture: string | null;
@@ -232,19 +236,22 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
      * @returns the step.
      */
     const finish = (state: GuessingState, won: boolean, finder: string | null, text: string, decision: string): Step<GuessingState> => {
-        return { state: { ...state, phase: "end", won, finder, heard: null }, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
+        return { state: { ...state, phase: "end", won, finder, heard: {} }, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
     };
 
     /**
      * Records an answer, spends one of the count if it costs one, and ends the game on the last.
-     * @param state the state, with something heard.
+     * @param state the state.
      * @param name the answer ruling.
+     * @param playerId who asked, with their line in heard.
+     * @param text what they asked.
      * @returns the step.
      */
-    const answer = (state: GuessingState, name: AnswerRuling): Step<GuessingState> => {
+    const answer = (state: GuessingState, name: AnswerRuling, playerId: string, text: string): Step<GuessingState> => {
         const chosen: AnswerDecision = answers[name];
-        const line: SaidLine = { speaker: state.heard === null ? "Someone" : nameOf(state, state.heard.playerId), text: state.heard?.text ?? "", answer: chosen.label };
-        const recorded: GuessingState = { ...state, said: [...state.said, line], heard: null };
+        const line: SaidLine = { speaker: nameOf(state, playerId), text, answer: chosen.label };
+        const heard: Record<string, string> = Object.fromEntries(Object.entries(state.heard).filter(([speaker]: [string, string]) => speaker !== playerId));
+        const recorded: GuessingState = { ...state, said: [...state.said, line], heard };
         if (chosen.spends === false) {
             return { state: recorded, facts: [] };
         }
@@ -256,8 +263,8 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
         if (spent.warn === false) {
             return { state: next, facts: [] };
         }
-        const text: string = `Tell them only ${spent.left} ${unitOf(spent.left)} ${spent.left === 1 ? "is" : "are"} left.`;
-        return { state: next, facts: because(publicFact("count-left", text), GUESSING_DECISIONS.warnAt) };
+        const warning: string = `Tell them only ${spent.left} ${unitOf(spent.left)} ${spent.left === 1 ? "is" : "are"} left.`;
+        return { state: next, facts: because(publicFact("count-left", warning), GUESSING_DECISIONS.warnAt) };
     };
 
     const cartridge: Cartridge<GuessingState> = {
@@ -273,7 +280,7 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
                 secret: "",
                 count: { used: 0, max: count.budget, warnAt: count.warnAt },
                 said: [],
-                heard: null,
+                heard: {},
                 won: false,
                 finder: null,
                 revealPicture: null,
@@ -329,7 +336,7 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
                 return { state: { ...state, revealPicture: event.src }, facts: [] };
             }
             if (event.type === "speechEnded" && state.phase === "asking") {
-                return { state: { ...state, heard: { playerId: event.playerId, text: event.text } }, facts: [] };
+                return { state: { ...state, heard: { ...state.heard, [event.playerId]: event.text } }, facts: [] };
             }
             if (event.type !== "hostRuled" || state.phase !== "asking") {
                 return { state, facts: [] };
@@ -337,16 +344,18 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
             if (event.ruling === "giveup") {
                 return finish(state, false, null, `They gave up after ${state.count.used} ${unitOf(state.count.used)}. The secret was ${state.secret}.`, answerDecision("giveup"));
             }
-            if (state.heard === null) {
+            const asker: string | null = event.playerId;
+            const asked: string | undefined = asker === null ? undefined : state.heard[asker];
+            if (asker === null || asked === undefined) {
                 return { state, facts: [] };
             }
             if (event.ruling === "correct") {
-                const finder: string = nameOf(state, state.heard.playerId);
+                const finder: string = nameOf(state, asker);
                 const text: string = `${finder} found it after ${state.count.used} ${unitOf(state.count.used)}. The secret was ${state.secret}. Announce it.`;
                 return finish(state, true, finder, text, answerDecision("correct"));
             }
             if (event.ruling in answers) {
-                return answer(state, event.ruling as AnswerRuling);
+                return answer(state, event.ruling as AnswerRuling, asker, asked);
             }
             return { state, facts: [] };
         },

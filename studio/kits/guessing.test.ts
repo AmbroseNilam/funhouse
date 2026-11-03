@@ -123,6 +123,18 @@ describe("the twenty doors blueprint", () => {
         assert.equal(ignored.facts.length, 0);
     });
 
+    it("matches each ruling to the person it answers, so overlapping replies keep a correct guess", () => {
+        const { game, state } = startAsking();
+        let current: GuessingState = game.cartridge.onEvent(state, { type: "speechEnded", at: 1, playerId: "paper1", text: "Is it alive?" }).state;
+        current = game.cartridge.onEvent(current, { type: "speechEnded", at: 2, playerId: "paper2", text: "Is it a platypus?" }).state;
+        const late: Step<GuessingState> = game.cartridge.onEvent(current, { type: "hostRuled", at: 3, ruling: "yes", detail: "", playerId: "paper1" });
+        assert.equal(late.state.said.at(-1)?.text, "Is it alive?");
+        const found: Step<GuessingState> = game.cartridge.onEvent(late.state, { type: "hostRuled", at: 4, ruling: "correct", detail: "", playerId: "paper2" });
+        assert.equal(found.state.won, true);
+        assert.equal(found.state.finder, "Spoon");
+        assert.equal(game.cartridge.onEvent(current, { type: "hostRuled", at: 5, ruling: "no", detail: "", playerId: "paper4" }).state, current, "nothing heard from that player");
+    });
+
     it("records a free answer without spending, so the ruling still visibly works", () => {
         const free: GuessingBlueprint = structuredClone(TWENTY_DOORS_BLUEPRINT);
         free.decisions.answers.sortof.spends = false;
