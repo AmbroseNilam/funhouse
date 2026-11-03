@@ -125,11 +125,11 @@ const PENDING_LIMIT: number = 20;
 /** What the host replies to say nothing. Checked before speaking, not left to cleanup. */
 const QUIET_MARKER: string = "(quiet)";
 
-/** Matches one ruling at the start of a reply, such as [[no]] or [[start: quizmaster]]. */
-const RULING_PATTERN: RegExp = /^\s*\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]\]/;
+/** Matches one ruling in a reply, such as [[no]] or [[start: quizmaster]]. Two questions at once can put one mid-reply. */
+const RULING_PATTERN: RegExp = /\[\[\s*([a-zA-Z]+)\s*(?::\s*([^\]]*?))?\s*\]\]/;
 
 /** A ruling with a name in it, which the faster model sometimes writes, such as [[Sam: right]]. */
-const NAMED_RULING_PATTERN: RegExp = /^\s*\[\[\s*([^\]:,]+?)\s*[:,]\s*([a-zA-Z]+)\s*\]\]/;
+const NAMED_RULING_PATTERN: RegExp = /\[\[\s*([^\]:,]+?)\s*[:,]\s*([a-zA-Z]+)\s*\]\]/g;
 
 /** Room for Spark's hidden reasoning plus a spoken reply. A brief with rulings reasons longer, and running out means no reply at all. */
 const REPLY_TOKEN_LIMIT: number = 1500;
@@ -320,7 +320,7 @@ export class Host {
     }
 
     /**
-     * Takes the rulings off the front of a reply and hands them to the room.
+     * Takes the rulings out of a reply and hands them to the room, in order.
      * @param reply the whole reply.
      * @param speakerId who the reply is answering.
      * @returns what is left to say.
@@ -339,24 +339,20 @@ export class Host {
                 log("host", "made a ruling");
                 this.stage.applyRuling(ruling, match[2] ?? "", speakerId);
             }
-            rest = rest.slice(match[0].length);
+            rest = `${rest.slice(0, match.index)} ${rest.slice(match.index + match[0].length)}`;
             match = RULING_PATTERN.exec(rest);
         }
         return rest;
     }
 
     /**
-     * Takes a player's name out of a ruling at the start of a reply, so the ruling still counts.
+     * Takes players' names out of rulings, so the rulings still count.
      * @param reply the whole reply.
-     * @returns the reply, with a plain ruling at the start.
+     * @returns the reply with plain rulings.
      */
     private withoutNameInRuling(reply: string): string {
-        const match: RegExpExecArray | null = NAMED_RULING_PATTERN.exec(reply);
-        const named: boolean = this.stage.playerNames().some((name: string) => name.toLowerCase() === match?.[1]?.toLowerCase());
-        if (match === null || named === false) {
-            return reply;
-        }
-        return `[[${match[2] ?? ""}]]${reply.slice(match[0].length)}`;
+        const names: string[] = this.stage.playerNames().map((name: string) => name.toLowerCase());
+        return reply.replace(NAMED_RULING_PATTERN, (whole: string, name: string, ruling: string) => (names.includes(name.toLowerCase()) === true ? `[[${ruling}]]` : whole));
     }
 
     /**
