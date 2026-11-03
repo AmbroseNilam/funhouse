@@ -2,6 +2,7 @@
 // routes WebSocket connections to rooms: /ws/screen for the public stage and /ws/phone for
 // phones, each with a ?room= code. A screen without a known code opens a new room.
 
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -71,6 +72,12 @@ const SECURITY_HEADERS: Record<string, string> = {
 /** How often bookkeeping for departed addresses is cleared. */
 const LIMITS_SWEEP_MILLISECONDS: number = 600000;
 
+/** Names the phone's current build, which changes whenever its page does. Empty when it hasn't been built. */
+const PHONE_VERSION: string = await readFile(join(STAGE_ROOTS.phone ?? "", "index.html")).then(
+    (page: Buffer) => createHash("sha256").update(page).digest("hex").slice(0, 16),
+    () => "",
+);
+
 /** The local test mode opens many rooms from one address. */
 const ROOM_LIMIT_ON: boolean = process.env.GAME_ROOM_TEXT_ONLY !== "1";
 
@@ -133,6 +140,10 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
         response.writeHead(302, { location: "/landing/brand/favicon-32.png" }).end();
         return;
     }
+    if (url.pathname === "/phone-version") {
+        response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }).end(PHONE_VERSION);
+        return;
+    }
     const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/([0-9a-f]+)$/.exec(url.pathname);
     if (drawing !== null) {
         const found: Drawing | undefined = directory.find(drawing[1] ?? "")?.drawing(drawing[2] ?? "");
@@ -158,7 +169,8 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
     }
     try {
         const body: Buffer = await readFile(file);
-        response.writeHead(200, { "content-type": MEDIA_TYPES[extname(file)] ?? "application/octet-stream" }).end(body);
+        const caching: Record<string, string> = extname(file) === ".html" ? { "cache-control": "no-cache" } : {};
+        response.writeHead(200, { "content-type": MEDIA_TYPES[extname(file)] ?? "application/octet-stream", ...caching }).end(body);
     } catch {
         response.writeHead(404).end("Not found. Run npm run build first.");
     }
