@@ -1,54 +1,103 @@
-/* Private stage styles: one hand, thumb reach, dark by default so a lit phone at night is a
-   deliberate signal rather than an accident. */
+/* The phone: a coloured card held in the hand. One surface, big plain words, nothing that needs
+   aiming at. Follows docs/DESIGN.md in the planning notes: Fraunces, painted card, lamp means live. */
 
 @layer tokens, base, components;
 
 @layer tokens {
-    :root { --bg: #0b0b10; --fg: #f4f1ea; --muted: #9a97a6; --accent: #f2c14e; --panel: #15151d; --danger: #ff5a5a; --font-body: "Inter", system-ui, sans-serif; }
+    :root {
+        --ink: #17110c;
+        --card: #2a1f16;
+        --paper: #efe3c8;
+        --paper-ink: #2a1f16;
+        --lamp: #e8a33d;
+        --wine: #8c2f2f;
+        --muted: #b6a68c;
+        --font: "Fraunces Variable", Georgia, serif;
+    }
 }
 
 @layer base {
-    html, body, #root { height: 100%; margin: 0; }
-    body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 18px; -webkit-tap-highlight-color: transparent; }
-    button, input { font: inherit; }
-    button { border: 0; border-radius: 16px; padding: 0.9em 1.2em; background: var(--panel); color: var(--fg); }
-    button:disabled { opacity: 0.4; }
-    input { width: 100%; box-sizing: border-box; padding: 0.9em 1em; border-radius: 16px; border: 1px solid var(--panel); background: var(--panel); color: var(--fg); }
+    html, body, #root { position: fixed; inset: 0; margin: 0; overflow: hidden; overscroll-behavior: none; }
+    body { background: var(--ink); color: var(--paper); font-family: var(--font); font-size: 18px; font-variation-settings: "SOFT" 100, "WONK" 1; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; -webkit-text-size-adjust: 100%; }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 42px; font-weight: 500; line-height: 1.08; letter-spacing: -0.01em; }
+    button, input { font: inherit; font-variation-settings: inherit; color: inherit; }
+    button { border: 0; background: none; padding: 0; }
+    input { width: 100%; box-sizing: border-box; padding: 16px; border: 0; border-radius: 4px; background: var(--paper); color: var(--paper-ink); font-size: 22px; user-select: text; -webkit-user-select: text; box-shadow: 4px 4px 0 #000; }
+    input::placeholder { color: #8a7a60; }
+    :focus-visible { outline: 3px solid var(--lamp); outline-offset: 3px; }
 }
 
 @layer components {
-    .phone { min-height: 100%; box-sizing: border-box; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 16px; }
-    .phone.name { justify-content: center; text-align: center; }
-    .phone.name form { display: flex; flex-direction: column; gap: 12px; }
-    .top-bar { display: flex; align-items: center; gap: 12px; color: var(--muted); }
-    .top-bar strong { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .top-bar span { flex: none; font-size: 0.85em; }
-    .menu-button { flex: none; margin-left: auto; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 1.2em; line-height: 1; }
-    .controls { flex: 1; display: flex; flex-direction: column; gap: 12px; }
-    .card { background: var(--panel); border-radius: 20px; padding: 20px; }
-    .card.secret { border: 1px solid var(--accent); }
-    .buttons { display: flex; flex-direction: column; gap: 10px; }
-    .notice.warning { color: var(--danger); }
-    .notice.secret { color: var(--accent); }
-    .controls:has(> .waiting:only-child) { justify-content: center; }
-    .waiting, .status { color: var(--muted); text-align: center; margin: 0; }
-    .status { min-height: 2.8em; font-size: 0.95em; }
-    .talk { align-self: center; flex: none; width: min(68vw, 42vh, 300px); aspect-ratio: 1; padding: 0; border-radius: 50%; font-size: 1.2em; font-weight: 600; background: var(--accent); color: #111; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: none; }
-    .talk { --level: 0; transition: background 120ms ease; }
-    .talk.holding { background: #fff; transform: scale(calc(1 + var(--level) * 0.1)); box-shadow: 0 0 calc(16px + var(--level) * 56px) calc(4px + var(--level) * 22px) rgba(242, 193, 78, 0.55); transition: transform 70ms linear, box-shadow 70ms linear; }
-    .talk.sent { font-size: 2.6em; }
-    @media (prefers-reduced-motion: reduce) {
-        .talk.holding { transform: none; }
-    }
-    .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(0, 0, 0, 0.6); }
-    .sheet { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; background: #1d1d27; }
+    .primary { display: block; width: 100%; padding: 16px; border-radius: 4px; background: var(--lamp); color: #241a02; font-size: 22px; font-weight: 600; box-shadow: 4px 4px 0 #000; transition: transform 80ms ease-out, box-shadow 80ms ease-out; }
+    .primary:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
+
+    .note-screen { position: fixed; inset: 0; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 20px; padding: max(24px, env(safe-area-inset-top)) 28px max(24px, env(safe-area-inset-bottom)); }
+    .note-screen form { display: flex; flex-direction: column; gap: 14px; }
+    .room-tag { color: var(--muted); font-size: 15px; }
+    .fine { color: var(--muted); font-size: 15px; line-height: 1.4; }
+
+    .pad-screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--seat); }
+    .corners { flex: none; display: flex; align-items: center; justify-content: space-between; padding-top: env(safe-area-inset-top); background: color-mix(in srgb, var(--ink) 35%, var(--seat)); }
+    .corner, .corner-gap { flex: none; width: 76px; height: 60px; font-size: 16px; color: var(--paper); }
+    .corner { transition: background 80ms ease-out; }
+    .corner:active { background: color-mix(in srgb, var(--ink) 40%, transparent); }
+    .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; color: var(--paper); }
+
+    .private { flex: 0 1 auto; max-height: 56%; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+    .paper { background: var(--paper); color: var(--paper-ink); padding: 16px; border-radius: 3px; box-shadow: 3px 3px 0 color-mix(in srgb, var(--ink) 70%, transparent); animation: paper-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .paper small { display: block; margin-bottom: 4px; color: var(--wine); font-size: 14px; }
+    .paper h2 { font-size: 30px; font-weight: 600; line-height: 1.1; margin-bottom: 6px; }
+    .paper p { line-height: 1.35; }
+    .prompt { font-size: 18px; margin-bottom: 8px; display: block; }
+    .choices { display: flex; flex-direction: column; gap: 8px; }
+    .choices button { min-height: 52px; padding: 10px 14px; text-align: left; font-size: 20px; border-radius: 3px; background: var(--card); color: var(--paper); transition: transform 70ms ease-out; }
+    .choices button:active { transform: scale(0.98); background: var(--lamp); color: #241a02; }
+    .choices button:disabled { opacity: 0.45; }
+    .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
+    .note.secret { background: var(--card); color: var(--paper); }
+    .note.warning { background: var(--wine); color: var(--paper); }
+
+    .surface { --level: 0; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+    .level-fill { position: absolute; inset: 0; background: var(--lamp); transform-origin: bottom; transform: scaleY(0); transition: transform 90ms linear; }
+    .talking .level-fill { transform: scaleY(calc(0.14 + var(--level) * 0.86)); }
+    .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
+    .touched .thumb { opacity: 1; transform: scale(1); }
+    .talking .thumb { opacity: 0; }
+    .line { position: relative; text-align: center; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+    .line strong { font-size: 38px; font-weight: 500; line-height: 1.1; color: var(--paper); }
+    .line small { font-size: 18px; color: color-mix(in srgb, var(--paper) 75%, transparent); }
+    .talking .line strong { color: #241a02; }
+    .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
+
+    .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(10, 7, 4, 0.72); animation: fade-in 120ms ease-out; }
+    .sheet { box-sizing: border-box; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); background: var(--paper); color: var(--paper-ink); border-radius: 6px 6px 0 0; animation: sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .sheet form { display: flex; flex-direction: column; gap: 10px; }
-    .sheet label { color: var(--muted); font-size: 0.85em; }
-    .sheet p { margin: 0 0 6px; }
-    .sheet input { background: var(--bg); }
-    .sheet button { background: var(--panel); }
-    .sheet .primary { background: var(--accent); color: #111; font-weight: 600; }
-    .sheet .danger { background: var(--danger); color: #111; font-weight: 600; }
-    .sheet .quiet { background: none; color: var(--muted); }
-    .listening-muted .talk { background: var(--panel); color: var(--muted); }
+    .sheet label { font-size: 18px; }
+    .sheet p { font-size: 20px; line-height: 1.3; margin-bottom: 6px; }
+    .sheet input { box-shadow: none; border: 1px solid var(--paper-ink); }
+    .sheet button { min-height: 54px; font-size: 20px; border-radius: 3px; background: var(--card); color: var(--paper); box-shadow: none; }
+    .sheet .primary { background: var(--lamp); color: #241a02; }
+    .sheet .danger { background: var(--wine); color: var(--paper); }
+    .sheet .quiet { background: none; color: var(--paper-ink); }
+}
+
+@keyframes paper-in {
+    from { opacity: 0; transform: translateY(10px) rotate(-0.6deg); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes sheet-in {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .paper, .sheet, .sheet-backdrop { animation: none; }
+    .thumb, .level-fill { transition: none; }
 }

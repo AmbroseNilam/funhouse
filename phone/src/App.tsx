@@ -1,11 +1,14 @@
-// The private stage: a name screen, then whatever the room tells this phone to show, plus the
-// talk button. Holding it streams microphone frames until release; a quick tap keeps the
-// microphone open until a second tap or a pause in speech. The phone never decides game logic; it renders controls and reports input. It remembers its seat so a refresh, a
-// locked screen or a network blip reconnects into the same seat without asking again.
+// The phone: a name, then one full-screen surface that works as a controller without looking
+// down. Slide moves the highlight on the TV, tap chooses, and press and hold talks. Anything
+// private to this player appears above the surface. The phone never decides game logic. It
+// remembers its seat, so a refresh, a locked screen or a network blip returns to the same seat.
 
-import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import type { Control, PhoneView } from "../../shared/controls.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
+import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
+import type { PadView } from "../../shared/shell.ts";
+import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -75,20 +78,20 @@ function clearSeat(): void {
 /** How often the talk button follows the microphone's loudness. */
 const LEVEL_INTERVAL_MILLISECONDS: number = 50;
 
-/** A press shorter than this is a tap, which locks the microphone open. */
-const TAP_MILLISECONDS: number = 250;
+/** Frames of audio kept from before a hold, so first words survive: 320 ms. */
+const PRE_ROLL_FRAMES: number = 4;
 
-/** Loudness that counts as someone speaking while locked. */
-const SPEECH_LEVEL: number = 0.1;
+/** How long the microphone keeps sending after release, so last words survive. */
+const TAIL_MILLISECONDS: number = 300;
 
-/** How long a pause in speech ends a locked turn. */
-const LOCK_SILENCE_MILLISECONDS: number = 1500;
+/** A tiny buzz on each step, where the phone can; iPhones can't, and the TV carries the feedback. */
+const STEP_BUZZ_MILLISECONDS: number = 6;
 
-/** How long a locked microphone waits for the first word before giving up. */
-const LOCK_NO_SPEECH_MILLISECONDS: number = 6000;
+/** Fewest milliseconds between lean messages. */
+const LEAN_INTERVAL_MILLISECONDS: number = 33;
 
-/** The longest a locked turn may run, in case the room is too loud to ever fall silent. */
-const LOCK_LIMIT_MILLISECONDS: number = 30000;
+/** Storage key for the gestures this phone has already learned. */
+const LEARNED_KEY: string = "gameroom.learned";
 
 /** How long the tick shows after letting go. */
 const SENT_TICK_MILLISECONDS: number = 900;
@@ -158,36 +161,86 @@ function reduce(state: PhoneState, action: PhoneAction): PhoneState {
 }
 
 /**
- * Renders one control.
+ * Reads which gestures this phone has already learned.
+ * @returns the gestures.
+ */
+function readLearned(): Set<string> {
+    try {
+        return new Set((localStorage.getItem(LEARNED_KEY) ?? "").split(",").filter((item: string) => item !== ""));
+    } catch {
+        return new Set();
+    }
+}
+
+/**
+ * Saves which gestures this phone has learned; without storage it teaches them again next time.
+ * @param learned the gestures.
+ */
+function writeLearned(learned: Set<string>): void {
+    try {
+        localStorage.setItem(LEARNED_KEY, [...learned].join(","));
+    } catch {
+        // Blocked storage only means a repeated hint.
+    }
+}
+
+/**
+ * The one line the surface shows, teaching one gesture at a time until each has been done.
+ * @param pad how the surface behaves.
+ * @param learned the gestures already done.
+ * @param waiting what the game says to wait for, if anything.
+ * @returns the headline and a smaller line under it.
+ */
+function surfaceLine(pad: PadView, learned: Set<string>, waiting: string): { big: string; small: string } {
+    if (pad.driving === true && pad.axis !== null && learned.has("slide") === false) {
+        return { big: "Slide your thumb", small: "Watch the TV" };
+    }
+    if (pad.driving === true && pad.canSelect === true && learned.has("tap") === false) {
+        return { big: "Tap to choose", small: "Anywhere on this screen" };
+    }
+    if (learned.has("hold") === false) {
+        return { big: "Press and hold to talk", small: `${HOST_NAME} is listening` };
+    }
+    if (waiting !== "") {
+        return { big: waiting, small: "" };
+    }
+    if (pad.driving === false && pad.axis !== null && pad.driverName !== "") {
+        return { big: `${pad.driverName} has the controller`, small: "Slide to take over" };
+    }
+    return { big: "", small: "Press and hold to talk" };
+}
+
+/**
+ * Renders one private control as a paper card. Waiting lines go on the surface instead.
  * @param control the control.
  * @param index its index, sent back with input.
  * @param send sends a message to the room.
- * @returns the element.
+ * @returns the element, or null.
  */
-function renderControl(control: Control, index: number, send: (message: PhoneMessage) => void): ReactElement {
+function renderControl(control: Control, index: number, send: (message: PhoneMessage) => void): ReactElement | null {
+    if (control.type === "waiting") {
+        return null;
+    }
     if (control.type === "roleCard") {
-        return <section key={index} className={`card ${control.secret === true ? "secret" : ""}`}><h2>{control.title}</h2><p>{control.body}</p></section>;
+        return <section key={index} className={`paper ${control.secret === true ? "secret" : ""}`}>{control.secret === true ? <small>Only you can see this</small> : null}<h2>{control.title}</h2><p>{control.body}</p></section>;
     }
     if (control.type === "buttons" || control.type === "choice") {
         return (
-            <section key={index} className="buttons">
-                {control.prompt !== undefined ? <p>{control.prompt}</p> : null}
+            <section key={index} className="paper choices">
+                {control.prompt !== undefined ? <p className="prompt">{control.prompt}</p> : null}
                 {control.options.map((option) => <button key={option.id} disabled={option.disabled === true} onClick={() => { send({ type: "input", input: { value: option.id, controlIndex: index } }); }}>{option.label}</button>)}
             </section>
         );
     }
     if (control.type === "textInput") {
         return (
-            <form key={index} className="text-input" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("value") as HTMLInputElement; send({ type: "input", input: { value: field.value.slice(0, control.maxLength), controlIndex: index } }); field.value = ""; }}>
-                <label>{control.prompt}<input name="value" maxLength={control.maxLength} placeholder={control.placeholder ?? ""} autoComplete="off" /></label>
+            <form key={index} className="paper choices" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("value") as HTMLInputElement; send({ type: "input", input: { value: field.value.slice(0, control.maxLength), controlIndex: index } }); field.value = ""; }}>
+                <label className="prompt">{control.prompt}<input name="value" maxLength={control.maxLength} placeholder={control.placeholder ?? ""} autoComplete="off" /></label>
                 <button type="submit">Send</button>
             </form>
         );
     }
-    if (control.type === "notice") {
-        return <p key={index} className={`notice ${control.tone}`}>{control.text}</p>;
-    }
-    return <p key={index} className="waiting">{control.text}</p>;
+    return <p key={index} className={`paper note ${control.tone}`}>{control.text}</p>;
 }
 
 /** The phone application. */
@@ -198,10 +251,12 @@ export function App(): ReactElement {
     const startingMicrophoneRef = useRef<Promise<void> | null>(null);
     const pendingNameRef = useRef<string | null>(null);
     const holdingRef = useRef<boolean>(false);
-    const talkRef = useRef<HTMLButtonElement | null>(null);
-    const pressedAtRef = useRef<number>(0);
-    const swallowReleaseRef = useRef<boolean>(false);
-    const [locked, setLocked] = useState<boolean>(false);
+    const preRollRef = useRef<ArrayBuffer[]>([]);
+    const tailTimerRef = useRef<number>(0);
+    const surfaceRef = useRef<HTMLDivElement | null>(null);
+    const padRef = useRef<PadView | null>(null);
+    const lastLeanAtRef = useRef<number>(0);
+    const [learned, setLearned] = useState<Set<string>>(readLearned);
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sent, setSent] = useState<boolean>(false);
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave">("closed");
@@ -266,7 +321,6 @@ export function App(): ReactElement {
                     return;
                 }
                 holdingRef.current = false;
-                setLocked(false);
                 dispatch({ type: "holding", holding: false });
                 if (event.code === RESUMED_ELSEWHERE_CODE) {
                     stopped = true;
@@ -312,37 +366,14 @@ export function App(): ReactElement {
         if (state.holding === false) {
             return;
         }
-        const startedAt: number = Date.now();
-        let lastSpeechAt: number = 0;
         const timer: number = window.setInterval(() => {
-            const level: number = captureRef.current?.level() ?? 0;
-            talkRef.current?.style.setProperty("--level", level.toFixed(3));
-            if (locked === false) {
-                return;
-            }
-            const now: number = Date.now();
-            if (level >= SPEECH_LEVEL) {
-                lastSpeechAt = now;
-            }
-            const paused: boolean = lastSpeechAt !== 0 && now - lastSpeechAt >= LOCK_SILENCE_MILLISECONDS;
-            const neverSpoke: boolean = lastSpeechAt === 0 && now - startedAt >= LOCK_NO_SPEECH_MILLISECONDS;
-            if (paused === true || neverSpoke === true || now - startedAt >= LOCK_LIMIT_MILLISECONDS) {
-                stopTalking();
-            }
+            surfaceRef.current?.style.setProperty("--level", (captureRef.current?.level() ?? 0).toFixed(3));
         }, LEVEL_INTERVAL_MILLISECONDS);
-        /** Stops a turn when the phone is put away, since hidden pages lose the microphone. */
-        const onHidden = (): void => {
-            if (document.visibilityState === "hidden") {
-                stopTalking();
-            }
-        };
-        document.addEventListener("visibilitychange", onHidden);
         return (): void => {
             window.clearInterval(timer);
-            document.removeEventListener("visibilitychange", onHidden);
-            talkRef.current?.style.setProperty("--level", "0");
+            surfaceRef.current?.style.setProperty("--level", "0");
         };
-    }, [state.holding, locked]);
+    }, [state.holding]);
 
     useEffect(() => {
         if (sent === false) {
@@ -351,6 +382,8 @@ export function App(): ReactElement {
         const timer: number = window.setTimeout(() => { setSent(false); }, SENT_TICK_MILLISECONDS);
         return (): void => { window.clearTimeout(timer); };
     }, [sent]);
+
+    useEffect(() => blockBrowserGestures(), []);
 
     const send = (message: PhoneMessage): void => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -373,8 +406,14 @@ export function App(): ReactElement {
             captureRef.current = await startMicrophone((frame: ArrayBuffer) => {
                 if (holdingRef.current === true && socketRef.current?.readyState === WebSocket.OPEN) {
                     socketRef.current.send(frame);
+                    return;
+                }
+                preRollRef.current.push(frame);
+                if (preRollRef.current.length > PRE_ROLL_FRAMES) {
+                    preRollRef.current.shift();
                 }
             });
+            dispatch({ type: "micError", error: "" });
         } catch (error: unknown) {
             dispatch({ type: "micError", error: error instanceof DOMException && error.name === "NotAllowedError" ? "Allow the microphone in your browser to talk." : "Couldn't start the microphone." });
         }
@@ -391,77 +430,136 @@ export function App(): ReactElement {
         startingMicrophoneRef.current = null;
     };
 
-    const setHolding = (holding: boolean): void => {
-        if (holding === false && holdingRef.current === true) {
-            setSent(true);
-        }
-        if (holding === true) {
-            setSent(false);
-        }
-        holdingRef.current = holding;
-        dispatch({ type: "holding", holding });
-        send({ type: "holdToTalk", down: holding });
+    /** Records that a gesture has been done, which retires its hint. */
+    const learn = (gesture: string): void => {
+        setLearned((current: Set<string>) => {
+            if (current.has(gesture) === true) {
+                return current;
+            }
+            const next: Set<string> = new Set(current);
+            next.add(gesture);
+            writeLearned(next);
+            return next;
+        });
     };
 
-    const stopTalking = (): void => {
-        setLocked(false);
-        setHolding(false);
-    };
-
-    const onTalkDown = (): void => {
-        void ensureMicrophone();
-        if (locked === true) {
-            swallowReleaseRef.current = true;
-            stopTalking();
-            return;
-        }
-        pressedAtRef.current = Date.now();
-        setHolding(true);
-    };
-
-    const onTalkUp = (): void => {
-        if (swallowReleaseRef.current === true) {
-            swallowReleaseRef.current = false;
-            return;
-        }
+    /** Starts talking: the room first, then the audio kept from just before the hold. */
+    const startTalking = (): void => {
+        window.clearTimeout(tailTimerRef.current);
         if (holdingRef.current === false) {
-            return;
+            send({ type: "holdToTalk", down: true });
+            holdingRef.current = true;
+            for (const frame of preRollRef.current.splice(0, preRollRef.current.length)) {
+                if (socketRef.current?.readyState === WebSocket.OPEN) {
+                    socketRef.current.send(frame);
+                }
+            }
         }
-        if (Date.now() - pressedAtRef.current < TAP_MILLISECONDS) {
-            setLocked(true);
-            return;
-        }
-        stopTalking();
+        dispatch({ type: "holding", holding: true });
+        setSent(false);
+        learn("hold");
     };
+
+    /** Stops talking, keeping the microphone on a moment so the last word isn't cut. */
+    const stopTalking = (): void => {
+        dispatch({ type: "holding", holding: false });
+        setSent(true);
+        tailTimerRef.current = window.setTimeout(() => {
+            holdingRef.current = false;
+            send({ type: "holdToTalk", down: false });
+        }, TAIL_MILLISECONDS);
+    };
+
+    const view: PhoneView | null = state.view;
+    padRef.current = view?.pad ?? null;
+    const canTalk: boolean = view?.listening === "holdToTalk" || view?.listening === "openFloor";
+    const canTalkRef = useRef<boolean>(canTalk);
+    canTalkRef.current = canTalk;
+    useEffect(() => {
+        if (canTalk === false && holdingRef.current === true) {
+            stopTalking();
+        }
+        // Only a change in whether talking is allowed should end a turn.
+    }, [canTalk]);
+
+    const showingSurface: boolean = state.stage === "joined" && movedAway === false;
+    useEffect(() => {
+        const surface: HTMLDivElement | null = surfaceRef.current;
+        if (showingSurface === false || surface === null) {
+            return;
+        }
+        return listenForGestures(surface, {
+            axis: () => padRef.current?.axis ?? null,
+            touch: (x: number, y: number): void => {
+                const box: DOMRect = surface.getBoundingClientRect();
+                surface.style.setProperty("--thumb-x", `${x - box.left}px`);
+                surface.style.setProperty("--thumb-y", `${y - box.top}px`);
+                surface.classList.add("touched");
+                void ensureMicrophone();
+            },
+            lifted: (): void => { surface.classList.remove("touched"); },
+            step: (delta: number): void => {
+                send({ type: "nav", action: { kind: "step", delta } });
+                learn("slide");
+                if ("vibrate" in navigator) {
+                    navigator.vibrate(STEP_BUZZ_MILLISECONDS);
+                }
+            },
+            lean: (x: number, y: number): void => {
+                const now: number = Date.now();
+                if (padRef.current?.driving === true && (now - lastLeanAtRef.current >= LEAN_INTERVAL_MILLISECONDS || (x === 0 && y === 0))) {
+                    lastLeanAtRef.current = now;
+                    send({ type: "lean", x, y });
+                }
+            },
+            tap: (): void => {
+                if (padRef.current?.canSelect === true) {
+                    send({ type: "nav", action: { kind: "select" } });
+                    learn("tap");
+                }
+            },
+            holdStart: (): void => {
+                if (canTalkRef.current === true) {
+                    startTalking();
+                }
+            },
+            holdEnd: (): void => {
+                if (holdingRef.current === true) {
+                    stopTalking();
+                }
+            },
+        });
+        // The surface reads everything it needs through refs, and only remounts with the screen.
+    }, [showingSurface]);
 
     if (movedAway === true) {
         return (
-            <main className="phone name">
+            <main className="note-screen">
                 <h1>You're playing somewhere else</h1>
                 <p>This seat is open in another tab or window.</p>
-                <button onClick={() => { location.reload(); }}>Use this tab instead</button>
+                <button className="primary" onClick={() => { location.reload(); }}>Use this tab instead</button>
             </main>
         );
     }
 
     if (state.stage === "name") {
         return (
-            <main className="phone name">
-                <h1>Game Room</h1>
-                <p>Room {state.roomCode || "?"}</p>
+            <main className="note-screen" data-scrolls>
+                <small className="room-tag">{PRODUCT_NAME} · Room {state.roomCode}</small>
+                <h1>Who's sitting down?</h1>
                 <form onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
-                    <input name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoFocus required />
-                    <button type="submit">Join</button>
+                    <input name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoFocus required aria-label="Your name" />
+                    <button className="primary" type="submit">Sit down</button>
                 </form>
+                <p className="fine">Your browser will ask for the microphone. That's how {HOST_NAME} hears you.</p>
             </main>
         );
     }
 
     if (state.stage === "joining") {
         return (
-            <main className="phone name">
-                <h1>Game Room</h1>
-                <p>{state.connected === true ? "Joining…" : "Connecting…"}</p>
+            <main className="note-screen">
+                <h1>{state.connected === true ? "Pulling up a chair…" : "Finding the room…"}</h1>
             </main>
         );
     }
@@ -479,44 +577,50 @@ export function App(): ReactElement {
         setMenu("closed");
     };
 
-    const view: PhoneView | null = state.view;
-    const canTalk: boolean = view?.listening === "holdToTalk" || view?.listening === "openFloor";
-    if (canTalk === false && state.holding === true) {
-        stopTalking();
-    }
+    const pad: PadView | null = view?.pad ?? null;
+    const controls: Control[] = view?.controls ?? [];
+    const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
+    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting);
+    const privateControls: (ReactElement | null)[] = controls.map((control, index) => renderControl(control, index, send));
+    const hasPrivate: boolean = privateControls.some((control) => control !== null);
+    const problem: string = state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : "";
+    const status: string = problem !== "" ? problem : view?.status ?? "";
+    const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     return (
-        <main className={`phone joined listening-${view?.listening ?? "muted"}`}>
-            <header className="top-bar">
-                <strong>{view?.playerName ?? ""}</strong>
-                <span>Room {state.roomCode}</span>
-                <button className="menu-button" aria-label="Menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>⋯</button>
+        <main className={`pad-screen ${state.holding === true ? "talking" : ""}`} style={seatStyle}>
+            <header className="corners">
+                {pad?.backLabel !== null && pad?.backLabel !== undefined
+                    ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
+                    : <span className="corner-gap" />}
+                <span className="who">{view?.playerName ?? ""}</span>
+                <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
-            <section className="controls">{view?.controls.map((control, index) => renderControl(control, index, send))}</section>
-            <button
-                ref={talkRef}
-                className={`talk ${state.holding === true ? "holding" : ""} ${sent === true ? "sent" : ""}`}
-                disabled={canTalk === false}
-                onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); onTalkDown(); }}
-                onPointerUp={onTalkUp}
-                onPointerCancel={() => { swallowReleaseRef.current = false; stopTalking(); }}
-                onContextMenu={(event) => { event.preventDefault(); }}
-            >
-                {state.holding === true ? "Listening" : sent === true ? "✓" : "Hold to talk"}
-            </button>
-            <p className="status" role="status">{state.connected === false ? "Reconnecting…" : state.micError !== "" ? state.micError : locked === true ? "Tap to stop, or just stop talking." : state.holding === true ? "Let go when you're done." : view?.status ?? ""}</p>
+            {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
+            <div className="surface" ref={surfaceRef}>
+                <div className="level-fill" aria-hidden="true" />
+                <div className="thumb" aria-hidden="true" />
+                <div className="line" aria-live="polite">
+                    {state.holding === true
+                        ? <strong>Listening</strong>
+                        : sent === true
+                            ? <strong>Got it</strong>
+                            : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}
+                </div>
+                {status !== "" && state.holding === false ? <p className="status" role="status">{status}</p> : null}
+            </div>
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
-                    <div className="sheet" role="dialog" aria-modal="true" aria-label="Menu">
+                    <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
                         {menu === "open" ? (
                             <>
-                                <button onClick={() => { setMenu("rename"); }}>Change name</button>
-                                <button onClick={() => { setMenu("leave"); }}>Leave room</button>
+                                <button onClick={() => { setMenu("rename"); }}>Change your name</button>
+                                <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); }}>Close</button>
                             </>
                         ) : null}
                         {menu === "rename" ? (
                             <form onSubmit={rename}>
-                                <label htmlFor="new-name">New name</label>
+                                <label htmlFor="new-name">What should we call you?</label>
                                 <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoFocus required />
                                 <button type="submit" className="primary">Save</button>
                                 <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Cancel</button>
@@ -524,7 +628,7 @@ export function App(): ReactElement {
                         ) : null}
                         {menu === "leave" ? (
                             <>
-                                <p>Leave room {state.roomCode}? You'll give up your seat.</p>
+                                <p>Leave the table? You'll give up your seat in room {state.roomCode}.</p>
                                 <button className="danger" onClick={leave}>Leave</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); }}>Stay</button>
                             </>
