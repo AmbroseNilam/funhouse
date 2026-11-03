@@ -212,6 +212,9 @@ describe("leading questions: the vote", () => {
         assert.deepEqual(found.timers, { vote: 45 });
         assert.equal(found.state.finderId, "paper1");
         assert.equal(stringsIn(game.cartridge.publicScene(found.state)).join(" ").includes("Colander"), true, "the word is public once found");
+        const askingClock: number = game.cartridge.publicScene(state).blocks.findIndex((block: SceneBlock) => block.type === "timer");
+        const voteClock: number = game.cartridge.publicScene(found.state).blocks.findIndex((block: SceneBlock) => block.type === "timer");
+        assert.ok(askingClock !== -1 && voteClock !== -1 && askingClock !== voteClock, "the vote clock can't inherit the asking clock's countdown");
         const ballot: Control | undefined = game.cartridge.privateControls(found.state, "paper1")[0];
         assert.ok(ballot !== undefined && ballot.type === "choice");
         assert.deepEqual(ballot.options.map((option) => option.label), ["Spoon", "Candle", "Saucer"], "nobody votes for themselves");

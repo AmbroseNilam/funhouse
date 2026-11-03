@@ -532,10 +532,12 @@ export function createPlantGame(givenBox: Box, givenDecisions: PlantDecisions, r
                 return {
                     mood: "tense",
                     transition: "fade",
+                    // The vote clock sits at a different position from the asking clock, because the TV keeps a
+                    // countdown's progress for a timer block at the same position across scenes.
                     blocks: [
                         { type: "title", text: state.word, kicker: `${nameOf(state, state.finderId)} found it` },
-                        { type: "text", text: "Who knew it all along? Vote on your phone.", emphasis: "large" },
                         { type: "timer", seconds: decisions.voteSeconds, label: "to vote", running: true },
+                        { type: "text", text: "Who knew it all along? Vote on your phone.", emphasis: "large" },
                     ],
                 };
             }
