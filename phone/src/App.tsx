@@ -1192,7 +1192,7 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true && pad?.startCard.length === 0 ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
