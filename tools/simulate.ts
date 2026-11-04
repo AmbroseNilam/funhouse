@@ -209,8 +209,8 @@ export class FakePhone {
         this.nav({ kind: "select" });
         await waitFor(() => screen.shell?.screen === "pick" || screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the game to start or ask what to pick");
         if (screen.shell?.screen === "pick") {
-            // A scenario brings its own topic when it can say one; otherwise it takes the surprise.
-            const own: number = screen.shell.menu.indexOf("Say your own topic");
+            // Quizmaster's scenarios bring their own topic; anything else takes the surprise.
+            const own: number = name === "Quizmaster" ? screen.shell.menu.indexOf("Say your own topic") : 0;
             this.nav({ kind: "choose", index: Math.max(0, own) });
         }
         await waitFor(() => screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the how-to card or the game");

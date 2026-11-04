@@ -13,6 +13,23 @@ export const TWENTY_DOORS_MANIFEST: CartridgeManifest = {
     variants: [],
     phases: [
         {
+            id: "topic",
+            hostBrief: "Ask what the secret should be about, in one short line. When anyone names a subject, rule it straight away; only leave it unruled if it isn't fit for a family table, and then make a dry joke of it and say you'll choose instead.",
+            listening: { "*": "holdToTalk" },
+            hostMayInterject: true,
+            silenceSeconds: 0,
+            hostRulings: {
+                topic: "they named a topic. Write it as [[topic: the topic in a few words]] and nothing else; you'll be told what to say next.",
+            },
+        },
+        {
+            id: "choosing",
+            hostBrief: "You are choosing the secret. Say one short line at most, then wait.",
+            listening: { "*": "muted" },
+            hostMayInterject: false,
+            silenceSeconds: 0,
+        },
+        {
             id: "asking",
             hostBrief: "Answer each yes-or-no question with a ruling, then a few words that add no clue beyond the answer. A question that can't be answered yes or no, like what colour it is, gets no ruling and uses no door: ask them to put it as yes or no. Chat that isn't a question or a guess gets no ruling either. Never stay quiet here: if you can't make out what was said, say so in a few words. If two people asked, answer with one ruling before each answer. Don't count doors out loud unless few are left.",
             listening: { "*": "holdToTalk" },
