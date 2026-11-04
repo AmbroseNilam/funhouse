@@ -19,7 +19,7 @@ import { CLUE_GALLERY_BLUEPRINT } from "../games/clue-gallery.ts";
 import type { KitGame } from "../kit/kit.ts";
 import { seededRandom } from "../kit/primitives.ts";
 import { findLeaks, linesIn, PAPER_PLAYERS, stringsIn } from "../rehearse.ts";
-import { CARD_PICTURE_PREFIX, CLUE_PREFIX, createGalleryGame, galleryProblems, PICK_PREFIX, picturesAsked, PLAY_PREFIX, ROOM_PICTURE_LIMIT, VOTE_PREFIX, type GalleryState, type RoundResult } from "./gallery.ts";
+import { ballotLetter, CARD_PICTURE_PREFIX, CLUE_PREFIX, createGalleryGame, galleryProblems, PICK_PREFIX, picturesAsked, PLAY_PREFIX, ROOM_PICTURE_LIMIT, VOTE_PREFIX, type GalleryState, type RoundResult } from "./gallery.ts";
 
 /** Four at the table. */
 const FOUR: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
@@ -118,7 +118,7 @@ function voteAll(run: Run, choices: ("teller" | "other")[]): void {
     const voters: CartridgePlayer[] = FOUR.filter((candidate: CartridgePlayer) => candidate.playerId !== teller);
     voters.forEach((voter: CartridgePlayer, index: number) => {
         const options: string[] = run.game.cartridge.legalActions(run.state, voter.playerId).map((action) => action.actionId);
-        const wanted: string | undefined = choices[index] === "teller" ? options.find((id: string) => id === `${VOTE_PREFIX}${tellerCard}`) : options.find((id: string) => id !== `${VOTE_PREFIX}${tellerCard}`);
+        const wanted: string | undefined = choices[index] === "teller" ? options.find((id: string) => id === `${VOTE_PREFIX}${ballotLetter(run.state.spread, tellerCard)}`) : options.find((id: string) => id !== `${VOTE_PREFIX}${ballotLetter(run.state.spread, tellerCard)}`);
         press(run, voter.playerId, wanted ?? options[0] ?? "");
     });
 }
@@ -318,8 +318,9 @@ describe("the gallery kit", () => {
         assert.deepEqual(run.game.cartridge.legalActions(run.state, teller), []);
         for (const player of FOUR.filter((candidate: CartridgePlayer) => candidate.playerId !== teller)) {
             const options: string[] = run.game.cartridge.legalActions(run.state, player.playerId).map((action) => action.actionId);
-            assert.equal(options.includes(`${VOTE_PREFIX}${run.state.plays[player.playerId]}`), false);
+            assert.equal(options.includes(`${VOTE_PREFIX}${ballotLetter(run.state.spread, run.state.plays[player.playerId] ?? "")}`), false);
             assert.equal(options.length, FOUR.length - 1);
+            assert.equal(options.some((id: string) => /c\d/.test(id)) === true, false, "a ballot button names a card id");
             const buttons: Control | undefined = run.game.cartridge.privateControls(run.state, player.playerId).find((control: Control) => control.type === "buttons");
             const labels: string[] = buttons?.type === "buttons" ? buttons.options.map((option: ControlOption) => option.label) : [];
             assert.equal(labels.every((label: string) => /^Card [A-D]$/.test(label)), true, labels.join());

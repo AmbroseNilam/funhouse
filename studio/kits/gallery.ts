@@ -137,6 +137,17 @@ export const PLAY_PREFIX: string = "play:";
 /** The prefix on the id of a button that votes for a card. */
 export const VOTE_PREFIX: string = "vote:";
 
+/**
+ * The letter a card wears on the ballot. Its place in the shuffled spread is all a ballot button
+ * says, so reading the button tells nobody whose card it is.
+ * @param spread the cards in the order they are shown.
+ * @param cardId a card.
+ * @returns its letter.
+ */
+export function ballotLetter(spread: readonly string[], cardId: string): string {
+    return String.fromCharCode(65 + Math.max(0, spread.indexOf(cardId)));
+}
+
 /** The id of the control a storyteller types a clue into. */
 export const CLUE_PREFIX: string = "clue:";
 
@@ -604,7 +615,7 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
             }
             if (state.phase === "vote" && votersOf(state).includes(playerId) === true && state.votes[playerId] === undefined) {
                 const others: string[] = state.spread.filter((cardId: string) => cardId !== state.plays[playerId]);
-                return others.map((cardId: string) => ({ actionId: `${VOTE_PREFIX}${cardId}`, label: `Card ${letter(state, cardId)}` }));
+                return others.map((cardId: string) => ({ actionId: `${VOTE_PREFIX}${ballotLetter(state.spread, cardId)}`, label: `Card ${letter(state, cardId)}` }));
             }
             return [];
         },
@@ -621,7 +632,11 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
                 const next: GalleryState = putIn(state, playerId, actionId.slice(PLAY_PREFIX.length));
                 return awaitingPlay(next).length === 0 ? beginVote(next) : { state: next, facts: [] };
             }
-            const next: GalleryState = { ...state, votes: { ...state.votes, [playerId]: actionId.slice(VOTE_PREFIX.length) } };
+            const voted: string | undefined = state.spread[actionId.slice(VOTE_PREFIX.length).charCodeAt(0) - 65];
+            if (voted === undefined) {
+                return { state, facts: [] };
+            }
+            const next: GalleryState = { ...state, votes: { ...state.votes, [playerId]: voted } };
             return votersOf(next).every((id: string) => next.votes[id] !== undefined) === true ? score(next, false) : { state: next, facts: [] };
         },
 

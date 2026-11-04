@@ -13,7 +13,7 @@ import { createOddWordGame, ODD_VOTE_PREFIX, type OddWordState } from "./kits/od
 import { createStrangerGame, STRANGER_ACTIONS, type StrangerState } from "./kits/stranger.ts";
 import { GUESS_PREFIX, STOP_ACTION, type Cell, type ClueBoardState, type TeamIndex } from "./kits/clueboard.ts";
 import { LINK_PREFIX, type ChainState } from "./kits/chain.ts";
-import { CLUE_PREFIX, type GalleryState } from "./kits/gallery.ts";
+import { ballotLetter, CLUE_PREFIX, type GalleryState, VOTE_PREFIX as BALLOT_PREFIX } from "./kits/gallery.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
 import type { KitGame } from "./kit/kit.ts";
@@ -371,8 +371,8 @@ export function galleryPersonas(): Persona<GalleryState>[] {
                 }
                 const tellerCard: string = state.plays[teller] ?? "";
                 const options: string[] = glimpse.legal(voter.playerId).map((action: LegalAction) => action.actionId);
-                const toTeller: string | undefined = options.find((id: string) => id.endsWith(tellerCard));
-                const away: string | undefined = options.find((id: string) => id.endsWith(tellerCard) === false);
+                const toTeller: string | undefined = options.find((id: string) => id === `${BALLOT_PREFIX}${ballotLetter(state.spread, tellerCard)}`);
+                const away: string | undefined = options.find((id: string) => id !== `${BALLOT_PREFIX}${ballotLetter(state.spread, tellerCard)}`);
                 const finds: boolean = way.finds === "all" || (way.finds === "split" && voters.indexOf(voter) % 2 === 0);
                 return { kind: "press", playerId: voter.playerId, actionId: (finds === true ? toTeller : away) ?? options[0] ?? "" };
             }
