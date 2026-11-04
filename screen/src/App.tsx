@@ -666,6 +666,7 @@ export function App(): ReactElement {
             {tvSeat.view !== null && shell?.screen === "play" && shell.gameOver === false && shell.steppedOut === false ? <TvHand gameId={shell.gameId} controls={tvSeat.view.controls} send={tvSeat.send} /> : null}
             {ON_CONSOLE === false && state.started === true ? (
                 <div className="tv-strip">
+                    {tvSeat.view === null && (people.length > 0 || HAS_MOUSE === true) ? <span className="tv-agree">For adults 18+. By sitting down you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a>.</span> : null}
                     {tvSeat.view !== null
                         ? <><span>You're {tvSeat.name} at this screen{tvSeat.view.pad.canDrive === false && tvSeat.view.pad.driverName !== "" ? `. ${tvSeat.view.pad.driverName} has the controller.` : "."}</span><button className="tv-button" onClick={tvSeat.leave}>Leave</button></>
                         : people.length > 0 ? <button className="tv-button" onClick={tvSeat.sit}>{tvSeat.full === true ? "The table's full" : "No phone? Take a seat"}</button> : null}
