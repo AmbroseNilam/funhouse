@@ -24,7 +24,7 @@ const QUICK: GuestPersona = { ...(GUEST_PERSONAS[0] as GuestPersona), minimumDel
 function viewOf(controls: Control[]): PhoneView {
     return {
         playerName: QUICK.name, listening: "muted", status: "", controls, hearing: "", tapToTalk: false, talkWaiting: false, turn: null, guests: { seated: [], canAdd: false, canRemove: false },
-        pad: { colour: "#000000", axis: null, canPrevious: false, canNext: false, driving: false, driverName: "", controllerFree: false, watching: false, canDrive: false, backLabel: null, canSelect: false },
+        pad: { colour: "#000000", axis: null, canPrevious: false, canNext: false, driving: false, driverName: "", controllerFree: false, watching: false, canDrive: false, backLabel: null, canSelect: false, pausedBy: "", confirmEnd: false, startCard: [] },
     };
 }
 
@@ -215,7 +215,7 @@ test("guest names are labelled, pass the nickname check, and aren't the host", (
 
 test("only the games cleared for guests say they take them", () => {
     const offered: Record<string, string> = Object.fromEntries(CATALOG.games.flatMap((game) => (game.meta.guests === undefined ? [] : [[game.meta.id, game.meta.guests]])));
-    assert.deepEqual(offered, { offByAMile: "model", strayWord: "model", underTheCup: "model", whoFits: "random" });
+    assert.deepEqual(offered, { offByAMile: "model", samePage: "model", strayWord: "model", underTheCup: "model", whoFits: "random" });
 });
 
 /**

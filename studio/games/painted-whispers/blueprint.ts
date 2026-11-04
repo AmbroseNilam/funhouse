@@ -16,9 +16,10 @@ export const PAINTED_WHISPERS_BLUEPRINT: ChainBlueprint = {
         name: "Painted Whispers",
         pitch: `You write a line. ${HOST_NAME} paints it. The next person only sees the painting.`,
         howToPlay: [
-            "The first person writes a line on their phone, and the host paints it on the screen.",
-            "The next person sees only the painting and describes it. The host paints that.",
-            "Round the table it goes. At the end the whole chain is shown, and you see where it wandered.",
+            "One person writes a line on their phone. The host paints it.",
+            "The next person sees only the painting and describes it.",
+            "The host paints that too, and on it goes round the table.",
+            "At the end, see the whole chain and how far it wandered.",
         ],
         remarks: ["I paint what I'm told. Not what's meant.", "Say it plainly. I'll do the rest.", "Somewhere in here, a goat becomes a lighthouse."],
         art: "art/hero.webp",

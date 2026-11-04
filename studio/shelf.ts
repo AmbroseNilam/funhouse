@@ -61,6 +61,7 @@ export function installBlueprint(given: Blueprint, kits: Kits = KITS): Installed
         art: blueprint.box.art,
         pauseActions: blueprintPauseActions(blueprint, kits),
         remarks: [...blueprint.box.remarks],
+        startCard: [...blueprint.box.howToPlay],
         create: (stage: GameStage): RunningGame => {
             log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);
             return new GameSession(createKitGame(blueprint, Math.random, kits).cartridge, stage);
@@ -92,4 +93,16 @@ export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = fa
     const replaced: InstalledGame[] = handWritten.map((game: InstalledGame) => installed.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
     const added: InstalledGame[] = installed.filter((game: InstalledGame) => handWritten.some((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) === false);
     return [...replaced, ...added];
+}
+
+/**
+ * The shelf every room gets: the hand-written games, which keep what they ask for before they begin,
+ * then the blueprint games that are visible.
+ * @param handWritten the games written in TypeScript.
+ * @param showHeld true to include the games on hold, each marked as testing in its pitch.
+ * @param catalog the games and kits to build from; the discovered ones unless a test gives its own.
+ * @returns the shelf.
+ */
+export function showcaseShelf(handWritten: InstalledGame[], showHeld: boolean = false, catalog: Catalog = CATALOG): InstalledGame[] {
+    return studioShelf(handWritten, showHeld, catalog).map((game: InstalledGame) => handWritten.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
 }

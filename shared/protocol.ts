@@ -62,7 +62,10 @@ export type RoomToScreenMessage =
     | { type: "heartbeat" };
 
 /** How long a stage waits with nothing from the server before it assumes the connection died. */
-export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 70000;
+export const SERVER_SILENCE_LIMIT_MILLISECONDS: number = 35000;
+
+/** How long a phone back in the foreground waits for the room to answer before it assumes the connection died. */
+export const FOREGROUND_ANSWER_LIMIT_MILLISECONDS: number = 3000;
 
 /** Why a tap-to-talk recording ended. */
 export type TapEnd = "stop" | "silence" | "limit" | "hidden";
@@ -102,8 +105,8 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
         return typeof message.name === "string";
     }
     if (message.type === "nav") {
-        const action: { kind?: unknown; delta?: unknown } | null = typeof message.action === "object" ? message.action : null;
-        return action?.kind === "select" || action?.kind === "back" || (action?.kind === "step" && typeof action.delta === "number" && Number.isFinite(action.delta) === true);
+        const action: { kind?: unknown; delta?: unknown; index?: unknown } | null = typeof message.action === "object" ? message.action : null;
+        return action?.kind === "select" || action?.kind === "back" || (action?.kind === "choose" && typeof action.index === "number") || (action?.kind === "step" && typeof action.delta === "number" && Number.isFinite(action.delta) === true);
     }
     if (message.type === "lean") {
         return typeof message.x === "number" && typeof message.y === "number";

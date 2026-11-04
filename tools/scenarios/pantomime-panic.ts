@@ -277,7 +277,7 @@ seats.find((seat: Seat) => seat !== third)?.phone.say("Is it a bicycle?");
 await pause(IGNORE_MILLISECONDS);
 noLeak();
 const beforeEnd: string[] = screen.hostLines.slice(gameStart);
-await seats[3]?.phone.fromPauseMenu(screen, "We give up");
+await seats[0]?.phone.fromPauseMenu(screen, "We give up");
 await waitFor(() => screen.shell?.gameOver === true, "the end of the game");
 hidden = [];
 const final = scores();

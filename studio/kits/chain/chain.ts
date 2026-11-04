@@ -12,11 +12,11 @@
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../../shared/cartridge.ts";
 import type { Control } from "../../../shared/controls.ts";
-import type { Scene, SceneBlock } from "../../../shared/scene.ts";
+import type { GalleryItem, Scene, SceneBlock } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { Turn } from "../../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../../shared/visibility.ts";
-import { boxProblems, isShortText, isWholeIn, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
+import { HOST_LINE_RULES, SAY_IT_ALOUD, boxProblems, isShortText, isWholeIn, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
 import { cleanLine, isDrawingAddress, paintPrompt } from "../../kit/painting.ts";
 import { because, frozenCopy, pick, shuffle } from "../../kit/primitives.ts";
 
@@ -153,29 +153,30 @@ export function chainManifest(box: Box): CartridgeManifest {
         hostBrief: [
             `You're running ${box.name}. One chain of lines and paintings goes round the table.`,
             "A player writes a line, you paint it, the next player sees only the painting and describes it, and so on.",
-            "You are never shown the lines until the reveal. Don't guess what anyone wrote and don't describe a painting out loud.",
+            "You are never shown the lines until the reveal, and you never see the paintings. Don't guess what anyone wrote and don't describe a painting.",
             "Say very little while they write. At the reveal you'll be told every link of the chain.",
+            HOST_LINE_RULES,
         ].join(" "),
         keywords: box.keywords,
         variants: [],
         phases: [
             {
                 id: "write",
-                hostBrief: "When you're told the game has begun, explain in two short sentences: the first person writes something to be painted, and everyone after only sees the painting. Then stop and stay quiet.",
+                hostBrief: "When you're told the game has begun, in two short sentences: name the first writer you were told and say they write something for you to paint, and that everyone after only sees the painting. When you're told who's next, name them in a few words. Otherwise stay quiet.",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
             },
             {
                 id: "paint",
-                hostBrief: "A painting is being made. Stay quiet unless you're told something went wrong with a painting; then say so in one short line, with no blame.",
+                hostBrief: "A painting is being made. When told, say in a few words that you're painting, a little differently each time. If you're told something went wrong with a painting, say so in one short line, with no blame.",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
             },
             {
                 id: "reveal",
-                hostBrief: "The chain is being shown one beat at a time on the screen. Stay quiet. You'll be told when it's over.",
+                hostBrief: "The chain is being shown one beat at a time on the screen. When you're told whose line is up, introduce it in under ten words, by name, with no verdict on it. Otherwise stay quiet. You'll be told when it's over.",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
@@ -183,8 +184,8 @@ export function chainManifest(box: Box): CartridgeManifest {
             {
                 id: "end",
                 hostBrief: [
-                    "You'll be told the whole chain and how far it drifted. Comment in three or four short sentences: where it started, the turn that changed it most, where it ended.",
-                    "Name the writer behind that turn, kindly. Quote a line only if it's short. Then ask if they want another chain.",
+                    "You'll be told the whole chain, and whether its first and last lines share words. In about 25 words: where it started, where it ended, and one writer named kindly. Then ask if they want another chain.",
+                    "Only what you were told is known: you never saw the paintings, so claim nothing about them or about why a line changed. Always speak here, never reply (quiet).",
                 ].join(" "),
                 listening: { "*": "holdToTalk" },
                 hostMayInterject: true,
@@ -253,8 +254,11 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         if (link === undefined) {
             return [];
         }
-        const shown: string = state.beat % 2 === 0 ? `${link.writerName} wrote ${quoted(link.text)}.` : link.src === null ? "That line was never painted." : "That line was painted.";
-        return because(publicFact("beat", shown, true), CHAIN_DECISIONS.beat);
+        if (state.beat % 2 === 1) {
+            return because(publicFact("beat", link.src === null ? "That line was never painted." : "That line was painted.", true), CHAIN_DECISIONS.beat);
+        }
+        const who: string = link.stock === true ? `A line from the box stood in for ${link.writerName}: ${quoted(link.text)}.` : `${link.writerName} wrote ${quoted(link.text)}.`;
+        return because(publicFact("beat", `${who} Introduce it in under ten words. ${SAY_IT_ALOUD}`), CHAIN_DECISIONS.beat);
     };
 
     /**
@@ -272,9 +276,9 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         }
         const fresh: ChainState = { ...state, phase: "write" };
         const text: string = state.step === 0
-            ? `${writer.name} writes the first line. Say, in a few words, that ${writer.name} is first, then stay quiet.`
-            : `${writer.name} is describing the last painting. Stay quiet.`;
-        return { state: fresh, facts: because(publicFact("writing", text, state.step !== 0), CHAIN_DECISIONS.write), nextPhaseId: "write", timers: { [`write:${state.step}`]: decisions.writeSeconds } };
+            ? `${writer.name} writes the first line. Name ${writer.name} as first, then stay quiet. ${SAY_IT_ALOUD}`
+            : `${writer.name} is up, describing the last painting. Say so in a few words, by name, saying nothing about the painting. ${SAY_IT_ALOUD}`;
+        return { state: fresh, facts: because(publicFact("writing", text), CHAIN_DECISIONS.write), nextPhaseId: "write", timers: { [`write:${state.step}`]: decisions.writeSeconds } };
     };
 
     /**
@@ -293,7 +297,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         const next: ChainState = { ...state, phase: "paint", links: [...state.links, link] };
         return {
             state: next,
-            facts: because(publicFact("painting", "A painting is being made.", true), CHAIN_DECISIONS.paint),
+            facts: because(publicFact("painting", `You're painting it. Say so in a few words, with nothing about what the line says. ${SAY_IT_ALOUD}`), CHAIN_DECISIONS.paint),
             nextPhaseId: "paint",
             timers: { [`paint:${state.step}`]: decisions.paintSeconds },
             draws: [{ id: `${PICTURE_PREFIX}${state.step}`, prompt: paintPrompt(text) }],
@@ -316,9 +320,9 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         const first: ChainLink | undefined = state.links[0];
         const last: ChainLink | undefined = state.links[state.links.length - 1];
         const overlap: number = first === undefined || last === undefined ? 0 : driftOverlap(first.text, last.text);
-        const drift: string = overlap === 0 ? "It drifted all the way: nothing of the first line survived." : overlap >= 0.5 ? "It held together remarkably well." : "It drifted, but something of the first line survived.";
-        const chain: string = state.links.map((link: ChainLink, index: number) => `${index + 1}. ${link.writerName} ${index === 0 ? "wrote" : "described"} ${quoted(link.text)}${link.src === null ? " (never painted)" : ""}`).join(" ");
-        const text: string = `Here is the whole chain. ${chain} ${drift}`;
+        const drift: string = overlap === 0 ? "The first and last lines share no words." : overlap >= 0.5 ? "The first and last lines share most of their words." : "The first and last lines share a few words.";
+        const chain: string = state.links.map((link: ChainLink, index: number) => `${index + 1}. ${link.writerName} ${link.stock === true ? "was covered by the stock line" : index === 0 ? "wrote" : "described"} ${quoted(link.text)}${link.src === null ? " (never painted)" : ""}`).join(" ");
+        const text: string = `Here is the whole chain. ${chain} ${drift} ${SAY_IT_ALOUD}`;
         return { state: { ...state, phase: "end" }, facts: because(publicFact("game-over", text), CHAIN_DECISIONS.beat), nextPhaseId: "end" };
     };
 
@@ -432,7 +436,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
             if (state.phase === "write" && writer !== undefined) {
                 const timer: SceneBlock = { type: "timer", seconds: decisions.writeSeconds, label: `for ${writer.name}`, running: true };
                 if (state.step === 0) {
-                    return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: box.name, kicker: "A chain of paintings" }, { type: "text", text: `${writer.name} writes something for the host to paint.`, emphasis: "large" }, progress, timer] };
+                    return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is writing`, kicker: box.name }, { type: "text", text: "The first line, for the host to paint. Nobody else will read it.", emphasis: "large" }, progress, timer] };
                 }
                 const previous: ChainLink | undefined = state.links[state.step - 1];
                 const seen: SceneBlock[] = previous === undefined
@@ -440,7 +444,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     : previous.src !== null
                         ? [{ type: "image", src: previous.src, caption: `${writer.name} describes this` }]
                         : [{ type: "text", text: `The painting didn't come. This is what it was meant to show: ${quoted(previous.text)}`, emphasis: "large" }, { type: "text", text: `${writer.name} puts it in their own words.` }];
-                return { mood: "neutral", transition: "fade", blocks: [...seen, progress, timer] };
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is describing this`, kicker: box.name }, ...seen, progress, timer] };
             }
             if (state.phase === "paint") {
                 const wrote: ChainLink | undefined = state.links[state.step];
@@ -449,9 +453,8 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     transition: "fade",
                     blocks: [
                         { type: "title", text: "Painting", ...(wrote === undefined ? {} : { kicker: `${wrote.writerName}'s line is in` }) },
-                        { type: "text", text: "The host is mixing the colours. This takes a moment.", emphasis: "whisper" },
+                        { type: "text", text: "The host is mixing the colours. This takes a moment.", emphasis: "large" },
                         progress,
-                        { type: "timer", seconds: decisions.paintSeconds, label: "before the host stops waiting", running: true },
                     ],
                 };
             }
@@ -474,12 +477,12 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                 }];
             }
             if (state.phase === "write" && writer !== undefined) {
-                return [{ type: "waiting", text: `${writer.name} is writing. Watch the screen.` }];
+                return [{ type: "waiting", text: `${writer.name} is ${state.step === 0 ? "writing the first line" : "describing the painting"}. Your turn comes soon.` }];
             }
             if (state.phase === "paint") {
                 return [{ type: "waiting", text: "The host is painting. Watch the screen." }];
             }
-            return [{ type: "waiting", text: state.phase === "end" ? "That was the chain." : "Watch the screen." }];
+            return [{ type: "waiting", text: state.phase === "end" ? "That's the whole chain. It's on the screen." : "Watch the screen." }];
         },
 
         hostFacts(state: ChainState, scope: Scope): ScopedFact[] {
@@ -513,7 +516,8 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         }
         if (state.beat % 2 === 0) {
             const verb: string = index === 0 ? "wrote" : "described";
-            return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: `${link.writerName} ${verb}`, kicker }, { type: "text", text: quoted(link.text), emphasis: "large" }] };
+            const heading: string = link.stock === true ? `A line from the box for ${link.writerName}` : `${link.writerName} ${verb}`;
+            return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: heading, kicker }, { type: "text", text: quoted(link.text), emphasis: "large" }] };
         }
         if (link.src === null) {
             return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: "No painting here", kicker }, { type: "text", text: "The host ran out of paint for this one.", emphasis: "whisper" }] };
@@ -532,11 +536,10 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         if (first === undefined || last === undefined) {
             return { mood: "defeat", transition: "fade", blocks: [{ type: "title", text: box.name }, { type: "text", text: "Nobody was left to write.", emphasis: "large" }] };
         }
+        const items: GalleryItem[] = state.links.map((link: ChainLink): GalleryItem => ({ src: link.src, heading: link.stock === true ? `For ${link.writerName}, from the box` : link.writerName, text: quoted(link.text) }));
         const blocks: SceneBlock[] = [
-            { type: "title", text: "It started as", kicker: first.writerName },
-            { type: "text", text: quoted(first.text), emphasis: "large" },
-            { type: "title", text: "It ended as", kicker: last.writerName },
-            { type: "text", text: quoted(last.text), emphasis: "large" },
+            { type: "title", text: "The whole chain", kicker: `From ${first.writerName} to ${last.writerName}` },
+            { type: "gallery", items },
         ];
         return { mood: "victory", transition: "fade", blocks };
     }

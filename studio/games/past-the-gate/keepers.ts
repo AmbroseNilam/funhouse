@@ -82,7 +82,7 @@ export const KEEPERS: GateScenario[] = [
         keeper: "Brannock",
         title: "the collector of the stone toll bridge",
         place: "the toll bridge",
-        manner: "Pompous and exact, counts under his breath, and corrects other people's sums.",
+        manner: "Pompous and exact, and corrects other people's arithmetic without ever saying the answer.",
         rules: [
             {
                 tests: [{ kind: "mentions", words: NUMBER_WORDS }, { kind: "avoids", words: ["free", "freebie", "cheap", "cheaper", "discount", "bargain", "haggle", "owe", "owing"] }],

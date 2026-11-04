@@ -23,6 +23,12 @@ import type { SceneBlock } from "../../shared/scene.ts";
 import { HOUSE_RULE } from "../../studio/kit/painting.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
+/** Longest to wait for the host's last line before leaving. */
+const LAST_LINE_WAIT_MILLISECONDS: number = 15000;
+
+/** How long the end screen stays up after that, so a person can watch it. */
+const END_SCREEN_MILLISECONDS: number = Number(process.env.END_SCREEN_MILLISECONDS ?? 2000);
+
 /** Where the stand-in for the Meta API reports what it was asked. */
 const STUB_URL: string = process.env.STUB_URL ?? "http://127.0.0.1:8798";
 
@@ -177,6 +183,7 @@ for (let step = 0; step < LINES.length; step += 1) {
 console.warn("All four links written.");
 
 await waitLong(() => screen.shell?.gameOver === true, "the reveal to finish");
+const linesAtEnd: number = screen.hostLines.length;
 clearInterval(watcher);
 checkNoLeak(LINES.length, false);
 const joined: string = sceneLog.join("\n");
@@ -211,7 +218,12 @@ try {
     }
     console.warn("No stub to ask about the prompts; that check was skipped.");
 }
-await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 2000); });
+// Leaving straight away would cut the host's last line off, as it would for a real table.
+const lastLineUntil: number = Date.now() + LAST_LINE_WAIT_MILLISECONDS;
+while (screen.hostLines.length <= linesAtEnd && Date.now() < lastLineUntil) {
+    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 200); });
+}
+await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, END_SCREEN_MILLISECONDS); });
 await seats[0]?.phone.chooseRow(screen, "Back to the shelf");
 await waitFor(() => screen.shell?.screen === "home", "the shelf");
 console.warn("PASS");

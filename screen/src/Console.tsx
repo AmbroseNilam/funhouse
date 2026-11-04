@@ -4,6 +4,7 @@
 
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
+import { Poster } from "./Poster.tsx";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 
 /** Slightly different box shapes, so the shelf reads as objects and not a grid. */
@@ -118,7 +119,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                 <div className="shelf-rail" style={{ transform: `translateX(calc(${-shelfShift(boxCount, shell.focus)} * var(--u)))` }}>
                 {shell.games.map((game: ShelfGame, index: number) => (
                     <div key={game.id} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${boxShape(index).height}%`, rotate: `${boxShape(index).tilt}deg`, width: `calc(${boxShape(index).width * BOX_WIDTH_UNITS} * var(--u))`, viewTransitionName: `box-${game.id}` }}>
-                        <img src={game.art} alt="" />
+                        <Poster id={game.id} art={game.art} />
                         <span className="box-name">{game.name}</span>
                         {index === shell.focus && empty === false ? <DriverFlag seat={driver} /> : null}
                     </div>
@@ -149,7 +150,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
     return (
         <section className="screen game-screen">
             <img className="room-art" src="art/hero.webp" alt="" />
-            <div className="cover" style={{ viewTransitionName: `box-${game.id}` }}><img src={game.art} alt="" /></div>
+            <div className="cover" style={{ viewTransitionName: `box-${game.id}` }}><Poster id={game.id} art={game.art} /></div>
             <div className="about">
                 <h1>{game.name}</h1>
                 <p className="pitch">{game.pitch}</p>
@@ -197,9 +198,10 @@ export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; 
         <div className="pause-backing">
             {shell.screen === "pause" ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
             <section className="pause-card">
+                {shell.screen === "confirmEnd" ? <h2>End the game for everyone?</h2> : null}
                 {shell.screen === "howTo"
                     ? <><h2>How to play {game?.name ?? ""}</h2><ol className="steps">{game?.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol></>
-                    : <h2>Paused</h2>}
+                    : shell.screen === "pause" ? <h2>{shell.pausedBy === "" ? "Paused" : `Paused by ${shell.pausedBy}`}</h2> : null}
                 <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
             </section>
         </div>
@@ -244,6 +246,30 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
     }
     const game: ShelfGame | undefined = shell.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
+    if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
+        return (
+            <section className="screen pick-screen">
+                <Poster className="room-art" id={game.id} art={game.art} />
+                <header className="shelf-heading">
+                    <h1>{game.startPick.prompt}</h1>
+                    <p>Slide and tap on your phone. {HOST_NAME} takes what's highlighted if nobody chooses.</p>
+                </header>
+                <ul className="pick-boxes">
+                    {shell.menu.map((label: string, index: number) => <li key={label} className={index === shell.focus ? "focused" : ""}>{label}</li>)}
+                </ul>
+            </section>
+        );
+    }
+    if (shell.screen === "startCard" && game !== undefined) {
+        return (
+            <section className="screen pick-screen">
+                <Poster className="room-art" id={game.id} art={game.art} />
+                <header className="shelf-heading"><h1>{game.name}</h1></header>
+                <ol className="steps start-card">{game.startCard?.map((line: string) => <li key={line}>{line}</li>)}</ol>
+                <p className="start-note">{driver === undefined ? "Starting soon." : `Starting soon. ${driver.name} can tap to start now.`}</p>
+            </section>
+        );
+    }
     if (shell.screen === "game" && game !== undefined) {
         return <GamePage shell={shell} driver={driver} game={game} />;
     }

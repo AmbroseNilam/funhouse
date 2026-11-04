@@ -13,7 +13,7 @@ this repository was written in that window.
 1. Open [funhouse.live](https://funhouse.live) on a TV or laptop and turn the sound on. A room opens with a QR code and a four-letter code.
 2. Everyone scans the code with their phone, or types it at funhouse.live, and picks a name. Each phone asks for the microphone.
 3. Slide on your phone to move along the shelf on the TV, and tap to choose a game.
-4. Tap Talk on your phone to speak to the host. It only hears you until you tap Stop or go quiet. Pressing and holding works too.
+4. Tap to talk on your phone. The host only hears you until you tap Stop or go quiet. Holding to talk works too.
 
 | Game | Players | What happens |
 | --- | --- | --- |

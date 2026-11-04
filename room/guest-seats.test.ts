@@ -67,7 +67,7 @@ after(() => {
  * @returns the room, the person's phone and the screen.
  */
 function table(): { room: InstanceType<typeof Room>; phone: FakeSocket; screen: FakeSocket } {
-    const room: InstanceType<typeof Room> = new Room("TEST", "http://localhost", studioShelf(GAMES));
+    const room: InstanceType<typeof Room> = new Room("TEST", "http://localhost", studioShelf(GAMES, true));
     rooms.push(room);
     const screen: FakeSocket = new FakeSocket();
     room.attachScreen(screen as unknown as WebSocket);
@@ -192,6 +192,8 @@ test("seats freeze for a game: nobody adds or removes a guest while one runs", (
     const shelf = screen.latest("shell")?.view as { games: { id: string }[] };
     phone.say({ type: "nav", action: { kind: "step", delta: shelf.games.findIndex((game) => game.id === "whoFits") } });
     phone.say({ type: "nav", action: { kind: "select" } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.equal((screen.latest("shell")?.view as { screen: string }).screen, "startCard");
     phone.say({ type: "nav", action: { kind: "select" } });
     assert.equal((screen.latest("shell")?.view as { screen: string }).screen, "play");
     phone.say({ type: "guest", action: "add" });

@@ -86,6 +86,9 @@ export function sceneStrings(scene: Scene): string[] {
         if (block.type === "text") {
             return [block.text];
         }
+        if (block.type === "gallery") {
+            return block.items.flatMap((item) => [item.heading, item.text]);
+        }
         if (block.type === "tally") {
             return [block.title, ...block.rows.map((row) => row.label)];
         }

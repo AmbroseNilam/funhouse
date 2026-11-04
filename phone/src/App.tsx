@@ -6,11 +6,13 @@
 import type { PhoneTurn } from "../../shared/turn.ts";
 import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import { listeningAllowsTalk, type Control, type PhoneView } from "../../shared/controls.ts";
-import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
+import { FOREGROUND_ANSWER_LIMIT_MILLISECONDS, parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
+import { isOutOfDate, versionLine } from "../../shared/build-info.ts";
+import { readServerBuild } from "./freshness.ts";
 import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
 import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
@@ -242,9 +244,16 @@ function writeLearned(learned: Set<string>): void {
  * @returns the headline and a smaller line under it.
  */
 function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean, talkButton: boolean): { big: string; small: string } {
-    const talkHint: string = talkButton === true ? "Tap Talk to speak" : "Press and hold to talk";
+    // The Talk button says this itself, so the surface only teaches holding.
+    const talkHint: string = talkButton === true ? "" : "Hold to talk";
+    if (pad.startCard.length > 0) {
+        return { big: "", small: pad.canSelect === true ? "Tap to start now" : "Starting soon" };
+    }
+    if (pad.pausedBy !== "") {
+        return { big: `Paused by ${pad.pausedBy}`, small: pad.canDrive === true ? "Slide to see more, tap to choose" : `Only ${pad.driverName} can resume` };
+    }
     if (pad.watching === true) {
-        return { big: "You're watching this game", small: canTalk === true ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
+        return { big: "You're watching this game", small: canTalk === true && talkHint !== "" ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
     }
     if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
@@ -252,11 +261,14 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.canSelect === true && pad.axis !== null && learned.has("tap") === false) {
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
-    if (canTalk === true && micOff === false && learned.has("hold") === false) {
-        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
+    if (canTalk === true && micOff === false && talkButton === false && learned.has("hold") === false) {
+        return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
         return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
+    }
+    if (canTalk === true && micOff === false && learned.has("hold") === false) {
+        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
     }
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
@@ -268,7 +280,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.driving === true) {
         return { big: "You have the controller", small: talkLine };
     }
-    if (pad.driverName === "") {
+    if (pad.driverName === "" || pad.controllerFree === true) {
         return { big: "", small: talkLine };
     }
     return pad.canDrive === true
@@ -399,6 +411,27 @@ function SecretCard(props: { title: string; lines: string[] }): ReactElement {
             {peeking === true
                 ? <>{props.title !== "" ? <strong>{props.title}</strong> : null}{props.lines.map((line: string) => <span key={line}>{line}</span>)}</>
                 : <em>Press and hold to peek</em>}
+        </button>
+    );
+}
+
+/**
+ * A role dealt to this player. A tap turns it over; it starts face up when first dealt and as a
+ * small strip from then on, so it never crowds the game.
+ * @param props the role, anything else secret, and how it starts.
+ * @returns the element.
+ */
+function RoleCard(props: { title: string; lines: string[]; startHidden: boolean }): ReactElement {
+    const [hidden, setHidden] = useState<boolean>(props.startHidden);
+    useEffect(() => { setHidden(props.startHidden); }, [props.startHidden]);
+    if (hidden === true) {
+        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>Your role. Tap to see</button>;
+    }
+    return (
+        <button className="paper role-face" onClick={() => { setHidden(true); }}>
+            <strong>{props.title}</strong>
+            {props.lines.map((line: string) => <span key={line}>{line}</span>)}
+            <small>Tap to hide</small>
         </button>
     );
 }
@@ -545,9 +578,23 @@ export function App(): ReactElement {
         let silenceTimer: number = 0;
 
         /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
-        const heardFromServer = (socket: WebSocket): void => {
+        const heardFromServer = (socket: WebSocket, limit: number = SERVER_SILENCE_LIMIT_MILLISECONDS): void => {
             window.clearTimeout(silenceTimer);
-            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+            silenceTimer = window.setTimeout(() => { giveUpOn(socket); }, limit);
+        };
+
+        /** Moves on from a socket that has gone silent at once, as a browser can take a long while to close a dead one. */
+        const giveUpOn = (socket: WebSocket): void => {
+            if (socketRef.current !== socket) {
+                return;
+            }
+            socket.close();
+            dispatch({ type: "connection", connected: false });
+            holdingRef.current = false;
+            dispatch({ type: "holding", holding: false });
+            window.clearTimeout(retryTimer);
+            retryDelay = 500;
+            connect();
         };
 
         /** Opens the socket and, once open, reclaims the saved seat if there is one. */
@@ -601,9 +648,12 @@ export function App(): ReactElement {
                 dispatch({ type: "message", message });
             };
             socket.onclose = (event: CloseEvent): void => {
+                if (socketRef.current !== socket) {
+                    return;
+                }
                 dispatch({ type: "connection", connected: false });
                 window.clearTimeout(silenceTimer);
-                if (stopped === true || socketRef.current !== socket) {
+                if (stopped === true) {
                     return;
                 }
                 holdingRef.current = false;
@@ -620,7 +670,13 @@ export function App(): ReactElement {
 
         /** Reconnects at once when the phone comes back to the foreground. */
         const onVisible = (): void => {
-            if (document.visibilityState !== "visible" || socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) {
+            const current: WebSocket | null = socketRef.current;
+            if (document.visibilityState !== "visible" || current?.readyState === WebSocket.CONNECTING) {
+                return;
+            }
+            // A phone that slept can hold a socket that looks open and is dead, so the room's answer to reportPresence decides.
+            if (current?.readyState === WebSocket.OPEN) {
+                heardFromServer(current, FOREGROUND_ANSWER_LIMIT_MILLISECONDS);
                 return;
             }
             window.clearTimeout(retryTimer);
@@ -738,6 +794,19 @@ export function App(): ReactElement {
         return (): void => { document.documentElement.style.background = ""; };
     }, [seatColour]);
 
+    const privateRef = useRef<HTMLElement>(null);
+    const typedEntryId: string = state.view?.controls.find((control: Control) => control.type === "textInput" || control.type === "numberInput")?.id ?? "";
+    // A typed answer may be all someone has, so its box and Send come into view rather than sitting below the fold.
+    useEffect(() => {
+        if (typedEntryId !== "" && privateRef.current !== null) {
+            privateRef.current.scrollTop = privateRef.current.scrollHeight;
+        }
+    }, [typedEntryId]);
+    const [outOfDate, setOutOfDate] = useState<boolean>(false);
+    // A page cached from an older release says so; one open when the server restarts reloads by itself.
+    useEffect(() => {
+        void readServerBuild().then((server) => { setOutOfDate(server !== null && isOutOfDate(__BUILD_INFO__, server)); });
+    }, [state.connected]);
     const reactionsWanted: boolean = settings.reactions;
     useEffect(() => {
         if (state.stage === "joined" && state.connected === true && socketRef.current?.readyState === WebSocket.OPEN) {
@@ -1050,7 +1119,7 @@ export function App(): ReactElement {
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
-                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap Talk or hold to talk.</p>
+                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
             </main>
         );
     }
@@ -1110,7 +1179,6 @@ export function App(): ReactElement {
     const pad: PadView | null = view?.pad ?? null;
     const controls: Control[] = view?.controls ?? [];
     const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
-    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     const secretTitle: string = controls.flatMap((control: Control) => (control.type === "roleCard" && control.secret === true ? [control.title] : []))[0] ?? "";
     const secretLines: string[] = controls.flatMap((control: Control) => {
         if (control.type === "roleCard" && control.secret === true) {
@@ -1118,16 +1186,24 @@ export function App(): ReactElement {
         }
         return control.type === "notice" && control.tone === "secret" ? [control.text] : [];
     });
-    const secretCard: ReactElement | null = secretLines.length > 0 ? <SecretCard key="secret" title={secretTitle} lines={secretLines} /> : null;
+    const roleControl: Control | undefined = controls.find((control: Control) => control.type === "roleCard" && control.secret === true);
+    const roleStartsHidden: boolean = roleControl?.type === "roleCard" && roleControl.startHidden === true;
+    const secretCard: ReactElement | null = secretLines.length === 0
+        ? null
+        : roleControl !== undefined
+            ? <RoleCard key="role" title={secretTitle} lines={secretLines} startHidden={roleStartsHidden} />
+            : <SecretCard key="secret" title={secretTitle} lines={secretLines} />;
     const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
-    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
-    const status: string = problem !== "" ? problem : view?.status === line.big ? "" : view?.status ?? "";
+    const quietUnderCards: boolean = hasPrivate === true && waiting === "" && canTalk === false;
+    const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
+    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true && hasPrivate === false ? "Your mic is off" : "";
+    const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""} ${hasPrivate === true ? "has-private" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -1135,9 +1211,25 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
-            {turn !== null ? <p className="turn-line">{turn.line}</p> : null}
+            {turn !== null && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
-            {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
+            {pad !== null && pad.startCard.length > 0 ? (
+                <section className="private">
+                    <section className="paper">
+                        <ol className="start-lines">{pad.startCard.map((text: string) => <li key={text}>{text}</li>)}</ol>
+                    </section>
+                </section>
+            ) : null}
+            {pad?.confirmEnd === true ? (
+                <section className="private">
+                    <section className="paper choices">
+                        <p className="prompt">End the game for everyone?</p>
+                        <button onClick={() => { send({ type: "nav", action: { kind: "choose", index: 1 } }); }}>End for everyone</button>
+                        <button onClick={() => { send({ type: "nav", action: { kind: "choose", index: 0 } }); }}>Keep playing</button>
+                    </section>
+                </section>
+            ) : null}
+            {hasPrivate === true && pad?.pausedBy === "" ? <section ref={privateRef} className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>
                 <div className="thumb" aria-hidden="true" />
@@ -1146,7 +1238,7 @@ export function App(): ReactElement {
                         ? micSilent === "stopped"
                             ? <><strong>Can't hear your mic</strong><small>{tapping === true ? "Stop and try again" : "Let go and try again"}</small></>
                             : micSilent === "quiet" && view?.hearing === ""
-                                ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
+                                ? <><strong>Listening</strong><small>Nothing yet. Try a bit louder.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
                                 : <><strong>Listening</strong>{tapping === true ? <small>Tap Stop when you're done</small> : null}</>
@@ -1162,7 +1254,8 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true && pad?.startCard.length === 0 ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
+            {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
@@ -1177,6 +1270,7 @@ export function App(): ReactElement {
                                 <button onClick={() => { setMenu("settings"); }}>Settings</button>
                                 <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
+                                <small className="version-line">{versionLine(__BUILD_INFO__)}</small>
                             </>
                         ) : null}
                         {menu === "mic" ? (

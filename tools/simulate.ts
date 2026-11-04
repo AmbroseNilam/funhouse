@@ -113,6 +113,9 @@ export class FakeScreen {
 /** A fake phone. */
 export class FakePhone {
     public view: PhoneView | null = null;
+    /** The seat this phone holds, for coming back to it. */
+    public playerId: string = "";
+    public resumeToken: string = "";
     /** Every view the room has sent this phone, oldest first, for leak checks. */
     public readonly views: PhoneView[] = [];
     private readonly socket: WebSocket;
@@ -122,13 +125,18 @@ export class FakePhone {
      * Joins a room.
      * @param code the room code.
      * @param name the player's name.
+     * @param seat the seat to come back to, for a phone reconnecting.
      */
-    public constructor(code: string, name: string) {
+    public constructor(code: string, name: string, seat?: { playerId: string; resumeToken: string }) {
         this.name = name;
         this.socket = new WebSocket(`${ROOM_URL}/ws/phone?room=${code}`);
-        this.socket.on("open", () => { this.socket.send(JSON.stringify({ type: "hello", name })); });
+        this.socket.on("open", () => { this.socket.send(JSON.stringify({ type: "hello", name, ...seat })); });
         this.socket.on("message", (data: WebSocket.RawData) => {
             const message: RoomToPhoneMessage = JSON.parse(rawDataToText(data)) as RoomToPhoneMessage;
+            if (message.type === "welcome") {
+                this.playerId = message.playerId;
+                this.resumeToken = message.resumeToken;
+            }
             if (message.type === "view") {
                 this.view = message.view;
                 this.views.push(message.view);
@@ -199,6 +207,16 @@ export class FakePhone {
         this.nav({ kind: "select" });
         await waitFor(() => screen.shell?.screen === "game", "the game's page");
         this.nav({ kind: "select" });
+        await waitFor(() => screen.shell?.screen === "pick" || screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the game to start or ask what to pick");
+        if (screen.shell?.screen === "pick") {
+            // Quizmaster's scenarios bring their own topic; anything else takes the surprise.
+            const own: number = name === "Quizmaster" ? screen.shell.menu.indexOf("Say your own topic") : 0;
+            this.nav({ kind: "choose", index: Math.max(0, own) });
+        }
+        await waitFor(() => screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the how-to card or the game");
+        if (screen.shell?.screen === "startCard") {
+            this.nav({ kind: "select" });
+        }
         await waitFor(() => screen.shell?.screen === "play", "the game to start");
     }
 
@@ -234,6 +252,12 @@ export class FakePhone {
      */
     public guest(action: "add" | "remove", playerId?: string): void {
         this.socket.send(JSON.stringify({ type: "guest", action, ...(playerId === undefined ? {} : { playerId }) }));
+    }
+
+    /** Leaves the table for good, as the phone menu does. */
+    public leave(): void {
+        console.warn(`${this.name} leaves the table`);
+        this.socket.send(JSON.stringify({ type: "leave" }));
     }
 
     /** Hangs up. */

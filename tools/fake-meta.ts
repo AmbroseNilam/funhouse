@@ -82,6 +82,18 @@ function groupsFor(items: readonly string[]): string {
 }
 
 /**
+ * What the stand-in "model" says to a closed question about pairs of answers, such as Same Page asks:
+ * two answers are the same only when both mention a bat or bats, so a scenario can see a pair join and a
+ * look-alike pair stay apart.
+ * @param prompt the request, with one numbered pair per line.
+ * @returns one "round.pair yes" or "round.pair no" line per pair.
+ */
+function sameAnswersFor(prompt: string): string {
+    const pairs: string[] = prompt.split("\n").filter((line: string) => /^\d+\.\d+ /.test(line));
+    return pairs.map((line: string) => `${line.split(" ")[0] ?? ""} ${(line.toLowerCase().match(/\bbats?\b/g) ?? []).length >= 2 ? "yes" : "no"}`).join("\n");
+}
+
+/**
  * What the game's model would write for a content request, by what the request asks for.
  * @param prompt the request.
  * @returns the text.
@@ -90,6 +102,9 @@ export function contentFor(prompt: string): string {
     const prompts: RegExpMatchArray | null = /Write (\d+) prompts/.exec(prompt);
     if (prompts !== null) {
         return PROMPT_POOL.slice(0, Number(prompts[1])).join("\n");
+    }
+    if (prompt.includes("say yes only if both of these are true") === true) {
+        return sameAnswersFor(prompt);
     }
     if (prompt.startsWith("Write one answer to this party-game prompt") === true) {
         return GHOST_ANSWER;

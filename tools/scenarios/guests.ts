@@ -24,7 +24,7 @@ import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 const GAME: string = process.env.GUEST_GAME ?? "Under the Cup";
 
 /** Fewest players each game needs, so the script knows how many guests to seat. */
-const MINIMUM: Record<string, number> = { "Under the Cup": 3, "Stray Word": 4, "Off by a Mile": 3, "Who Fits": 3 };
+const MINIMUM: Record<string, number> = { "Under the Cup": 3, "Stray Word": 4, "Off by a Mile": 3, "Who Fits": 3, "Same Page": 3 };
 
 /** How many guests to seat. */
 const GUESTS: number = Number(process.env.GUEST_COUNT ?? Math.max(2, (MINIMUM[GAME] ?? 3) - 1));
@@ -138,7 +138,11 @@ say(`At the table: Teacup and ${guests.map((guest) => guest.name).join(", ")}`);
 
 await waitFor(() => screen.shell?.games[target]?.blocked === null, "the game to be startable");
 await person.chooseRow(screen, "Play");
-await waitFor(() => screen.shell?.screen === "play", "the game to start");
+await waitFor(() => screen.shell?.screen === "play" || screen.shell?.screen === "startCard", "the game to start");
+if (screen.shell?.screen === "startCard") {
+    person.nav({ kind: "select" });
+    await waitFor(() => screen.shell?.screen === "play", "the how-to card to be skipped");
+}
 say(`Started ${GAME}`);
 
 const startedAt: number = Date.now();

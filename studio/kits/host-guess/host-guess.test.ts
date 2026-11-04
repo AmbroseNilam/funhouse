@@ -280,8 +280,8 @@ describe("cold read: guesses", () => {
         const verdict: Step<HostGuessState> = pressAll(game, guessed.state, FOUR.map((player: CartridgePlayer) => player.playerId), `${HOST_GUESS_IDS.verdict}right`);
         assert.equal(verdict.state.phase, "end");
         assert.equal(verdict.state.won, true);
-        assert.match(told(verdict), /You got it after 2 questions\./);
-        assert.equal(game.cartridge.outcome(verdict.state), "The host guessed it after 2 questions.");
+        assert.match(told(verdict), /You got it after 1 question\./, "the guess costs a question but isn't one that was asked");
+        assert.equal(game.cartridge.outcome(verdict.state), "The host guessed it after 1 question.");
     });
 
     it("sends a wrong guess back to the questions, remembers it, and refuses it a second time", () => {

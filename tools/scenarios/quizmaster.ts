@@ -2,6 +2,7 @@
 // a repeat answer, a timed-out question, a skip and a question where everyone answers. Fails if the
 // host says an answer before it is revealed. Run the room with GAME_ROOM_TEXT_ONLY=1, then:
 // node tools/scenarios/quizmaster.ts
+// This is the open-answer game: start the room with QUIZ_OPEN_ANSWERS=1. quiz-choices.ts plays the default, with four answers.
 
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
@@ -177,7 +178,7 @@ console.warn(`Waiting out the ${QUESTION_SECONDS} second timer.`);
 await reach(3, "the timer to move past question 2");
 
 // Question 3: a skip.
-await alex.fromPauseMenu(screen, "Skip this question");
+await sam.fromPauseMenu(screen, "Skip this question");
 await reach(4, "a skip to move on");
 
 // Question 4: Alex answers right.

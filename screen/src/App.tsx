@@ -1,6 +1,7 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
+import { versionLine } from "../../shared/build-info.ts";
 import type { Turn } from "../../shared/turn.ts";
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import { flushSync } from "react-dom";
@@ -146,6 +147,13 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     if (block.type === "image") {
         return <figure key={index} className="image"><img src={block.src} alt={block.caption ?? ""} />{block.caption !== undefined ? <figcaption>{block.caption}</figcaption> : null}</figure>;
     }
+    if (block.type === "gallery") {
+        return (
+            <ul key={index} className={`gallery ${block.items.length > 4 ? "many" : ""}`}>
+                {block.items.map((item, place: number) => <li key={place}>{item.src === null ? <div className="gallery-empty" /> : <img src={item.src} alt="" />}<strong>{item.heading}</strong><span>{item.text}</span></li>)}
+            </ul>
+        );
+    }
     if (block.type === "roster") {
         return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={`${player.speaking === true ? "speaking" : ""} ${player.badge === "out" ? "out" : ""}`}>{player.name}{player.badge !== undefined ? <small>{player.badge}</small> : null}</li>)}</ul>;
     }
@@ -165,6 +173,9 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
             </div>
         );
     }
+    if (block.type === "choices") {
+        return <ol key={index} className="answer-choices">{block.options.map((option: string) => <li key={option}>{option}</li>)}</ol>;
+    }
     if (block.type === "board") {
         return (
             <ul key={index} className="board" style={{ gridTemplateColumns: `repeat(${block.columns}, 1fr)` }}>
@@ -175,6 +186,17 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
                     </li>
                 ))}
             </ul>
+        );
+    }
+    if (block.type === "moment") {
+        return (
+            <div key={`moment-${block.kind}-${block.heading}`} className={`moment moment-${block.kind}`}>
+                {block.kind === "night" ? <div className="night-sky" aria-hidden="true"><i className="moon" /><i className="eyes"><b /><b /></i></div> : null}
+                <div className="moment-card">
+                    <strong>{block.heading}</strong>
+                    {block.detail !== undefined ? <span>{block.detail}</span> : null}
+                </div>
+            </div>
         );
     }
     return <span key={index} hidden />;
@@ -209,7 +231,19 @@ export function App(): ReactElement {
         /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
         const heardFromServer = (socket: WebSocket): void => {
             window.clearTimeout(silenceTimer);
-            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+            silenceTimer = window.setTimeout(() => { giveUpOn(socket); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+        };
+
+        /** Moves on from a socket that has gone silent at once, as a browser can take a long while to close a dead one. */
+        const giveUpOn = (socket: WebSocket): void => {
+            if (socketRef.current !== socket) {
+                return;
+            }
+            socket.close();
+            dispatch({ type: "connection", connected: false });
+            window.clearTimeout(retryTimer);
+            retryDelay = 500;
+            connect();
         };
 
         /** Opens the socket; on close, retries with backoff so a network blip heals itself. */
@@ -227,8 +261,11 @@ export function App(): ReactElement {
                 }
             };
             socket.onclose = (): void => {
+                if (socketRef.current !== socket) {
+                    return;
+                }
                 dispatch({ type: "connection", connected: false });
-                if (stopped === true || socketRef.current !== socket) {
+                if (stopped === true) {
                     return;
                 }
                 retryTimer = window.setTimeout(connect, retryDelay);
@@ -457,16 +494,17 @@ export function App(): ReactElement {
     const seats: Seat[] = shell?.seats ?? [];
     const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
     const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
-    const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
+    const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd";
     const stageMood: string = playing === true ? mood : "room";
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
-    const backdrop: string | undefined = state.scene?.backdrop ?? game?.art;
+    const backdrop: string | undefined = state.scene?.backdrop ?? (game === undefined ? undefined : `art/posters/${game.id}.webp`);
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
+            <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
             {playing === true ? (
                 <section className="screen play-screen">
-                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
+                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" onError={(event) => { if (game !== undefined && event.currentTarget.getAttribute("src") !== game.art) { event.currentTarget.src = game.art; } }} style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
                     <div className="play-column">
                         {state.turn !== null ? <p className="turn-label">{state.turn.label}</p> : null}
                         <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
@@ -491,7 +529,7 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

@@ -131,3 +131,34 @@ test("ordinary nicknames pass", () => {
         assert.equal(nicknameCategory(name, "Marlowe"), null, name);
     }
 });
+
+test("takes a common word typed in capitals when the classifier only minds the capitals, and shows what it passed", async () => {
+    const asked: string[] = [];
+    const classify: TextClassifier = (line: string): Promise<boolean> => {
+        asked.push(line);
+        return Promise.resolve(line !== "MAP");
+    };
+    assert.deepEqual(await filterText("MAP", 40, classify), { allowed: true, text: "map" });
+    assert.deepEqual(asked, ["MAP", "map"]);
+    assert.deepEqual(await filterText("TEA", 40, classify), { allowed: true, text: "TEA" }, "no second call when the first passes");
+});
+
+test("still refuses a capitals word the classifier refuses either way, and any longer line in capitals", async () => {
+    assert.deepEqual(await filterText("WORD", 40, () => Promise.resolve(false)), { allowed: false, category: "classifier" });
+    const onlyLower: TextClassifier = (line: string): Promise<boolean> => Promise.resolve(line === line.toLowerCase());
+    assert.deepEqual(await filterText("MAP LOVERS", 40, onlyLower), { allowed: false, category: "classifier" });
+    assert.deepEqual(await filterText("Map", 40, onlyLower), { allowed: false, category: "classifier" }, "only a word wholly in capitals gets a second look");
+});
+
+test("a real abusive word in capitals is refused by the local check, with no second look at all", async () => {
+    const asked: string[] = [];
+    const classify: TextClassifier = (line: string): Promise<boolean> => {
+        asked.push(line);
+        return Promise.resolve(line === line.toLowerCase());
+    };
+    for (const word of [SLUR, SLUR_TWO, SHORT_SLUR, EXPLICIT]) {
+        const result = await filterText(word.toUpperCase(), 40, classify);
+        assert.equal(result.allowed, false, "a word on the local list");
+    }
+    assert.deepEqual(asked, [], "the classifier never saw them, so its second look can't let them through");
+});

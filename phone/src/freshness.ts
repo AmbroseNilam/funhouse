@@ -3,6 +3,8 @@
 // changes when the server restarts for a release, which closes every room, so a reload can't
 // interrupt a game.
 
+import type { BuildInfo } from "../../shared/build-info.ts";
+
 /** How often an open phone checks, in milliseconds. */
 const CHECK_MILLISECONDS: number = 60000;
 
@@ -40,4 +42,17 @@ export function reloadWhenUpdated(): void {
             void check();
         }
     });
+}
+
+/**
+ * Asks the server which build it is.
+ * @returns the build, or null if the server can't say right now.
+ */
+export async function readServerBuild(): Promise<BuildInfo | null> {
+    try {
+        const response: Response = await fetch("/version", { cache: "no-store" });
+        return response.ok === true ? await response.json() as BuildInfo : null;
+    } catch {
+        return null;
+    }
 }

@@ -44,7 +44,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
   30pt, then one per 70pt, and reversing steps back. No wrap. Tap: release under 300ms and under
   10pt. Hold: 300ms still, then movement is ignored while talking.
 - **Tap on the pad never locks the mic.** Tap on the pad always means select. A separate Talk button is
-  the default way to talk: it starts recording and Stop ends it, and holding still works. It shows a live
+  the default way to talk, a small chip labelled "Tap to talk": it starts recording and Stop ends it, and holding still works. It shows a live
   scrolling waveform, live words and a small Stop, and stops itself on silence, at a time limit, or when
   the page is hidden. It waits while the host speaks. A phone can choose Tap or Hold in its settings, kept
   in that browser, and `?tap=0` or `?hold=1` opens a room with holding only.
@@ -58,7 +58,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 - **Vibration is a bonus only.** iPhones can't be relied on. Feedback comes from the TV.
 - **Slow choices may look down.** Secret roles and votes appear on the phone as paper cards, with
   the touch surface below them. Instructions always stay on the TV.
-- **Teach during join, one gesture per moment, answered by the TV:** slide, then tap, then Talk.
+- **Teach during join, one gesture per moment, answered by the TV:** slide, then tap, then talk.
   Hints never look tappable, and each disappears once it's been done.
 
 ## The TV
@@ -69,9 +69,12 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 - **Focus:** scale 1.07 plus a lifted hard shadow and a lamp edge. Never colour alone.
 - **Reading at distance (at 1080p, scaled to viewport):** body 32, floor 28, captions 46. Safe area
   80 sides and 60 top and bottom; place cards stand on the table edge, which sits inside the bottom margin. Captions: two lines at most, name on speaker change.
-- **Driver:** one person drives, first joiner by default. Their name hangs off the focus. After 5s
-  idle, anyone's swipe takes over. Anyone may talk at any time. If the driver leaves, the next person
-  takes over and the host says so.
+- **Driver:** one person drives, first joiner by default. Their name hangs off the focus. On the shelf,
+  after 5s idle, anyone's swipe takes over. During a game the controller stays with its holder unless
+  their phone drops or goes down or they are out, and only the holder pauses, resumes or ends it for
+  everyone, ending only after "End the game for everyone?" on their phone, which goes away after about 8s.
+  Anyone may talk at any time, and anyone may leave for themselves. If the driver leaves, the next person
+  playing takes over and the host says so.
 
 ## Motion
 

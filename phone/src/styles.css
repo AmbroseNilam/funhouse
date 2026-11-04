@@ -63,6 +63,29 @@
     .slider-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 16px; }
     .slider-labels strong { font-size: 30px; }
     .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
+    .paper p { white-space: pre-line; }
+    .has-private .private { flex: 1 1 auto; max-height: none; min-height: 0; padding-bottom: 4px; }
+    .has-private .surface { flex: 0 0 84px; padding: 8px 170px calc(8px + env(safe-area-inset-bottom)) 16px; justify-content: flex-start; }
+    .has-private .line { text-align: left; gap: 2px; }
+    .has-private .line strong { font-size: 20px; line-height: 1.15; }
+    .has-private .line small { font-size: 15px; }
+    .pad-screen.has-private.dictating .surface { flex-basis: 170px; padding-right: 16px; padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+    .has-private .dictation { bottom: calc(10px + env(safe-area-inset-bottom)); left: 16px; right: 16px; }
+    .has-private .dictation canvas { height: 56px; }
+    .has-private .dictation button { width: 60px; height: 60px; font-size: 18px; }
+    .has-private .private { gap: 8px; padding: 8px 10px 4px; }
+    .has-private .paper { padding: 12px; }
+    .has-private .paper h2 { font-size: 30px; margin-bottom: 4px; }
+    .has-private .paper p { font-size: 18px; line-height: 1.28; }
+    .has-private .prompt { font-size: 17px; margin-bottom: 2px; }
+    .has-private .choices { gap: 6px; }
+    .has-private .choices button { min-height: 44px; padding: 8px 12px; font-size: 18px; }
+    .private > .choices:last-child:has(> button:only-of-type) { position: sticky; bottom: 0; }
+    .role-face, .role-strip { display: flex; flex-direction: column; width: 100%; text-align: left; flex: none; }
+    .role-face { gap: 8px; padding: 18px; font-size: 21px; line-height: 1.25; }
+    .role-face strong { font-size: 32px; font-weight: 600; line-height: 1.08; }
+    .role-face small { font-size: 16px; opacity: 0.75; margin-top: 4px; }
+    .role-strip { background: var(--card); color: var(--paper); padding: 12px 16px; font-size: 18px; }
     .peek { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 150px; justify-content: center; text-align: center; touch-action: none; background: var(--card); color: var(--paper); font-size: 22px; line-height: 1.25; transition: background 80ms ease-out; }
     .peek em { font-style: normal; font-size: 22px; color: var(--paper); }
     .peek strong { font-size: 44px; font-weight: 600; line-height: 1.05; }
@@ -96,7 +119,9 @@
     .tap-talk:disabled { opacity: 0.45; }
     .tap-talk { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
     .tap-talk:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
-    .tap-talk { left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
+    .tap-talk { left: 50%; translate: -50% 0; bottom: calc(52px + env(safe-area-inset-bottom)); min-height: 48px; padding: 0 22px; border-radius: 24px; background: var(--paper); color: var(--paper-ink); font-size: 18px; white-space: nowrap; }
+    /* With a card up, the chip sits in the corner of the short strip below it, so it never covers the card. */
+    .has-private .tap-talk { left: auto; right: 16px; translate: none; bottom: calc(14px + env(safe-area-inset-bottom)); }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }
@@ -106,6 +131,10 @@
     .hearing { margin: 0; padding: 0 12px; font-size: 26px; line-height: 1.2; color: var(--paper); text-shadow: 2px 2px 0 #000; overflow-wrap: anywhere; }
     .talking .line strong { color: var(--paper); text-shadow: 2px 2px 0 #000; }
     .pad-screen.dictating .line strong, .pad-screen.dictating .hearing { text-shadow: none; }
+    .version-line { display: block; margin-top: 8px; text-align: center; color: var(--paper-ink); opacity: 0.6; font-size: 13px; }
+    .update-note { position: absolute; left: 50%; top: 56px; translate: -50% 0; min-height: 36px; padding: 4px 12px; background: var(--paper); color: var(--paper-ink); font-size: 15px; white-space: nowrap; z-index: 5; }
+    .start-lines { margin: 0; padding-left: 22px; font-size: 18px; line-height: 1.3; }
+    .start-lines li + li { margin-top: 8px; }
     .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
 
     .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(10, 7, 4, 0.72); animation: fade-in 120ms ease-out; }

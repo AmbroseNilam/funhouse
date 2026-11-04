@@ -2,6 +2,6 @@
     "id": "blankVerdict",
     "kit": "hand",
     "level": "held",
-    "reason": "no run with the real host yet",
+    "reason": "not on the first shelf Ambrose approved; its real-host run has been listed as a known failure",
     "order": 170
 }

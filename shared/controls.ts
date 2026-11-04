@@ -24,7 +24,7 @@ export function listeningAllowsTalk(mode: ListeningMode): boolean {
  * answer only gets that far once the content filter has passed it. Give each question its own id.
  */
 export type Control =
-    | { type: "roleCard"; title: string; body: string; secret: boolean }
+    | { type: "roleCard"; title: string; body: string; secret: boolean; startHidden?: boolean }
     | { type: "buttons"; prompt?: string; options: ControlOption[] }
     | { type: "choice"; prompt: string; options: ControlOption[]; multiple: boolean }
     | { type: "textInput"; id: string; prompt: string; placeholder?: string; maxLength: number; note?: string }

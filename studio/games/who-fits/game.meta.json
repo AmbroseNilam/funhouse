@@ -1,7 +1,8 @@
 {
     "id": "whoFits",
     "kit": "tap",
-    "level": "visible",
+    "level": "held",
+    "reason": "not in the five; held, not deleted",
     "guests": "random",
     "order": 30
 }
