@@ -1426,6 +1426,7 @@ export function App(): ReactElement {
                                 <SettingRow label={`${HOST_NAME}'s quick reactions`} on={settings.reactions} onChange={(on: boolean) => { changeSettings({ ...settings, reactions: on }); }} />
                                 {"vibrate" in navigator ? <SettingRow label="Vibration" on={settings.vibration} onChange={(on: boolean) => { changeSettings({ ...settings, vibration: on }); }} /> : null}
                                 {view?.tapToTalk === true ? <SettingRow label="To talk" on={settings.talkButton} onWord="Tap" offWord="Hold" onChange={(on: boolean) => { changeSettings({ ...settings, talkButton: on }); }} /> : null}
+                                {view?.hostVoice.canChange === true ? <SettingRow label="Host voice, for the whole room" on={view.hostVoice.choice === "warm"} onWord="Warm" offWord="Usual" onChange={(on: boolean) => { send({ type: "hostVoice", choice: on === true ? "warm" : "current" }); }} /> : null}
                                 <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
                         ) : null}
