@@ -75,6 +75,8 @@ export interface MatchState {
     players: CartridgePlayer[];
     /** The stems this game drew, in play order. */
     stems: PromptStem[];
+    /** How many rounds each player's card matched someone else's. */
+    matches: Record<string, number>;
     /** Whether a hat is in play: it is not with three players. */
     hatInPlay: boolean;
     /** Round number, starting at 1; 0 while the prompts are being written. */
@@ -356,8 +358,28 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const scores: string = ranked.map((player: CartridgePlayer) => `${player.name} ${state.scores[player.playerId] ?? 0}`).join(", ");
         const hat: string = state.hatLoser === null ? "The hat cost nobody anything." : `The hat ended with ${nameOf(state, state.hatLoser)}, which cost ${decisions.hatPenalty} ${ofCount(decisions.hatPenalty, "point", "points")}.`;
         const lead: string = state.result === "tooFew" ? "Too few people were left to go on. " : "";
-        return `${lead}The game is over. Final scores: ${scores}. Most points: ${winners}. ${hat} Say who won, the hat in a kind word, and offer another game.`;
+        return `${lead}The game is over. Final scores: ${scores}. Most points: ${winners}. ${whyWon(state, scoreRows(state))} ${hat} Say who won and why, the hat in a kind word, and offer another game.`;
     };
+
+    /**
+     * Says in a line why the winner won.
+     * @param state the state at the end.
+     * @param rows the final scores, best first.
+     * @returns the line.
+     */
+    function whyWon(state: MatchState, rows: readonly TallyRow[]): string {
+        const leaders: string[] = rows.filter((row: TallyRow) => row.highlight === true).map((row: TallyRow) => row.label);
+        const matchesOf = (name: string): number => state.matches[state.players.find((player: CartridgePlayer) => player.name === name)?.playerId ?? ""] ?? 0;
+        const top: number = rows[0]?.count ?? 0;
+        if (leaders.length === 0) {
+            return "Nobody matched the room this time.";
+        }
+        const only: string = leaders[0] ?? "";
+        if (leaders.length === 1) {
+            return `${only} matched the room ${matchesOf(only)} ${matchesOf(only) === 1 ? "time" : "times"}, for ${top} ${top === 1 ? "point" : "points"}.`;
+        }
+        return `${leaders.join(" and ")} tied on ${top} ${top === 1 ? "point" : "points"}.`;
+    }
 
     /**
      * Ends the game: the hat's cost lands, once.
@@ -390,7 +412,11 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const state: MatchState = { ...before, phase: "reveal", stacks: ordered, scores, gained, hat, asked: false, doubts: [] };
         const top: Stack | undefined = ordered[0];
         const record: RoundRecord = { prompt: promptOf(state), top: top === undefined ? "" : stackText(state, top), topSize: top?.length ?? 0 };
-        const next: MatchState = { ...state, record: [...before.record, record] };
+        const matches: Record<string, number> = { ...before.matches };
+        for (const playerId of stacks.filter((stack: Stack) => stack.length > 1).flat()) {
+            matches[playerId] = (matches[playerId] ?? 0) + 1;
+        }
+        const next: MatchState = { ...state, matches, record: [...before.record, record] };
         const moved: boolean = hat !== null && hat !== before.hat;
         return { state: next, facts: because(publicFact("reveal", revealText(next, moved)), MATCH_DECISIONS.stacks), nextPhaseId: "reveal", timers: { [`reveal${next.round}`]: decisions.revealSeconds } };
     };
@@ -596,6 +622,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             const state: MatchState = {
                 phase: "choosing",
                 stems: drawn,
+                matches: {},
                 players,
                 hatInPlay: players.length >= HAT_MINIMUM_PLAYERS,
                 round: 0,
@@ -722,6 +749,8 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             if (hatLine !== "") {
                 blocks.push({ type: "text", text: hatLine, emphasis: "large" });
             }
+            blocks.push({ type: "text", text: whyWon(state, rows), emphasis: "large" });
+            blocks.push({ type: "text", text: "Every other card in your stack is a point, and a pair scores two each." });
             blocks.push({ type: "tally", title: "Points", rows });
             return { mood: "victory", transition: "fade", blocks };
         },
