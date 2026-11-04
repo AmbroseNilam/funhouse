@@ -214,6 +214,10 @@ npm run check
 
 Logs must never hold what anyone said, what the host replied or a player's name.
 
+## Credits
+
+Built by Ambrose Nilam, with AI coding agents (Claude, Codex) doing much of the implementation under my direction.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE). Fraunces is under the SIL Open Font License.
