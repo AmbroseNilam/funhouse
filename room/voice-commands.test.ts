@@ -19,7 +19,7 @@ test("knows each command in its sure phrasings", () => {
 });
 
 test("leaves talk and short answers alone", () => {
-    for (const said of ["stop", "skip", "pause in the middle", "is it a new game console", "I never give up on my dreams", "a restart button", "repeat offender", "next", "the end", "is it something you would pause"]) {
+    for (const said of ["stop", "skip", "pause", "repeat", "pause in the middle", "is it a new game console", "I never give up on my dreams", "a restart button", "repeat offender", "next", "the end", "is it something you would pause"]) {
         assert.equal(commandByKeywords(said), null, said);
     }
 });

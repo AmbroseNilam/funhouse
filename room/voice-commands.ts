@@ -18,17 +18,17 @@ export const VOICE_COMMANDS: Record<VoiceCommand, string> = {
 };
 
 /** Commands that lose a game in progress, so the same player has to say them twice. */
-export const DESTRUCTIVE_COMMANDS: readonly VoiceCommand[] = ["restart", "end"];
+export const DESTRUCTIVE_COMMANDS: readonly VoiceCommand[] = ["restart", "end", "changeTopic"];
 
-/** Whole phrases, after tidying, that can only mean a command. A short answer like "stop" or "skip" is left alone. */
+/** Whole phrases, after tidying, that can only mean a command. A word that could be an answer, like "stop" or "pause", is left alone. */
 const SURE_PHRASES: Record<VoiceCommand, string[]> = {
     restart: ["restart", "restart the game", "restart game", "start over", "start again", "new game", "start a new game", "play again", "play it again", "let's play again"],
     giveUp: ["i give up", "we give up", "give up"],
     changeTopic: ["change the topic", "change topic", "new topic", "different topic", "pick a new topic", "pick a different topic"],
-    repeat: ["say that again", "repeat that", "repeat", "what did you say", "can you repeat that"],
+    repeat: ["say that again", "repeat that", "what did you say", "can you repeat that"],
     skip: ["skip this question", "skip this one", "skip the question", "next question"],
     end: ["end the game", "end game", "stop the game", "quit the game", "quit game", "back to the shelf", "go back to the shelf"],
-    pause: ["pause", "pause the game", "pause game"],
+    pause: ["pause the game", "pause game"],
     whoseTurn: ["whose turn is it", "whose turn", "who's turn is it", "whos turn is it", "who is next", "who's next"],
 };
 

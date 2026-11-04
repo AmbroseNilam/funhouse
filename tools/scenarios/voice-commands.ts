@@ -63,6 +63,9 @@ expect(true, "pause opens the pause menu");
 await sam.chooseRow(screen, "Keep playing");
 await waitFor(() => screen.shell?.screen === "play", "play to resume");
 sam.say("change the topic");
+await pause(800);
+expect(progress() === before + 1, "one change of topic changes nothing yet");
+sam.say("change the topic");
 await waitFor(() => screen.title() === "Quizmaster" && screen.scene?.blocks.some((block) => block.type === "progress") === false, "the topic question");
 expect(true, "change the topic goes back to choosing one");
 

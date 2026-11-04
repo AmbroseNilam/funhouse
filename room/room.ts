@@ -1855,7 +1855,7 @@ export class Room implements HostStage {
 
     /**
      * Does what a voice command says, if it means anything right now, and has the host narrate what
-     * really happened. Restarting or ending a game in progress waits for the same player to say it again.
+     * really happened. Restarting, ending or changing the topic of a game in progress waits for the same player to say it again.
      * @param player who said it.
      * @param command the command.
      * @returns false when it doesn't apply, so the words are ordinary talk.
@@ -1888,6 +1888,10 @@ export class Room implements HostStage {
         if (actionId !== undefined) {
             if (decided === true || game.hasAction(player.playerId, actionId) === false) {
                 return false;
+            }
+            if (DESTRUCTIVE_COMMANDS.includes(command) === true && this.confirmed(player, command) === false) {
+                this.host.notice(`(Game: ${player.name} asked to change the topic. Nothing has changed yet. Ask them to say it again if they mean it, in a few words.)`, WAKE_DELAY_MILLISECONDS.speech);
+                return true;
             }
             game.input(player.playerId, actionId);
             this.refreshPhones();
