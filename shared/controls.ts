@@ -51,7 +51,7 @@ export interface PhoneView {
     pad: PadView;
     /** The words heard so far while this phone holds to talk, so the person knows it's working. */
     hearing: string;
-    /** True when this room is trying tap-to-talk. */
+    /** True when this room offers the Talk button. */
     tapToTalk: boolean;
     /** True while the Talk button waits for the host's voice to finish. */
     talkWaiting: boolean;
