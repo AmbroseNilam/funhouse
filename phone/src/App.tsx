@@ -1471,7 +1471,7 @@ export function App(): ReactElement {
     const hasPrivate: boolean = privateControls.some((control) => control !== null) && pad?.pausedBy === "";
     const quietUnderCards: boolean = hasPrivate === true && waiting === "" && pad?.axis === null;
     // A hidden role alone is a strip, not a card, so the screen is free for one big line.
-    const onlyHiddenRole: boolean = roleStartsHidden === true && controls.every((control: Control) => control.type === "waiting" || (control.type === "roleCard" && control.secret === true) || (control.type === "notice" && control.tone === "secret"));
+    const onlyHiddenRole: boolean = roleStartsHidden === true && controls.every((control: Control) => control.type === "waiting" || control.type === "drain" || (control.type === "roleCard" && control.secret === true) || (control.type === "notice" && control.tone === "secret"));
     const cardLayout: boolean = hasPrivate === true && pad?.axis === null && onlyHiddenRole === false;
     const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     // A card over the controller, as at the end of a game: the first thumb lesson says what the thumb is for.

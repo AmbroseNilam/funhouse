@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Cartridge, CartridgePlayer, Step } from "../../shared/cartridge.ts";
+import type { Control } from "../../shared/controls.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import { canSee } from "../../shared/visibility.ts";
 import { createWerewolf, rolesFor, presetSetup, describeRoles, werewolfStartPick, WEREWOLF_GROUP, type Phase, type Role, type WerewolfState } from "./rules.ts";
@@ -459,6 +460,33 @@ describe("werewolf when someone leaves", () => {
         const left: Step<WerewolfState> = game.onEvent(settled, { type: "playerLeft", at: 0, playerId: villager });
         assert.equal(left.state.nightSettled, false);
         assert.equal(left.timers?.night, 20);
+    });
+});
+
+describe("werewolf night clock", () => {
+    it("shows the same bar on the TV and every phone, and phones with no night action match apart from the hidden card", () => {
+        const { game, state: night } = toFirstNight(9);
+        const seenBars: string[] = night.seats.map((seat) => JSON.stringify(game.privateControls(night, seat.playerId).find((control) => control.type === "drain")));
+        assert.equal(new Set(seenBars).size, 1);
+        assert.deepEqual(JSON.parse(seenBars[0] ?? "{}"), { type: "drain", seconds: 45, key: "night-1" });
+        assert.deepEqual(game.publicScene(night).blocks.find((block) => block.type === "drain"), { type: "drain", seconds: 45, key: "night-1" });
+        const withoutCard = (playerId: string): string => JSON.stringify(game.privateControls(night, playerId).filter((control) => control.type !== "roleCard"));
+        const hunter: string = holder(night, "hunter");
+        const villager: string = holder(night, "villager");
+        assert.equal(withoutCard(hunter), withoutCard(villager));
+        const hunterCard: Control | undefined = game.privateControls(night, hunter).find((control) => control.type === "roleCard");
+        assert.ok(hunterCard?.type === "roleCard" && hunterCard.startHidden === true);
+        assert.equal(game.privateControls(night, hunter).length, game.privateControls(night, villager).length);
+    });
+
+    it("gives the dead the bar too, and takes it away by day", () => {
+        const { game, state: night } = toFirstNight(6);
+        const ghost: string = holder(night, "villager");
+        const dawn: WerewolfState = playNight(game, night, ghost).state;
+        assert.equal(game.privateControls(dawn, ghost).some((control) => control.type === "drain"), false);
+        const nextNight: WerewolfState = { ...dawn, phase: "night", round: 2 };
+        const bar = game.privateControls(nextNight, ghost).find((control) => control.type === "drain");
+        assert.ok(bar?.type === "drain" && bar.key === "night-2");
     });
 });
 

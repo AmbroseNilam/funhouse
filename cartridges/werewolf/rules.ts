@@ -143,6 +143,15 @@ const ART_PROMPTS: { id: string; prompt: string }[] = [
 ];
 
 /**
+ * Names the clock for one night, the same on the TV and every phone.
+ * @param state the night.
+ * @returns the name.
+ */
+function nightClock(state: WerewolfState): string {
+    return `night-${state.round}`;
+}
+
+/**
  * Deterministic shuffle so tests can replay a seating.
  * @param items the list to shuffle.
  * @param random a function returning [0, 1).
@@ -748,6 +757,7 @@ export function createWerewolf(random: () => number = Math.random, pick: string 
                 blocks: [
                     { type: "moment", kind: "night", heading: "The werewolves wake", detail: "Everyone else, eyes closed and phones down." },
                     { type: "title", text: "Night falls", kicker: `Night ${state.round}` },
+                    { type: "drain", seconds: NIGHT_SECONDS, key: nightClock(state) },
                 ],
             };
         }
@@ -938,9 +948,11 @@ export function createWerewolf(random: () => number = Math.random, pick: string 
 
         privateControls(state: WerewolfState, playerId: string): Control[] {
             const held: Control[] = holderControls(state);
+            // The same bar on every phone at night, whatever its role, so the clock gives nothing away.
+            const bar: Control[] = state.phase === "night" ? [{ type: "drain", seconds: NIGHT_SECONDS, key: nightClock(state) }] : [];
             const seat: Seat | undefined = seatOf(state, playerId);
             if (seat === undefined) {
-                return [{ type: "waiting", text: "You are watching this round." }, ...held];
+                return [{ type: "waiting", text: "You are watching this round." }, ...bar, ...held];
             }
             const actions: LegalAction[] = this.legalActions(state, playerId);
             const asOptions = (): ControlOption[] => actions.map((action) => ({ id: action.actionId, label: action.label }));
@@ -957,13 +969,13 @@ export function createWerewolf(random: () => number = Math.random, pick: string 
                 return [card, { type: "choice", prompt: "You were the hunter. Who do you take with you?", options: asOptions(), multiple: false }, ...held];
             }
             if (seat.alive === false) {
-                return [card, ...ghostControls(state, seat, actions), ...held];
+                return [card, ...bar, ...ghostControls(state, seat, actions), ...held];
             }
             if (state.phase === "roles") {
                 return [card, ...bigAction(), ...held];
             }
             if (state.phase === "night") {
-                return [card, ...nightControls(state, seat, actions)];
+                return [card, ...bar, ...nightControls(state, seat, actions)];
             }
             if (state.phase === "dawn" || state.phase === "verdict") {
                 return [card, { type: "waiting", text: state.moment?.heading ?? "Watch the TV" }];
