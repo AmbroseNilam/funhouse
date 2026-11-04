@@ -16,6 +16,8 @@ export type SceneBlock =
     | { type: "title"; text: string; kicker?: string }
     | { type: "text"; text: string; emphasis?: "normal" | "large" | "whisper" }
     | { type: "image"; src: string; caption?: string }
+    /** Where a picture will appear, filling slowly while it's painted. Picture models give no real progress, so it never claims a number. The key names this one painting. */
+    | { type: "painting"; key: string; label: string }
     | { type: "gallery"; items: GalleryItem[] }
     | { type: "roster"; players: RosterEntry[] }
     | { type: "timer"; seconds: number; label?: string; running: boolean }

@@ -217,6 +217,9 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     if (block.type === "text") {
         return <p key={index} className={`text ${block.emphasis ?? "normal"}`}>{block.text}</p>;
     }
+    if (block.type === "painting") {
+        return <figure key={block.key} className="painting" role="status"><i /><figcaption>{block.label}</figcaption></figure>;
+    }
     if (block.type === "image") {
         return <figure key={index} className="image"><img src={block.src} alt={block.caption ?? ""} />{block.caption !== undefined ? <figcaption>{block.caption}</figcaption> : null}</figure>;
     }

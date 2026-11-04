@@ -334,7 +334,10 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
                     blocks.push({ type: "image", src: state.revealPicture });
                 }
                 if (state.revealPicture === null && state.stoppedWaitingForPicture === false) {
-                    blocks.push({ type: "text", text: "Still painting it…", emphasis: "whisper" });
+                    blocks.push({ type: "painting", key: "reveal", label: "Painting it…" });
+                }
+                if (state.revealPicture === null && state.stoppedWaitingForPicture === true) {
+                    blocks.push({ type: "text", text: `${HOST_NAME}'s paint ran dry this time.`, emphasis: "whisper" });
                 }
                 blocks.push({ type: "progress", label: "Doors opened", current: state.doorsOpened, max: DOOR_COUNT, marks: "door" });
                 return { mood: state.won === true ? "victory" : "defeat", transition: "fade", blocks };

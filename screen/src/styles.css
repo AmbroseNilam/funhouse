@@ -221,7 +221,11 @@
     .marks-door i { position: relative; width: calc(38 * var(--u)); height: calc(64 * var(--u)); background: #5a3d22; border-radius: calc(19 * var(--u)) calc(19 * var(--u)) 0 0; transform-origin: left center; transition: transform 340ms cubic-bezier(0.3, 1.2, 0.5, 1), background 340ms ease; }
     .marks-door i::after { content: ""; position: absolute; right: calc(6 * var(--u)); top: 54%; width: calc(5 * var(--u)); height: calc(5 * var(--u)); border-radius: 50%; background: var(--brass); }
     .marks-door i.done { background: var(--lamp); transform: perspective(calc(240 * var(--u))) rotateY(-46deg); }
+    .painting { position: relative; flex: none; align-self: flex-start; margin: 0; width: calc(420 * var(--u)); height: calc(280 * var(--u)); overflow: hidden; rotate: -1.2deg; background: var(--card); box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; }
+    .painting i { position: absolute; inset: 0; transform-origin: left; background: radial-gradient(circle at 30% 35%, var(--lamp), transparent 55%), radial-gradient(circle at 75% 70%, var(--wine), transparent 60%), var(--brass-dark); animation: painting-fill 12s cubic-bezier(0.3, 0.45, 0.4, 1) forwards; }
+    .painting figcaption { position: absolute; left: calc(20 * var(--u)); bottom: calc(14 * var(--u)); padding: calc(4 * var(--u)) calc(14 * var(--u)); background: var(--paper); color: var(--paper-ink); font-size: calc(32 * var(--u)); }
     .blocks .image { margin: 0; }
+    .blocks:has(.marks-door) .image img { max-height: calc(280 * var(--u)); }
     .blocks .image img { max-height: calc(360 * var(--u)); width: auto; rotate: -1.2deg; box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; animation: reveal-in 700ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .play-column { position: absolute; left: calc(80 * var(--u)); right: calc(420 * var(--u)); top: calc(60 * var(--u)); bottom: calc(300 * var(--u)); display: flex; flex-direction: column; gap: calc(16 * var(--u)); }
     .turn-label { flex: none; align-self: flex-start; margin: 0; padding: calc(6 * var(--u)) calc(18 * var(--u)); font-size: calc(36 * var(--u)); font-weight: 600; background: var(--paper); color: var(--paper-ink); rotate: -0.6deg; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
@@ -443,6 +447,11 @@
 @keyframes lantern-think {
     from { translate: 0 0; }
     to { translate: 0 -5px; }
+}
+
+@keyframes painting-fill {
+    from { transform: scaleX(0.03); filter: blur(calc(24 * var(--u))); }
+    to { transform: scaleX(0.9); filter: blur(calc(4 * var(--u))); }
 }
 
 @keyframes drain-down {

@@ -365,7 +365,7 @@ export function createGuessingGame(givenBox: Box, givenDecisions: GuessingDecisi
             const progress: SceneBlock = { type: "progress", label: count.label, current: state.count.used, max: count.budget, marks: count.marks };
             if (state.phase === "end") {
                 const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
-                const painting: SceneBlock = state.revealPicture === null ? { type: "text", text: "Still painting it…", emphasis: "whisper" } : { type: "image", src: state.revealPicture };
+                const painting: SceneBlock = state.revealPicture === null ? { type: "painting", key: "reveal", label: "Painting it…" } : { type: "image", src: state.revealPicture };
                 if (decisions.paintReveal === true) {
                     blocks.push(painting);
                 }

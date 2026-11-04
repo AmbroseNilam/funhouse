@@ -453,7 +453,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     transition: "fade",
                     blocks: [
                         { type: "title", text: "Painting", ...(wrote === undefined ? {} : { kicker: `${wrote.writerName}'s line is in` }) },
-                        { type: "text", text: "The host is mixing the colours. This takes a moment.", emphasis: "large" },
+                        { type: "painting", key: `paint-${state.step}`, label: "Mixing the colours…" },
                         progress,
                     ],
                 };
