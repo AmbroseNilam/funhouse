@@ -6,9 +6,10 @@ import type { Blueprint, TapBlueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
+import { createIdentityGame, type IdentityState } from "./kits/identity.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
 import { createFitsGame, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
-import { fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { fitsPersonas, fitsTapCheck, guessingPersonas, identityNameCheck, identityPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -28,6 +29,10 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "plant") {
         const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
+    }
+    if (blueprint.kit === "identity") {
+        const makeIdentity = (seed: number): KitGame<IdentityState> => createIdentityGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearseMany(makeIdentity, identityPersonas(), CHECK_SEEDS, { ...options, roleCheck: identityNameCheck(blueprint) });
     }
     const fits: TapBlueprint & { decisions: FitsDecisions } = { ...blueprint, decisions: blueprint.decisions };
     const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);
