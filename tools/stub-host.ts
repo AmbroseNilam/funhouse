@@ -69,6 +69,9 @@ export function hostReply(system: string, user: string): string {
         const said: string = lines.at(-1) ?? "";
         return said.toLowerCase().includes(place.toLowerCase()) === true ? "[[right]]" : "[[wrong]]";
     }
+    if (rulings.includes("locked") === true && text.includes("(Game:") === false && text.trim() !== "") {
+        return "[[locked]]";
+    }
     if (system.includes("Players are questioning each other in turn") === true) {
         return "(quiet)";
     }
