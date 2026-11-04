@@ -70,6 +70,20 @@ export function installBlueprint(given: Blueprint, kits: Kits = KITS): Installed
 }
 
 /**
+ * The same game with the metadata's decisions for a table with an agent, if it has any.
+ * @param game the game.
+ * @param catalog the kits to build with.
+ * @returns what to add to its shelf entry.
+ */
+function slowerForAgents(game: DiscoveredGame, catalog: Catalog): Partial<InstalledGame> {
+    if (game.meta.agentDecisions === undefined) {
+        return {};
+    }
+    const slower: InstalledGame = installBlueprint({ ...game.blueprint, decisions: { ...game.blueprint.decisions as object, ...game.meta.agentDecisions } }, catalog.kits);
+    return { createForAgents: (stage: GameStage, pick?: string): RunningGame => slower.create(stage, pick) };
+}
+
+/**
  * A shelf where every shipped blueprint stands in for the hand-written game with the same id,
  * and blueprints with new ids come after the hand-written games. A game that can't be installed is
  * logged and left off, so a hand-written game it would replace stays on the shelf.
@@ -83,7 +97,8 @@ export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = fa
     const installed: InstalledGame[] = shown.flatMap((game: DiscoveredGame) => {
         try {
             const made: InstalledGame = installBlueprint(game.blueprint, catalog.kits);
-            const offered: InstalledGame = game.meta.guests === undefined ? made : { ...made, guests: game.meta.guests };
+            const guested: InstalledGame = game.meta.guests === undefined ? made : { ...made, guests: game.meta.guests };
+            const offered: InstalledGame = game.meta.agents === true ? { ...guested, agents: true, ...slowerForAgents(game, catalog) } : guested;
             return [game.meta.level === "visible" ? offered : { ...offered, pitch: `Testing. ${offered.pitch}` }];
         } catch (error: unknown) {
             log("studio", `LEFT OUT ${game.meta.id}: ${error instanceof Error ? error.message : String(error)}`);

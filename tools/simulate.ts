@@ -259,7 +259,7 @@ export class FakePhone {
      * @param action what to do.
      * @param playerId which guest; the newest if not said.
      */
-    public guest(action: "add" | "remove", playerId?: string): void {
+    public guest(action: "add" | "remove" | "inviteAgent", playerId?: string): void {
         this.socket.send(JSON.stringify({ type: "guest", action, ...(playerId === undefined ? {} : { playerId }) }));
     }
 

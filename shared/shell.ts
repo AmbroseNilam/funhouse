@@ -57,8 +57,10 @@ export interface Seat {
     phoneDown: boolean;
     /** True when they joined after this game began, so they're only watching it. */
     watching: boolean;
-    /** True for an AI guest, which the TV always marks as one. */
+    /** True for a seat a machine plays: an AI guest or someone's agent. The TV always marks it, and it never drives. */
     guest: boolean;
+    /** True when that machine is someone's own agent, from outside the room. */
+    agent: boolean;
 }
 
 /** Everything the TV needs to draw the console. */

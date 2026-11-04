@@ -33,6 +33,7 @@ const START_NOW: string = "Start now";
 /** The game page's rows for AI guests, and its way back. */
 const ADD_GUEST: string = "Add an AI guest";
 const REMOVE_GUEST: string = "Remove an AI guest";
+const REMOVE_AGENT: string = "Remove an agent";
 const BACK_TO_SHELF: string = "Back to the shelf";
 
 /** Rows once a game has been decided. */
@@ -363,7 +364,11 @@ export class Shell {
         if (this.currentGame()?.guestsWelcome === true && this.stage.mayAddGuest() === true) {
             return [ADD_GUEST];
         }
-        return this.stage.seats().some((seat) => seat.guest === true) ? [REMOVE_GUEST] : [];
+        const newest: Omit<Seat, "driving"> | undefined = this.stage.seats().filter((seat) => seat.guest === true).at(-1);
+        if (newest === undefined) {
+            return [];
+        }
+        return [newest.agent === true ? REMOVE_AGENT : REMOVE_GUEST];
     }
 
     /**
@@ -481,7 +486,7 @@ export class Shell {
             this.stage.changed();
             return;
         }
-        if (row === REMOVE_GUEST) {
+        if (row === REMOVE_GUEST || row === REMOVE_AGENT) {
             this.stage.removeGuest();
             this.stage.changed();
             return;

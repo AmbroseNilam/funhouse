@@ -23,7 +23,7 @@ const QUICK: GuestPersona = { ...(GUEST_PERSONAS[0] as GuestPersona), minimumDel
  */
 function viewOf(controls: Control[]): PhoneView {
     return {
-        gameOn: false, playerName: QUICK.name, listening: "muted", status: "", controls, hearing: "", tapToTalk: false, talkWaiting: false, turn: null, guests: { seated: [], canAdd: false, canRemove: false },
+        gameOn: false, playerName: QUICK.name, listening: "muted", status: "", controls, hearing: "", tapToTalk: false, talkWaiting: false, turn: null, guests: { seated: [], canAdd: false, canRemove: false, agents: null },
         pad: { colour: "#000000", axis: null, canPrevious: false, canNext: false, driving: false, driverName: "", controllerFree: false, watching: false, canDrive: false, backLabel: null, canSelect: false, pausedBy: "", confirmEnd: false, startCard: [] },
     };
 }

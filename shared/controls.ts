@@ -66,11 +66,13 @@ export interface PhoneView {
 /** The AI guests at the table and what this phone may do about them. */
 export interface GuestTable {
     /** Who's sitting in. */
-    seated: { playerId: string; name: string; style: string }[];
+    seated: { playerId: string; name: string; style: string; agent: boolean }[];
     /** True when this phone may seat another. */
     canAdd: boolean;
     /** True when this phone may send one home; guests only come and go between games. */
     canRemove: boolean;
+    /** Whether this phone can bring its own agent, or null where the room doesn't offer that. */
+    agents: { canInvite: boolean; link: string; games: string[] } | null;
 }
 
 /** What a phone sends when a player uses a control. */

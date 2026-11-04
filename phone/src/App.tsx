@@ -539,6 +539,30 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
 }
 
 /** The phone application. */
+/**
+ * The words to paste to someone's agent, with the link in them.
+ * @param props the link and the games an agent can play.
+ * @returns the element.
+ */
+function AgentInvite(props: { link: string; games: string[] }): ReactElement {
+    const [copied, setCopied] = useState<boolean>(false);
+    const words: string = `Join my party game as my AI agent and play with me. Open this link and follow what it says: ${props.link}`;
+    const copy = (): void => {
+        navigator.clipboard.writeText(words).then(() => { setCopied(true); }).catch(() => { setCopied(false); });
+    };
+    const share = (): void => {
+        navigator.share({ text: words }).catch(() => { /* someone closed the share sheet */ });
+    };
+    return (
+        <>
+            <p className="mic-note">Paste this to any agent. It can play {props.games.join(", ")}. Anyone with the link gets the seat, and it stops working in ten minutes if nobody sits down.</p>
+            <textarea className="agent-words" readOnly rows={6} value={words} onFocus={(event) => { event.target.select(); }} />
+            {"clipboard" in navigator ? <button className="primary" onClick={copy}>{copied === true ? "Copied" : "Copy"}</button> : null}
+            {"share" in navigator ? <button onClick={share}>Share</button> : null}
+        </>
+    );
+}
+
 export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
     const socketRef = useRef<WebSocket | null>(null);
@@ -1325,7 +1349,7 @@ export function App(): ReactElement {
                                 {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
                                 {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
-                                {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0) ? <button onClick={() => { setMenu("guests"); }}>AI guests</button> : null}
+                                {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0 || view.guests.agents !== null) ? <button onClick={() => { setMenu("guests"); }}>{view.guests.agents === null ? "AI guests" : "AI guests and agents"}</button> : null}
                                 {installWay !== null ? <button onClick={() => { setMenu("install"); }}>Add to your home screen</button> : null}
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
@@ -1361,12 +1385,14 @@ export function App(): ReactElement {
                                 <ul className="guest-list">
                                     {(view?.guests.seated ?? []).map((guest) => (
                                         <li key={guest.playerId}>
-                                            <div><strong>{guest.name}</strong> <small className="guest-mark">AI guest</small><br />{guest.style}</div>
+                                            <div><strong>{guest.name}</strong> <small className="guest-mark">{guest.agent === true ? "AI agent" : "AI guest"}</small><br />{guest.style}</div>
                                             {view?.guests.canRemove === true ? <button className="quiet" onClick={() => { send({ type: "guest", action: "remove", playerId: guest.playerId }); }}>Remove</button> : null}
                                         </li>
                                     ))}
                                 </ul>
                                 {view?.guests.canAdd === true ? <button className="primary" onClick={() => { send({ type: "guest", action: "add" }); }}>Add a guest</button> : null}
+                                {view?.guests.agents?.canInvite === true ? <button onClick={() => { send({ type: "guest", action: "inviteAgent" }); }}>Add an agent</button> : null}
+                                {view?.guests.agents !== undefined && view.guests.agents !== null && view.guests.agents.link !== "" ? <AgentInvite link={view.guests.agents.link} games={view.guests.agents.games} /> : null}
                                 {view?.guests.canRemove === false && (view.guests.seated.length > 0) ? <p className="mic-note">Guests come and go between games.</p> : null}
                                 <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
