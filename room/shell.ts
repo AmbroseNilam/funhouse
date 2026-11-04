@@ -2,6 +2,7 @@
 // offers. It decides nothing about any game. Starting and leaving go back to the room through
 // its stage, so the same paths work from a phone or from the host.
 
+import type { GamePick } from "../shared/cartridge.ts";
 import type { NavAction, NavAxis, PadView, Seat, ShelfGame, ShellScreen, ShellView } from "../shared/shell.ts";
 
 /** How long a driver may sit idle before anyone else's swipe takes over. */
@@ -52,6 +53,8 @@ export interface ShellStage {
     seats(): Omit<Seat, "driving">[];
     /** Starts a game, with what was chosen for it if it asks for a choice. */
     startGame(gameId: string, pick?: string): void;
+    /** A question the running game has for the picker, if it's setting itself up. */
+    gamePick(): GamePick | null;
     /** A choice before a game has opened, for the host to mention. */
     pickOpened(hostLine: string): void;
     endGame(): void;
@@ -99,6 +102,7 @@ export class Shell {
     private shelfFocus: number = 0;
     private gameId: string | null = null;
     private driverId: string | null = null;
+    private gamePickKey: string = "";
     private lastDriveAt: number = 0;
     private freeTimer: NodeJS.Timeout | null = null;
     private pickTimer: NodeJS.Timeout | null = null;
@@ -124,6 +128,7 @@ export class Shell {
      * @param action what.
      */
     public act(playerId: string, action: NavAction): void {
+        this.followGamePick();
         const takingTheQuestion: boolean = this.screen === "confirmEnd" && this.driverId !== playerId;
         if (this.claimDrive(playerId) === false || takingTheQuestion === true) {
             return;
@@ -203,6 +208,23 @@ export class Shell {
     }
 
     /**
+     * The running game's question for the picker, unless a pause or anything else is on top.
+     * @returns the pick, if there is one.
+     */
+    private gamePick(): GamePick | null {
+        return this.screen === "play" ? this.stage.gamePick() : null;
+    }
+
+    /** Puts the highlight back on the first row when the game moves to a new question. */
+    private followGamePick(): void {
+        const key: string = this.gamePick()?.prompt ?? "";
+        if (key !== this.gamePickKey) {
+            this.gamePickKey = key;
+            this.focus = 0;
+        }
+    }
+
+    /**
      * Whether this person has the controller.
      * @param playerId who.
      * @returns true for the driver.
@@ -216,9 +238,12 @@ export class Shell {
      * @returns the view.
      */
     public view(): ShellView {
+        this.followGamePick();
+        const pick: GamePick | null = this.gamePick();
         const seats: Seat[] = this.stage.seats().map((seat) => ({ ...seat, driving: seat.playerId === this.driverId }));
         return {
-            screen: this.screen,
+            screen: pick === null ? this.screen : "setup",
+            setup: pick === null ? null : { prompt: pick.prompt, kicker: pick.kicker },
             axis: this.axis(),
             focus: this.focus,
             games: this.stage.games(),
@@ -238,6 +263,7 @@ export class Shell {
      * @returns the view.
      */
     public pad(playerId: string, colour: string): PadView {
+        this.followGamePick();
         const driver: Omit<Seat, "driving"> | undefined = this.stage.seats().find((seat) => seat.playerId === this.driverId);
         const count: number = this.itemCount();
         const canDrive: boolean = this.mayDrive(playerId);
@@ -347,6 +373,10 @@ export class Shell {
      * @returns the labels.
      */
     private menu(): string[] {
+        const pick: GamePick | null = this.gamePick();
+        if (pick !== null) {
+            return pick.choices.map((choice) => choice.label);
+        }
         if (this.screen === "game") {
             return [this.currentGame()?.blocked === null ? "Play" : "Can't start yet", ...this.guestRows(), BACK_TO_SHELF];
         }
@@ -410,7 +440,7 @@ export class Shell {
      * @returns the axis, or null when there's nothing to move through.
      */
     private axis(): NavAxis {
-        if (this.screen === "home" || this.screen === "pick") {
+        if (this.screen === "home" || this.screen === "pick" || this.gamePick() !== null) {
             return "x";
         }
         return this.itemCount() > 1 ? "y" : null;
@@ -464,6 +494,14 @@ export class Shell {
      * @param playerId who chose it.
      */
     private select(playerId: string): void {
+        const pick: GamePick | null = this.gamePick();
+        if (pick !== null) {
+            const choice = pick.choices[this.focus];
+            if (choice !== undefined) {
+                this.stage.gameAction(playerId, choice.id);
+            }
+            return;
+        }
         if (this.screen === "home") {
             this.selectOnShelf();
             return;

@@ -3,7 +3,7 @@
 // only ever says which way the thumb went.
 
 /** Which screen the TV is on. */
-export type ShellScreen = "home" | "game" | "pick" | "startCard" | "players" | "addPlayer" | "addGuest" | "guestLine" | "agentOnPhone" | "play" | "pause" | "howTo" | "confirmEnd";
+export type ShellScreen = "home" | "game" | "pick" | "setup" | "startCard" | "players" | "addPlayer" | "addGuest" | "guestLine" | "agentOnPhone" | "play" | "pause" | "howTo" | "confirmEnd";
 
 /** Which way a phone's swipes move the highlight, if at all. */
 export type NavAxis = "x" | "y" | null;
@@ -74,6 +74,8 @@ export interface ShellView {
     gameId: string | null;
     /** Rows on the current screen; empty when it has none. */
     menu: string[];
+    /** The question on a game's own setup screen. */
+    setup: { prompt: string; kicker: string } | null;
     seats: Seat[];
     /** True once a game has been decided and is showing its result. */
     gameOver: boolean;

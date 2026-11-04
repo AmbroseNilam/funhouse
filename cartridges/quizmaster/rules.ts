@@ -4,14 +4,14 @@
 import type { StartPick } from "../../shared/shell.ts";
 import type { Turn } from "../../shared/turn.ts";
 import { HOST_NAME } from "../../shared/brand.ts";
-import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
+import type { Cartridge, CartridgePlayer, GamePick, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { isHostSafe, shuffled } from "../../studio/kit/text.ts";
-import { answerSetup, followUpPrompt, parseFollowUp, SETUP_START, setupBlocks, setupControls, setupFinished, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
+import { answerOwn, answerSetup, isSetupBox, parseSetupQuestions, SETUP_START, setupBlocks, setupControls, setupFinished, setupPick, setupPrompt, startSetup, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
 import { REVEAL_NOW } from "../../shared/controls.ts";
 import { DRAIN_WARM_SECONDS } from "../../shared/drain.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
@@ -40,8 +40,8 @@ const MOST_QUESTIONS: number = 10;
 /** Shortest clock worth a nudge from the host: on a quicker one he'd still be reading the question. */
 const NUDGE_FROM_SECONDS: number = 30;
 
-/** How long the model gets to write a follow-up before setup carries on without one. */
-const FOLLOW_UP_WAIT_SECONDS: number = 5;
+/** How long the model gets to write its setup questions before the fixed ones carry on alone. */
+const SETUP_WAIT_SECONDS: number = 7;
 
 /** Most names listed on the TV as still answering, before it just counts them. */
 const STILL_ANSWERING_NAMES: number = 3;
@@ -275,7 +275,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      */
     const prepare = (state: QuizmasterState, topic: string): Step<QuizmasterState> => {
         const request: string = [
-            `Write ${state.count + EXTRA_QUESTIONS_REQUESTED} trivia questions about the topic "${state.focus === "" ? topic : `${topic}: ${state.focus}`}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
+            `Write ${state.count + EXTRA_QUESTIONS_REQUESTED} trivia questions about the topic "${topic}"${state.focus === "" ? "" : ` (asked what they wanted, the room said: "${state.focus}")`}, pitched at general knowledge: fun for adults, none needing specialist expertise,`,
             "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
             "Only use facts you are sure of, and don't put the answer in the question.",
             ...(multipleChoice === true ? [
@@ -302,20 +302,19 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             state: { ...state, phase: "thinking", topic, setup: null, focus: "" },
             facts: [fact],
             nextPhaseId: "thinking",
-            followUpRequest: { id: `follow-up-${topic}`, prompt: followUpPrompt(topic) },
-            timers: { "setup-wait": FOLLOW_UP_WAIT_SECONDS },
+            followUpRequest: { id: `setup-${topic}`, prompt: setupPrompt(topic, "A party quiz") },
+            timers: { "setup-wait": SETUP_WAIT_SECONDS },
         };
     };
 
     /**
      * Opens the setup questions.
      * @param state the state.
-     * @param followUp the model's question, if it wrote a good one.
+     * @param written the model's questions that passed, if any.
      * @returns the step.
      */
-    const askSetup = (state: QuizmasterState, followUp: SetupQuestion | null): Step<QuizmasterState> => {
-        const questions: SetupQuestion[] = [...(followUp === null ? [] : [followUp]), ...SETUP_QUESTIONS];
-        return { state: { ...state, phase: "setup", setup: { questions, at: 0, chosen: {} } }, facts: [], nextPhaseId: "setup" };
+    const askSetup = (state: QuizmasterState, written: SetupQuestion[]): Step<QuizmasterState> => {
+        return { state: { ...state, phase: "setup", setup: startSetup([...written, ...SETUP_QUESTIONS]) }, facts: [], nextPhaseId: "setup" };
     };
 
     /**
@@ -325,10 +324,20 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      */
     const finishSetup = (state: QuizmasterState): Step<QuizmasterState> => {
         const chosen: Record<string, string> = state.setup?.chosen ?? {};
-        const followUp: SetupQuestion | undefined = state.setup?.questions.find((question: SetupQuestion) => question.id === "follow-up");
-        const focus: string = followUp?.options.find((option) => option.id === chosen["follow-up"])?.label ?? "";
+        const focus: string = (state.setup?.told ?? []).map((line) => `${line.prompt} ${line.answer}`).join(" ");
         const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "none"];
         return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace ?? null }, state.topic);
+    };
+
+    /**
+     * Carries on after a setup answer.
+     * @param state the state.
+     * @param progress where setup is now.
+     * @returns the step.
+     */
+    const afterSetupAnswer = (state: QuizmasterState, progress: SetupProgress): Step<QuizmasterState> => {
+        const answered: QuizmasterState = { ...state, setup: progress };
+        return setupFinished(progress) === true ? finishSetup(answered) : { state: answered, facts: [] };
     };
 
     /**
@@ -541,8 +550,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 if (progress === null) {
                     return { state, facts: [] };
                 }
-                const answered: QuizmasterState = { ...state, setup: progress };
-                return setupFinished(progress) === true ? finishSetup(answered) : { state: answered, facts: [] };
+                return afterSetupAnswer(state, progress);
             }
             if (state.phase === "question" && state.questionSeconds === null && actionId === REVEAL_NOW) {
                 return finishQuestion(state, "The host of the room asked to see the answer.");
@@ -579,12 +587,17 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 const settled: boolean = players.length === 0 || players.every((player) => state.answered.includes(player.playerId));
                 return settled === true ? finishQuestion(remaining, "Everyone left has answered.") : { state: remaining, facts: [] };
             }
+            if (state.phase === "setup" && state.setup !== null && ((event.type === "answered" && typeof event.value === "string" && isSetupBox(state.setup, event.controlId) === true) || (event.type === "hostRuled" && event.ruling === "own"))) {
+                const own: string = event.type === "answered" ? String(event.value) : event.detail;
+                const progress: SetupProgress | null = answerOwn(state.setup, own);
+                return progress === null ? { state, facts: [] } : afterSetupAnswer(state, progress);
+            }
             if (event.type === "followUpReady") {
-                return state.phase === "thinking" ? askSetup(state, parseFollowUp(event.text)) : { state, facts: [] };
+                return state.phase === "thinking" ? askSetup(state, parseSetupQuestions(event.text)) : { state, facts: [] };
             }
             if (event.type === "timerFired") {
                 if (state.phase === "thinking" && event.timerId === "setup-wait") {
-                    return askSetup(state, null);
+                    return askSetup(state, []);
                 }
                 if (state.phase === "lockedIn" && event.timerId === "reveal-build") {
                     return lightAnswer(state);
@@ -725,12 +738,19 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             };
         },
 
+        setupPick(state: QuizmasterState): GamePick | null {
+            if (state.phase !== "thinking" && state.phase !== "setup") {
+                return null;
+            }
+            return setupPick(state.setup, `${HOST_NAME} is thinking…`, `${state.topic}. Slide and tap on your phone.`);
+        },
+
         privateControls(state: QuizmasterState, playerId: string): Control[] {
             if (state.phase === "topic") {
                 return [{ type: "buttons", prompt: "Say or type a topic.", options: [{ id: SURPRISE, label: "Surprise me instead" }] }];
             }
             if (state.phase === "thinking" || state.phase === "setup") {
-                return setupControls(state.setup, `${HOST_NAME} is thinking…`);
+                return setupControls(state.setup);
             }
             if (state.phase === "preparing") {
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];
@@ -770,6 +790,10 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         },
 
         hostFacts(state: QuizmasterState, scope: Scope): ScopedFact[] {
+            const asking: SetupQuestion | undefined = state.setup?.questions[state.setup.at];
+            if (scope.kind === "host" && state.phase === "setup" && asking !== undefined) {
+                return [{ scope: { kind: "public" }, kind: "setup-question", text: `The TV is asking: ${asking.prompt} Choices: ${asking.options.map((option) => option.label).join(", ")}.` }];
+            }
             if (scope.kind !== "host" || state.phase !== "question") {
                 return [];
             }

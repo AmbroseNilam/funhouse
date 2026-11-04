@@ -35,10 +35,13 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
         },
         {
             id: "setup",
-            hostBrief: "The players are making a few quick choices on their phones and the TV shows them. Stay quiet until you're told the questions are ready.",
+            hostBrief: "The TV is asking the players a setup question, given in your facts. When anyone answers it in any words, even an answer that isn't on the list, rule it straight away and say nothing else; never ask them to choose from the list. Only stay quiet for chat that doesn't answer it.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: false,
             silenceSeconds: 0,
+            hostRulings: {
+                own: "someone answered the question on the TV. Write it as [[own: their answer in a few words]] and nothing else; you'll be told what to say next.",
+            },
         },
         {
             id: "preparing",

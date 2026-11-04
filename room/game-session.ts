@@ -3,7 +3,7 @@
 // rules stay the referee. The host hears facts and may only make rulings the phase allows.
 
 import type { Turn } from "../shared/turn.ts";
-import type { ContentGrounding, Cartridge, CartridgeManifest, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
+import type { GamePick, ContentGrounding, Cartridge, CartridgeManifest, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { Control, ListeningMode } from "../shared/controls.ts";
 import type { Scene } from "../shared/scene.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
@@ -36,6 +36,8 @@ export interface RunningGame {
     start(players: CartridgePlayer[]): void;
     /** A player pressed a button or sent text. */
     input(playerId: string, value: string): void;
+    /** A question for the TV's picker, while the game sets itself up. */
+    setupPick(): GamePick | null;
     /** Something happened in the room that the rules may care about. */
     event(event: RoomEvent): void;
     /** Who is out of the game but still at the table. */
@@ -104,6 +106,15 @@ export class GameSession<State> implements RunningGame {
      * Passes a player's button press or text to the rules.
      * @param playerId who.
      * @param value the option id or typed text.
+     */
+    public setupPick(): GamePick | null {
+        return this.state === null ? null : this.cartridge.setupPick?.(this.state) ?? null;
+    }
+
+    /**
+     * Passes a player's press or text to the rules.
+     * @param playerId who.
+     * @param value what.
      */
     public input(playerId: string, value: string): void {
         if (this.state === null) {

@@ -50,6 +50,7 @@ function seat(playerId: string, name: string): Omit<Seat, "driving"> {
 function shellWith(told: Told): Shell {
     let shell: Shell | null = null;
     const stage: ShellStage = {
+        gamePick: () => null,
         games: () => [GAME],
         seats: () => told.seats ?? [seat("a", "Ana"), seat("b", "Ben"), seat("c", "Cy")],
         startGame: (gameId: string, pick?: string) => { told.started.push({ gameId, pick }); shell?.gameStarted(gameId); },
@@ -346,6 +347,7 @@ describe("the console", () => {
             { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false, agent: false },
         ];
         const shell: Shell = new Shell({
+            gamePick: () => null,
             games: () => [],
             seats: () => seats,
             startGame: () => undefined,

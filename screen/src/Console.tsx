@@ -271,6 +271,20 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} pointing={pointing} />;
     }
     const game: ShelfGame | undefined = shell.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
+    if (shell.screen === "setup" && shell.setup !== null && game !== undefined) {
+        return (
+            <section className="screen pick-screen setup-screen">
+                <Poster className="room-art" id={game.id} art={game.art} />
+                <header className="shelf-heading">
+                    <h1>{shell.setup.prompt}</h1>
+                    <p>{shell.setup.kicker}</p>
+                </header>
+                <ul className="pick-boxes">
+                    {shell.menu.map((label: string, index: number) => <li key={label} {...chooseProps(pointing, index)} className={index === shell.focus ? "focused" : ""}>{label}</li>)}
+                </ul>
+            </section>
+        );
+    }
     if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
         return (
             <section className="screen pick-screen">

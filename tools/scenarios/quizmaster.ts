@@ -155,8 +155,8 @@ await waitFor(() => screen.title() === "Quizmaster", "Quizmaster to start");
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, SETTLE_MILLISECONDS); });
 const topicBefore: number = screen.hostLines.length;
 sam.say(`Let's do this topic: ${TOPIC}.`);
-await waitFor(() => sam.options().some((option) => option.label === "Just start"), "setup");
-sam.press("Just start");
+await waitFor(() => screen.shell?.screen === "setup", "setup");
+sam.nav({ kind: "choose", index: screen.shell?.menu.indexOf("Just start") ?? 0 });
 await screen.nextHostLine(topicBefore);
 await reach(1, "the first question");
 

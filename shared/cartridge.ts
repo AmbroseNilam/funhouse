@@ -71,6 +71,14 @@ export interface ContentGrounding {
     cacheable: boolean;
 }
 
+/** A question a running game puts on the TV's picker. Each choice's id comes back to the game as an action. */
+export interface GamePick {
+    prompt: string;
+    /** The line under the heading. */
+    kicker: string;
+    choices: { id: string; label: string }[];
+}
+
 /** Result of applying an action or event: the new state plus facts to record. */
 export interface Step<State> {
     state: State;
@@ -88,7 +96,7 @@ export interface Step<State> {
      * answersMerged event with this id. Only filtered text, and no player names.
      */
     mergeRequest?: { id: string; question: string; answers: string[] };
-    /** Asks the fast model for one setup follow-up. It returns as followUpReady, with empty text if it failed. */
+    /** Asks the fast model for setup questions. It returns as followUpReady, with empty text if it failed. */
     followUpRequest?: { id: string; prompt: string };
     /** Pictures to draw ahead of need; each returns as drawingReady, or never if drawing fails. */
     draws?: { id: string; prompt: string }[];
@@ -117,6 +125,8 @@ export interface Cartridge<State> {
     onEvent(state: State, event: RoomEvent): Step<State>;
     /** What the public screen may show. */
     publicScene(state: State): Scene;
+    /** A question for the TV's picker, with the phone driving it, while a game sets itself up. */
+    setupPick?(state: State): GamePick | null;
     /** What one phone may show. */
     privateControls(state: State, playerId: string): Control[];
     /** Facts the host may narrate right now, filtered by the scope it is speaking into. */

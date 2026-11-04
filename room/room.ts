@@ -7,9 +7,10 @@
 // on the screen, each phone keeps a transcription session open ahead of its next press, and a
 // short pre-recorded filler plays when a reply is slow to start.
 
+import { OWN_ANSWER_LIMIT } from "../cartridges/setup-step.ts";
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
-import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
+import type { GamePick, ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
 import { REVEAL_NOW, type Control, type GuestTable, type HostVoiceChoice, type ListeningMode, type PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
@@ -340,10 +341,13 @@ const GUEST_LINE_GAP_MILLISECONDS: number = 5000;
 /** Most people a phone names when it's waiting; beyond that it counts them. */
 const WAITING_NAMES: number = 3;
 
-/** How long a setup follow-up may take. */
-const FOLLOW_UP_TIME_LIMIT_MILLISECONDS: number = 4500;
+/** The ruling that carries someone's own spoken answer to a setup question. */
+const OWN_ANSWER_RULING: string = "own";
 
-/** Room for the model's reasoning plus one short question. */
+/** How long the model may take over setup questions. */
+const FOLLOW_UP_TIME_LIMIT_MILLISECONDS: number = 6500;
+
+/** Room for the model's reasoning plus a few short questions. */
 const FOLLOW_UP_TOKEN_LIMIT: number = 1500;
 
 const NO_GUESTS_HERE: string = "AI guests can't play this one. Remove them first.";
@@ -440,6 +444,7 @@ export class Room implements HostStage, AgentHost {
     private readonly host: Host;
     private readonly voice: HostVoice;
     private hostVoiceChoice: HostVoiceChoice = "current";
+    private lastGamePick: string = "";
     private readonly speech: OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech = chooseVoice();
     private woken: boolean = false;
     private game: RunningGame | null = null;
@@ -889,7 +894,26 @@ export class Room implements HostStage, AgentHost {
             log(this.scope(), "ignored a ruling the moment doesn't allow");
             return;
         }
+        if (ruling === OWN_ANSWER_RULING) {
+            void this.passOwnAnswer(detail, speakerId);
+            return;
+        }
         this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: speakerId });
+    }
+
+    /**
+     * Runs someone's own spoken setup answer past the same filter as a typed one, before the game sees it.
+     * @param detail what the host heard them say.
+     * @param speakerId who said it.
+     */
+    private async passOwnAnswer(detail: string, speakerId: string | null): Promise<void> {
+        const game: RunningGame | null = this.game;
+        const classify = async (line: string): Promise<boolean> => BUDGET.spend("guest") === true && await isFitForRoom(line);
+        const result: FilterResult = await filterText(detail, OWN_ANSWER_LIMIT, classify);
+        log(this.scope(), `own setup answer: ${result.allowed === true ? "passed" : `filtered, ${result.category}`}`);
+        if (result.allowed === true && this.game === game) {
+            game?.event({ type: "hostRuled", at: Date.now(), ruling: OWN_ANSWER_RULING, detail: result.text, playerId: speakerId });
+        }
     }
 
     /**
@@ -1913,6 +1937,7 @@ export class Room implements HostStage, AgentHost {
      */
     private shellStage(): ShellStage {
         return {
+            gamePick: (): GamePick | null => this.game?.setupPick() ?? null,
             games: (): ShelfGame[] => this.games.map((game: InstalledGame) => this.shelfGame(game)),
             seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk, phoneDown, guest, agent }: Player) => ({
                 guest: guest !== null || agent !== null,
@@ -2245,6 +2270,12 @@ export class Room implements HostStage, AgentHost {
             tellHost: (line: string): void => { this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen); },
             changed: (): void => {
                 this.broadcastScene();
+                const pick: string = this.game?.setupPick()?.prompt ?? "";
+                if (pick !== this.lastGamePick) {
+                    this.lastGamePick = pick;
+                    this.broadcastShell();
+                    this.refreshPhones();
+                }
                 if (this.gameDecided === false && this.game?.outcome() !== null) {
                     this.gameDecided = true;
                     this.shell.gameDecided();

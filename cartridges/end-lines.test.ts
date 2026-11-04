@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { GamePick } from "../shared/cartridge.ts";
 import { createQuizmaster, QUESTION_COUNT, REVEAL_BUILD_SECONDS } from "./quizmaster/rules.ts";
 import { createTwentyDoors } from "./twenty-doors/rules.ts";
 
@@ -108,6 +109,16 @@ describe("Twenty Doors' own topic", () => {
     });
 });
 
+/**
+ * What a quiz has on the TV's picker.
+ * @param game the game.
+ * @param state its state.
+ * @returns the pick, if there is one.
+ */
+function pickOf(game: ReturnType<typeof createQuizmaster>, state: ReturnType<ReturnType<typeof createQuizmaster>["init"]>["state"]): GamePick | null {
+    return game.setupPick?.(state) ?? null;
+}
+
 describe("Quizmaster's four answers", () => {
     const players = [{ playerId: "a", name: "Sam" }, { playerId: "b", name: "Alex" }];
     const items = Array.from({ length: QUESTION_COUNT }, (_unused: unknown, index: number) => ({ question: `Q${index} what?`, answer: `Right${index}`, wrong: [`Bad${index}a`, `Bad${index}b`, `Bad${index}c`] }));
@@ -192,39 +203,53 @@ describe("Quizmaster's four answers", () => {
         assert.deepEqual(heardNext.state.heard, ["a"], "the next thing they say counts");
     });
 
-    it("asks the setup questions, and they change the game", () => {
+    it("asks the model's questions, then the fixed ones, and the answers change the game", () => {
         const game = createQuizmaster("Movies", () => 0.4);
         const thinking = game.init(players, {});
         assert.equal(game.phaseOf(thinking.state), "thinking");
         assert.match(thinking.followUpRequest?.prompt ?? "", /Movies/);
-        const asked = game.onEvent(thinking.state, { type: "followUpReady", at: 0, id: "x", text: '{"question": "Old films or new?", "options": ["Old", "New"]}' }).state;
-        assert.match(JSON.stringify(game.privateControls(asked, "a")), /Old films or new\?/);
-        assert.match(JSON.stringify(game.privateControls(asked, "a")), /Just start/);
-        let state = asked;
-        for (const tap of ["setup:follow-up:1", "setup:level:hard", "setup:count:10", "setup:time:quick"]) {
-            state = game.apply(state, "b", tap).state;
-        }
-        assert.equal(game.phaseOf(state), "preparing");
-        assert.equal(state.count, 10);
-        const writing = game.apply(game.apply(game.apply(game.apply(asked, "b", "setup:follow-up:1").state, "b", "setup:level:hard").state, "b", "setup:count:10").state, "b", "setup:time:quick");
-        assert.match(writing.contentRequest ?? "", /Write 12 trivia questions about the topic "Movies: New"/);
-        assert.match(writing.contentRequest ?? "", /Make most of them hard/);
+        assert.deepEqual(pickOf(game, thinking.state)?.choices.map((choice) => choice.label), ["Just start"]);
+        const reply: string = JSON.stringify({ questions: [{ question: "Old films or new?", options: ["Old", "New"] }, { question: "Which genre?", options: ["Comedy", "Horror", "Drama"] }] });
+        const asked = game.onEvent(thinking.state, { type: "followUpReady", at: 0, id: "x", text: reply }).state;
+        assert.deepEqual(pickOf(game, asked)?.choices.map((choice) => choice.label), ["Old", "New", "Add your own", "Just start"]);
+        let state = game.apply(asked, "b", "setup:model-0:1").state;
+        assert.equal(pickOf(game, state)?.prompt, "Which genre?");
+        state = game.apply(state, "b", "setup-own").state;
+        assert.equal(pickOf(game, state), null, "the TV shows the question while the phones take the answer");
+        const box = game.privateControls(state, "a").find((control) => control.type === "textInput");
+        assert.equal(box?.type, "textInput");
+        state = game.onEvent(state, { type: "answered", at: 0, playerId: "a", controlId: box.id, value: "Westerns" }).state;
+        assert.equal(pickOf(game, state)?.prompt, "How hard?");
+        assert.equal(pickOf(game, state)?.choices.some((choice) => choice.label === "Add your own"), false);
+        state = game.onEvent(state, { type: "hostRuled", at: 0, ruling: "own", detail: "Hard", playerId: "a" }).state;
+        assert.equal(pickOf(game, state)?.prompt, "How many questions?");
+        assert.equal(game.onEvent(state, { type: "hostRuled", at: 0, ruling: "own", detail: "lots", playerId: "a" }).state, state, "a fixed question only takes what it offers");
+        const counted = game.apply(state, "b", "setup:count:10").state;
+        const writing = game.apply(counted, "b", "setup:time:quick");
+        assert.equal(game.phaseOf(writing.state), "preparing");
+        assert.equal(writing.state.count, 10);
+        assert.match(writing.contentRequest ?? "", /Write 12 trivia questions about the topic "Movies"/);
+        assert.match(writing.contentRequest ?? "", /Old films or new\? New Which genre\? Westerns/);
         const items = Array.from({ length: 12 }, (_unused: unknown, index: number) => ({ question: `Q${index} what?`, answer: `Right${index}`, wrong: [`Bad${index}a`, `Bad${index}b`, `Bad${index}c`] }));
-        const begun = game.onEvent(state, { type: "contentReady", at: 0, text: JSON.stringify(items) });
+        const begun = game.onEvent(writing.state, { type: "contentReady", at: 0, text: JSON.stringify(items) });
         assert.equal(begun.state.questions.length, 10);
         assert.equal(begun.timers?.["question-0"], 15);
+        assert.equal(pickOf(game, begun.state), null);
     });
 
-    it("skips a poor or late follow-up, and Just start skips everything", () => {
+    it("drops poor model questions, carries on if it's slow, and Just start skips everything", () => {
         const game = createQuizmaster("Movies", () => 0.4);
         const thinking = game.init(players, {}).state;
-        for (const bad of ["", "not json", '{"question": "No question mark", "options": ["A", "B"]}', '{"question": "One?", "options": ["A"]}', '{"question": "Long?", "options": ["A", "This answer is far too long for a button"]}', '{"question": "<b>Odd</b>?", "options": ["A", "B"]}']) {
+        const one = (question: unknown, options: unknown): string => JSON.stringify({ questions: [{ question, options }] });
+        for (const bad of ["", "not json", "{}", one("No question mark", ["A", "B"]), one("One?", ["A"]), one("Five?", ["A", "B", "C", "D", "E"]), one("Long?", ["A", "This answer is far too long for a row"]), one("<b>Odd</b>?", ["A", "B"]), one("How hard should it be?", ["A", "B"]), one("Same?", ["A", "a"]), one(7, ["A", "B"])]) {
             const after = game.onEvent(thinking, { type: "followUpReady", at: 0, id: "x", text: bad }).state;
             assert.equal(after.setup?.questions[0]?.id, "level", bad);
         }
+        const mixed = game.onEvent(thinking, { type: "followUpReady", at: 0, id: "x", text: JSON.stringify({ questions: [{ question: "Bad", options: [] }, { question: "Good?", options: ["A", "B"] }, { question: "2?", options: ["A", "B"] }, { question: "3?", options: ["A", "B"] }, { question: "4?", options: ["A", "B"] }] }) }).state;
+        assert.equal(mixed.setup?.questions.filter((question) => question.custom === true).length, 2, "the first three, less the bad one");
         const timedOut = game.onEvent(thinking, { type: "timerFired", at: 0, timerId: "setup-wait" }).state;
         assert.equal(timedOut.setup?.questions[0]?.id, "level");
-        assert.equal(game.onEvent(timedOut, { type: "followUpReady", at: 0, id: "x", text: '{"question": "Late?", "options": ["A", "B"]}' }).state, timedOut);
+        assert.equal(game.onEvent(timedOut, { type: "followUpReady", at: 0, id: "x", text: one("Late?", ["A", "B"]) }).state, timedOut);
         const started = game.apply(thinking, "a", "setup-start");
         assert.equal(game.phaseOf(started.state), "preparing");
         assert.equal(started.state.count, QUESTION_COUNT);
