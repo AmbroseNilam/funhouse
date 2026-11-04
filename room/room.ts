@@ -16,7 +16,7 @@ import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { isFitForRoom } from "../providers/meta/moderation.ts";
 import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
-import { filterText, type FilterResult } from "./content-filter.ts";
+import { filterText, nicknameCategory, type FilterResult } from "./content-filter.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -143,6 +143,37 @@ const TEXT_ANSWER_GAP_MILLISECONDS: number = 1000;
 
 /** What someone hears when the filter says no. It never says why. */
 const ANSWER_REFUSED_NOTE: string = "That one won't work. Try another.";
+
+/** Nicknames the classifier has already judged, so a rejoin or a common name takes no time. Bounded because anyone can send names. */
+const CHECKED_NICKNAMES: Map<string, boolean> = new Map();
+
+/** Most nicknames remembered. */
+const CHECKED_NICKNAME_LIMIT: number = 2000;
+
+/**
+ * Asks the classifier about a nickname, remembering clear answers. A failure counts as no and isn't remembered.
+ * @param name the name.
+ * @returns true when it may be used.
+ */
+async function nicknameIsFit(name: string): Promise<boolean> {
+    const key: string = name.toLowerCase();
+    const known: boolean | undefined = CHECKED_NICKNAMES.get(key);
+    if (known !== undefined) {
+        return known;
+    }
+    if (BUDGET.spend("spark") === false) {
+        return false;
+    }
+    const fit: boolean | null = await isFitForRoom(name, "nickname").catch(() => null);
+    if (fit === null) {
+        return false;
+    }
+    if (CHECKED_NICKNAMES.size >= CHECKED_NICKNAME_LIMIT) {
+        CHECKED_NICKNAMES.clear();
+    }
+    CHECKED_NICKNAMES.set(key, fit);
+    return fit;
+}
 
 /** Longest name a seat can have. */
 const NAME_CHARACTER_LIMIT: number = 24;
@@ -889,7 +920,10 @@ export class Room implements HostStage {
             return null;
         }
         this.wake();
-        const name: string = this.freeName(cleanName(rawName) || `Player ${this.nextPlayerNumber}`, null);
+        const placeholder: string = this.freeName(`Player ${this.nextPlayerNumber}`, null);
+        const wanted: string = cleanName(rawName);
+        const passedLocally: boolean = wanted !== "" && this.nicknameRefused(wanted) === false;
+        const name: string = passedLocally === true && TEXT_ONLY === true ? this.freeName(wanted, null) : placeholder;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
         const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
@@ -902,13 +936,66 @@ export class Room implements HostStage {
         this.broadcastShell();
         this.refreshPhones();
         this.prepareStandby(player);
-        if (Date.now() - this.lastJoinNoticeAt >= JOIN_NOTICE_GAP_MILLISECONDS) {
-            this.lastJoinNoticeAt = Date.now();
-            this.host.notice(`(${name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+        if (passedLocally === true && TEXT_ONLY === false) {
+            void this.settleNickname(player, wanted);
             return player;
         }
-        this.host.remark(`(${name} joined the room)`);
+        if (wanted !== "" && passedLocally === false) {
+            this.setHint(player, `That name won't work, so you're ${name} for now. Change it from the menu.`);
+        }
+        this.announceJoin(player);
         return player;
+    }
+
+    /**
+     * Tells the host someone has joined, by the name they ended up with.
+     * @param player who.
+     */
+    private announceJoin(player: Player): void {
+        if (Date.now() - this.lastJoinNoticeAt >= JOIN_NOTICE_GAP_MILLISECONDS) {
+            this.lastJoinNoticeAt = Date.now();
+            this.host.notice(`(${player.name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+            return;
+        }
+        this.host.remark(`(${player.name} joined the room)`);
+    }
+
+    /**
+     * Whether the local check refuses a nickname. The reason goes to the log, never the name.
+     * @param name the cleaned name.
+     * @returns true when it can't be used.
+     */
+    private nicknameRefused(name: string): boolean {
+        const category: string | null = nicknameCategory(name, this.host.persona.name);
+        if (category !== null) {
+            log(this.scope(), `a nickname was refused: ${category}`);
+        }
+        return category !== null;
+    }
+
+    /**
+     * A new player sits as "Player 3" until the classifier has passed their name, so nothing it
+     * would refuse reaches the TV or the host even for a moment. If it can't answer they stay that.
+     * @param player who.
+     * @param wanted the name they asked for, which the local check passed.
+     */
+    private async settleNickname(player: Player, wanted: string): Promise<void> {
+        const fit: boolean = await nicknameIsFit(wanted);
+        if (this.players.get(player.playerId) !== player) {
+            return;
+        }
+        const locked: boolean = this.game !== null && this.gamePlayerIds.has(player.playerId) === true;
+        if (fit === true && locked === false) {
+            player.name = this.freeName(wanted, player.playerId);
+            this.welcome(player);
+            this.broadcastScene();
+            this.broadcastShell();
+            this.refreshPhones();
+        }
+        if (fit === false || locked === true) {
+            this.setHint(player, fit === false ? `That name won't work, so you're ${player.name} for now. Change it from the menu.` : `You're ${player.name} for this game. Change it from the menu after.`);
+        }
+        this.announceJoin(player);
     }
 
     /**
@@ -1477,14 +1564,41 @@ export class Room implements HostStage {
      * @param rawName the name the player typed.
      */
     private rename(player: Player, rawName: string): void {
-        const name: string = this.freeName(cleanName(rawName), player.playerId);
-        if (name === "" || name === player.name) {
+        const wanted: string = cleanName(rawName);
+        if (wanted === "" || this.freeName(wanted, player.playerId) === player.name) {
             return;
         }
         if (this.game !== null) {
             this.setHint(player, "You can change your name after the game.");
             return;
         }
+        if (this.nicknameRefused(wanted) === true) {
+            this.setHint(player, "That name won't work. Try another.");
+            return;
+        }
+        if (TEXT_ONLY === true) {
+            this.applyRename(player, wanted);
+            return;
+        }
+        void nicknameIsFit(wanted).then((fit: boolean) => {
+            if (this.players.get(player.playerId) !== player || this.game !== null) {
+                return;
+            }
+            if (fit === false) {
+                this.setHint(player, "That name won't work. Try another.");
+                return;
+            }
+            this.applyRename(player, wanted);
+        });
+    }
+
+    /**
+     * Gives a player the checked name they asked for and tells the table.
+     * @param player who.
+     * @param wanted the name.
+     */
+    private applyRename(player: Player, wanted: string): void {
+        const name: string = this.freeName(wanted, player.playerId);
         const previous: string = player.name;
         player.name = name;
         log(this.scope(), `${player.playerId} changed their name`);

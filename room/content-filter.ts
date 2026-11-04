@@ -219,3 +219,23 @@ export async function filterText(text: string, limit: number, classify: TextClas
     const fit: boolean = await classify(tidy).catch(() => false);
     return fit === true ? { allowed: true, text: tidy } : { allowed: false, category: "classifier" };
 }
+
+/** Names that read as the room itself talking. */
+const RESERVED_NAMES: string[] = ["host", "the host", "game", "the game", "system", "admin", "moderator", "narrator", "referee", "funhouse"];
+
+/**
+ * The local check for a nickname: everything a typed line must pass, and it mustn't pose as the host.
+ * @param name the cleaned name.
+ * @param hostName the host's name.
+ * @returns why it can't be used, or null when it passes.
+ */
+export function nicknameCategory(name: string, hostName: string): FilterCategory | "impersonation" | null {
+    const local: FilterCategory | null = localCategory(name);
+    if (local !== null) {
+        return local;
+    }
+    const words: string[] = wordsOf(plainLetters(name));
+    const spaced: string = words.join(" ");
+    const posesAsHost: boolean = squeeze(words.join("")).includes(squeeze(hostName.toLowerCase()));
+    return posesAsHost === true || RESERVED_NAMES.includes(spaced) === true ? "impersonation" : null;
+}
