@@ -66,12 +66,25 @@ sam.say("change the topic");
 await waitFor(() => screen.title() === "Quizmaster" && screen.scene?.blocks.some((block) => block.type === "progress") === false, "the topic question");
 expect(true, "change the topic goes back to choosing one");
 
-// A command that means nothing here goes to the host as talk, and "say that again" repeats exactly.
+// "Say that again" repeats the last line itself, so no new words appear. The fake screen files an
+// identical line once, and a model's reply would almost never match it.
 await pause(4000);
 const lines: number = screen.hostLines.length;
-const last: string | undefined = screen.hostLines.at(-1);
 sam.say("say that again");
-await waitFor(() => screen.hostLines.length > lines, "the line again");
-expect(screen.hostLines.at(-1) === last, "say that again repeats the last line word for word");
+await pause(5000);
+expect(screen.hostLines.length === lines, "say that again repeats the last line instead of asking the host");
+
+// Words that aren't a command right now, like skip in Twenty Doors, stay ordinary talk.
+await pause(10000);
+await sam.fromPauseMenu(screen, "Leave this game");
+await waitFor(() => screen.shell?.screen === "home", "the shelf");
+await pause(10000);
+await sam.startGame(screen, "Twenty Doors");
+await waitFor(() => screen.title().startsWith("It's"), "the game");
+await pause(4000);
+const talk: number = screen.hostLines.length;
+sam.say("skip this question");
+await screen.nextHostLine(talk);
+expect(screen.title().startsWith("It's") === true, "skip in a game with no questions to skip goes to the host as talk");
 console.warn("PASS");
 process.exit(0);
