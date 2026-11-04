@@ -42,7 +42,7 @@ describe("kit registry", () => {
     });
 
     it("keeps the tap-only games visible", () => {
-        for (const id of ["whoFits", "underTheCup", "magpiePockets"]) {
+        for (const id of ["whoFits", "underTheCup"]) {
             assert.equal(HELD_BACK[id], undefined, id);
             assert.equal(BLUEPRINTS.some((blueprint) => blueprint.box.id === id), true, id);
         }

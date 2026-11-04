@@ -1,6 +1,7 @@
 {
     "id": "tinCanTelephone",
     "kit": "clueboard",
-    "level": "visible",
+    "level": "held",
+    "reason": "not on the first shelf Ambrose approved; plays on the real host but needs more polish",
     "order": 100
 }
