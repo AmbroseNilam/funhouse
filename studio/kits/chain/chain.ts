@@ -466,7 +466,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
 
         privateControls(state: ChainState, playerId: string): Control[] {
             const writer: CartridgePlayer | undefined = writerOf(state);
-            const moveOn: Control[] = decisions.writeSeconds === 0 ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Move on", holderOnly: true }] }] : [];
+            const moveOn: Control[] = decisions.writeSeconds === 0 ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Move on", holderOnly: true, style: "quiet" }] }] : [];
             if (state.phase === "write" && writer?.playerId === playerId) {
                 return [{
                     type: "textInput",

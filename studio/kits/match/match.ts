@@ -763,7 +763,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         },
 
         privateControls(state: MatchState, playerId: string): Control[] {
-            const revealNow: Control = { type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true }] };
+            const revealNow: Control = { type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true, style: "quiet" }] };
             if (state.phase === "writing" && decisions.writeSeconds === 0 && state.players.some((player: CartridgePlayer) => player.playerId === playerId) === false) {
                 return [{ type: "waiting", text: "Look at the screen." }, revealNow];
             }

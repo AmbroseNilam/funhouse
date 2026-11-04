@@ -316,6 +316,9 @@ const NO_AGENTS_HERE: string = "Agents can't join this one. Remove them first.";
 const HOST_MARKUP: RegExp = /\[\[|\]\]|\(\s*game\s*:/i;
 
 /** Why a table with AI guests can't start a game that doesn't take them. */
+/** Most people a phone names when it's waiting; beyond that it counts them. */
+const WAITING_NAMES: number = 3;
+
 /** How long a setup follow-up may take. */
 const FOLLOW_UP_TIME_LIMIT_MILLISECONDS: number = 4500;
 
@@ -3032,7 +3035,7 @@ export class Room implements HostStage, AgentHost {
             return { yours: true, open: false, line: turn.phoneLine ?? "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
-        return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: `Waiting for ${left.length} people` };
+        return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: left.length > WAITING_NAMES ? `Waiting for ${left.length} people` : `Waiting for ${left.map((playerId: string) => this.players.get(playerId)?.name ?? "someone").join(", ")}` };
     }
 
     /**

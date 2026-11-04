@@ -748,7 +748,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return [{ type: "waiting", text: seated === false ? "Watch the TV." : gained > 0 ? `You got it! +${gained}` : unanswered === true ? (state.revealWhy === TIME_UP ? "Time ran out." : "No answer that time.") : "Not this time." }];
             }
             const drain: Control[] = state.questionSeconds === null ? [] : [{ type: "drain", seconds: state.questionSeconds, key: `quiz-${state.index}-${state.questions[state.index]?.question ?? ""}` }];
-            const revealNow: Control[] = state.questionSeconds === null ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true }] }] : [];
+            const revealNow: Control[] = state.questionSeconds === null ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true, style: "quiet" }] }] : [];
             const onScreen: string[] = state.questions[state.index]?.choices ?? [];
             if (onScreen.length > 0 && seated === true && state.answered.includes(playerId) === false) {
                 return [...drain, { type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }, ...revealNow];
