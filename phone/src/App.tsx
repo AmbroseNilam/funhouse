@@ -286,11 +286,11 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.startCard.length > 0) {
         return { big: "", small: pad.canSelect === true ? "Tap to start now" : "Starting soon" };
     }
+    if (pad.watching === true) {
+        return { big: pad.pausedBy !== "" ? `Paused by ${pad.pausedBy}` : pad.gameOver === true ? "That game's over" : "Game in progress", small: "You're watching. You'll join the next game." };
+    }
     if (pad.pausedBy !== "") {
         return { big: `Paused by ${pad.pausedBy}`, small: pad.canDrive === true ? "Slide to see more, tap to choose" : `Only ${pad.driverName} can resume` };
-    }
-    if (pad.watching === true) {
-        return { big: "You're watching this game", small: canTalk === true && talkHint !== "" ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
     }
     if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
@@ -1478,7 +1478,7 @@ export function App(): ReactElement {
     const cardOverPad: boolean = hasPrivate === true && pad !== null && pad.axis !== null;
     const shownLine: { big: string; small: string } = cardOverPad === true && line.big === "Slide your thumb" ? { big: "Slide to choose on the TV", small: "Tap to pick" } : line;
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true && hasPrivate === false ? "Your mic is off" : "";
-    const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
+    const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && (pad.pausedBy !== "" || pad.watching === true)) ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;

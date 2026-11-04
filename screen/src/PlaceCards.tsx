@@ -34,6 +34,18 @@ function cardState(seat: Seat, turn: Turn | null, touched: boolean): string {
 }
 
 /**
+ * What a card says while it's small: the first word, or the whole name when that would look like someone else's.
+ * @param seat the seat.
+ * @param seats everyone at the table.
+ * @returns the words.
+ */
+function shortName(seat: Seat, seats: Seat[]): string {
+    const first = (name: string): string => (name.split(" ")[0] ?? "").toLowerCase();
+    const shared: boolean = seats.filter((other: Seat) => first(other.name) === first(seat.name)).length > 1;
+    return shared === true ? seat.name : seat.name.split(" ")[0] ?? seat.name;
+}
+
+/**
  * The place cards.
  * @param props everyone in the room, whose turn it is, and whose phone was just touched.
  * @returns the element, or nothing when nobody's here.
@@ -48,7 +60,7 @@ export function PlaceCards(props: { seats: Seat[]; turn: Turn | null; touchedId:
         <ul className={`place-cards ${playing.length > ROOMY_CARDS ? "crowded" : ""}`}>
             {playing.map((seat: Seat) => (
                 <li key={seat.playerId} data-seat={seat.playerId} className={cardState(seat, props.turn, props.touchedId === seat.playerId)} style={{ background: seat.colour }}>
-                    <span className="short-name">{seat.name.split(" ")[0]}</span>
+                    <span className="short-name">{shortName(seat, props.seats)}</span>
                     <span className="full-name">{seat.name}</span>
                     {seat.guest === true ? <small className="guest-mark">{seat.agent === true ? "AI agent" : "AI guest"}</small> : null}
                     <i className="tick" aria-hidden="true" />

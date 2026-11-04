@@ -37,7 +37,7 @@ const SMALL_SCREEN: boolean = matchMedia("(max-width: 600px)").matches;
 /** The landing page. */
 export function App(): ReactElement {
     const [code, setCode] = useState<string>("");
-    const [moment, setMoment] = useState<Moment>(MISSING_ROOM !== null || FULL_ROOM !== null ? "turnedAway" : "arrived");
+    const [moment, setMoment] = useState<Moment>(FULL_ROOM !== null ? "roomFull" : MISSING_ROOM !== null ? "turnedAway" : "arrived");
     const [look, setLook] = useState<number>(0);
     const ready: boolean = code.length === ROOM_CODE_LENGTH;
     const installWay: InstallWay | null = useInstallWay();

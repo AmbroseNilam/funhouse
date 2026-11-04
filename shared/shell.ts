@@ -121,6 +121,8 @@ export interface PadView {
     controllerFree: boolean;
     /** True when this person joined after the game began, so they're only watching it. */
     watching: boolean;
+    /** True once the game on screen has a result. */
+    gameOver: boolean;
     /** True when this phone's swipes would count now: it's driving, or the controller is free. */
     canDrive: boolean;
     /** What the back corner does here, or null when it does nothing. */

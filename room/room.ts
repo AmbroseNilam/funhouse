@@ -1854,6 +1854,9 @@ export class Room implements HostStage, AgentHost {
      * @param controlIndex which control.
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
+        if (this.isWatching(player) === true) {
+            return;
+        }
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
         const holdersCall: boolean = value === REVEAL_NOW || this.game?.controls(player.playerId).some((control: Control) => control.type === "buttons" && control.options.some((option) => option.id === value && option.holderOnly === true)) === true;
         if (this.paused === true || (holdersCall === true && this.shell.holdsControl(player.playerId) === false)) {
@@ -1871,6 +1874,9 @@ export class Room implements HostStage, AgentHost {
      * @param value what they entered.
      */
     private onAnswer(player: Player, controlId: string, value: string | number): void {
+        if (this.isWatching(player) === true) {
+            return;
+        }
         const key: string = `${player.playerId}|${controlId}`;
         const control: Control | undefined = this.answerControl(player, controlId);
         if (this.paused === true || control === undefined || this.answered.has(key) === true || this.checking.has(key) === true) {
@@ -2957,6 +2963,10 @@ export class Room implements HostStage, AgentHost {
      * @param said their words.
      */
     private passToGame(player: Player, said: string): void {
+        if (this.isWatching(player) === true) {
+            this.host.notice(`${player.name}, who is only watching this game: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
+            return;
+        }
         const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
         this.record(event);
         this.game?.event(event);
@@ -3371,13 +3381,22 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
+     * Whether this person sat down after the running game began, so nothing in it is theirs.
+     * @param player the player.
+     * @returns true while they're only watching.
+     */
+    private isWatching(player: Player): boolean {
+        return this.game !== null && this.gamePlayerIds.has(player.playerId) === false;
+    }
+
+    /**
      * What the game's turn means for one phone. A secret turn looks the same on every phone.
      * @param player the player.
      * @returns the turn, or null when this phone has nothing to wait for or do.
      */
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
-        if (this.game?.outIds().includes(player.playerId) === true) {
+        if (this.game?.outIds().includes(player.playerId) === true || this.isWatching(player) === true) {
             return null;
         }
         if (turn?.kind === "anyone") {
@@ -3442,6 +3461,9 @@ export class Room implements HostStage, AgentHost {
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
+        if (this.isWatching(player) === true) {
+            return [];
+        }
         const holding: boolean = this.shell.holdsControl(player.playerId);
         return (this.game?.controls(player.playerId) ?? []).flatMap((control: Control): Control[] => {
             if (control.type !== "buttons" || holding === true || control.options.some((option) => option.holderOnly === true) === false) {
