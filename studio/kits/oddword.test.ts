@@ -215,6 +215,12 @@ describe("stray word: the order of words", () => {
         assert.ok(note?.type === "textInput" && (note.note ?? "").includes("One word only"));
     });
 
+    it("takes a number as a word, and does not drop it as it would from a clue", () => {
+        const { game, state } = startClues(0, 1);
+        assert.equal(say(game, state, "two").state.said[0]?.word, "two");
+        assert.equal(say(game, state, "two words here").state.said.length, 0, "two words are two words");
+    });
+
     it("refuses a repeat, and refuses the secret from someone who knows it, privately", () => {
         const { game, state } = startClues(0, 1);
         const one: OddWordState = say(game, state, "amber").state;
@@ -244,7 +250,7 @@ describe("stray word: the order of words", () => {
             return control?.type === "textInput" ? control.id : "";
         };
         assert.equal(box(state), "word:0:0");
-        const refused: OddWordState = on(game, state, { type: "answered", at: 1, playerId: "paper2", controlId: "word:0:0", value: "two words" }).state;
+        const refused: OddWordState = on(game, state, { type: "answered", at: 1, playerId: "paper2", controlId: "word:0:0", value: "very hard thing" }).state;
         assert.equal(box(refused), "word:0:1");
         assert.equal(on(game, refused, { type: "answered", at: 2, playerId: "paper2", controlId: "word:0:0", value: "amber" }).state, refused, "the old box is dead");
         assert.equal(on(game, refused, { type: "answered", at: 2, playerId: "paper3", controlId: "word:0:1", value: "amber" }).state, refused, "someone else's answer");

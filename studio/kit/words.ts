@@ -103,13 +103,15 @@ export function numberIn(text: string): number | null {
 
 /**
  * Pulls the one word out of speech that may be wrapped in fillers and a number, such as
- * "my clue is ocean, three". Number words and digits are dropped.
+ * "my clue is ocean, three". Number words and digits are dropped, unless the number is itself
+ * what is being said.
  * @param text what was said.
+ * @param keepNumbers true when a number word may be the word, as in a game of one word each.
  * @returns the word, or null when there is none or more than one.
  */
-export function singleWord(text: string): string | null {
+export function singleWord(text: string, keepNumbers: boolean = false): string | null {
     const tokens: string[] = text.toLowerCase().replace(/[^\p{L}\p{N}' -]/gu, " ").split(/\s+/).map((token: string) => token.replace(/^[-']+|[-']+$/g, "")).filter((token: string) => token !== "");
-    const rest: string[] = tokens.filter((token: string) => FILLER_WORDS.has(token) === false && /^\d+$/.test(token) === false && NUMBER_WORDS[token] === undefined);
+    const rest: string[] = tokens.filter((token: string) => FILLER_WORDS.has(token) === false && (keepNumbers === true || (/^\d+$/.test(token) === false && NUMBER_WORDS[token] === undefined)));
     const only: string | undefined = rest[0];
     return rest.length === 1 && only !== undefined && isPlainWord(only) === true ? only : null;
 }

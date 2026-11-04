@@ -314,7 +314,7 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
      * @returns the step.
      */
     const take = (state: OddWordState, playerId: string, raw: string): Step<OddWordState> => {
-        const word: string | null = singleWord(raw);
+        const word: string | null = singleWord(raw, true);
         if (word === null) {
             return { state: { ...state, refusal: "many", tries: state.tries + 1 }, facts: [] };
         }
