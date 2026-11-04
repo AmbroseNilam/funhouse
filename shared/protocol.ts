@@ -15,6 +15,7 @@ export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree" | "roomC
 export type PhoneMessage =
     | { type: "hello"; name: string; playerId?: string; resumeToken?: string; sameName?: "takeSeat" | "newSeat" }
     | { type: "input"; input: ControlInput }
+    | { type: "answer"; controlId: string; value: string | number }
     | { type: "holdToTalk"; down: boolean }
     | { type: "rename"; name: string }
     | { type: "leave" }
@@ -108,6 +109,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "textOnlySay") {
         return typeof message.text === "string";
+    }
+    if (message.type === "answer") {
+        return typeof message.controlId === "string" && (typeof message.value === "string" || typeof message.value === "number");
     }
     if (message.type === "input") {
         const input: { value?: unknown; controlIndex?: unknown } | null = typeof message.input === "object" ? message.input : null;
