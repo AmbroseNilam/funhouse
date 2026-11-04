@@ -253,6 +253,43 @@ describe("the chain kit", () => {
         assert.equal(blueprintProblems(small).length > 0, true);
     });
 
+    it("has the host name each writer and each line as the chain plays, and claim only what the words show", () => {
+        const run: Run = start();
+        const first: Step<ChainState> = write(run, "A red fox on a bicycle");
+        assert.equal(first.facts.some((fact) => fact.quiet !== true && fact.kind === "writing"), false);
+        const next: Step<ChainState> = paint(run);
+        const named = next.facts.find((fact) => fact.kind === "writing");
+        assert.notEqual(named?.quiet, true, "the next writer is announced");
+        for (let index = 1; index < FOUR.length; index += 1) {
+            write(run, `Blue whale number ${"xyz"[index - 1]} sings`);
+            paint(run);
+        }
+        const spoken: string[] = [];
+        let step: Step<ChainState> = { state: run.state, facts: [] };
+        for (let beat = 0; run.state.phase === "reveal" && beat < 12; beat += 1) {
+            step = play(run, { type: "timerFired", at: 100 + beat, timerId: `beat:${run.state.beat}` });
+            spoken.push(...step.facts.filter((fact) => fact.quiet !== true && fact.kind === "beat").map((fact) => fact.text));
+        }
+        assert.ok(spoken.length >= FOUR.length - 1, "each line is introduced aloud");
+        const over: string = step.facts.find((fact) => fact.kind === "game-over")?.text ?? "";
+        assert.match(over, /share no words/);
+        assert.equal(/nothing of|survived|remarkably/.test(over), false, "no claim beyond the words");
+    });
+
+    it("never credits a player with a stock line at the reveal", () => {
+        const run: Run = start();
+        const timedOut: Step<ChainState> = play(run, { type: "timerFired", at: 1, timerId: "write:0" });
+        assert.equal(timedOut.state.links[0]?.stock, true);
+        paint(run);
+        for (let index = 1; index < FOUR.length; index += 1) {
+            write(run, `A plain line ${"xyz"[index - 1]} here`);
+            paint(run);
+        }
+        const heading: string = JSON.stringify(blocks(run)[0]);
+        assert.match(heading, /A line from the box for/);
+        assert.equal(/ wrote"/.test(heading), false);
+    });
+
     it("measures how far a chain drifted", () => {
         assert.equal(driftOverlap("a red fox", "a red fox"), 1);
         assert.equal(driftOverlap("a red fox", "blue whale"), 0);

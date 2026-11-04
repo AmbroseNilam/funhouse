@@ -239,6 +239,11 @@ describe("stray word: the order of words", () => {
         }
     });
 
+    it("explains the game once: nothing before the word is ready asks the host to explain it", () => {
+        const opening: string = createOddWordGame(STRAY_WORD_BLUEPRINT.box, STRAY_WORD_BLUEPRINT.decisions).cartridge.manifest.phases.find((phase) => phase.id === "dealing")?.hostBrief ?? "";
+        assert.match(opening, /Don't explain/);
+    });
+
     it("takes either part of a two-word secret as too close, even with an ending on it", () => {
         for (const clue of ["shower", "showers", "curtain", "curtains", "showercurtain"]) {
             assert.equal(tooClose(clue, "Shower curtain"), true, clue);

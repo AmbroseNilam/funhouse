@@ -110,6 +110,19 @@ if (category === "" || cardOf(stray.phone).body.includes(category) === false) {
     throw new Error("The stray was not told what kind of thing it is.");
 }
 
+/** How long to give the host to speak at a moment that should be spoken. */
+const HOST_LINE_WAIT_MILLISECONDS: number = 12000;
+/**
+ * Holds on until the host has said something new, or a fair wait has passed, so a moment that should be spoken isn't talked over.
+ * @param before how many lines the host had said.
+ */
+async function hostHasSpoken(before: number): Promise<void> {
+    const until: number = Date.now() + HOST_LINE_WAIT_MILLISECONDS;
+    while (screen.hostLines.length <= before && Date.now() < until) {
+        await pause(SETTLE_MILLISECONDS);
+    }
+}
+
 /** Fails if the word has reached the Stray, the TV or the host before the end. */
 function checkNoLeaks(ended: boolean): void {
     if (squash(JSON.stringify(stray.phone.view?.controls ?? [])).includes(squash(word)) === true) {
@@ -159,6 +172,8 @@ for (let said = 0; said < 10; said += 1) {
         }
     }
     const next: string = words[said] ?? "";
+    const kickerBefore: string = headline().kicker;
+    const heardBefore: number = screen.hostLines.length;
     if (said === 3) {
         const box: Control | undefined = up.phone.view?.controls.find((control: Control) => control.type === "textInput");
         if (box?.type !== "textInput") {
@@ -171,15 +186,19 @@ for (let said = 0; said < 10; said += 1) {
     }
     await waitFor(() => tvText().toLowerCase().includes(`${upName.toLowerCase()}: ${next}`) || headline().text === "Who is the stray?", `${next} on the TV`);
     checkNoLeaks(false);
+    if (headline().kicker !== kickerBefore) {
+        await hostHasSpoken(heardBefore);
+    }
 }
 await waitFor(() => headline().text === "Who is the stray?", "the vote");
 await waitFor(() => seats.every((seat: Seat) => seat.phone.options().length > 0), "a ballot on every phone");
+const heardBeforeVerdict: number = screen.hostLines.length;
 for (const seat of seats) {
     seat.phone.press(seat === stray ? (others[0] as Seat).name : stray.name);
 }
 await waitFor(() => headline().text === `${stray.name} is the stray`, "the Stray's guess");
 checkNoLeaks(false);
-await pause(SETTLE_MILLISECONDS);
+await hostHasSpoken(heardBeforeVerdict);
 const right: boolean = process.env.SCENARIO_GUESS === "right";
 stray.phone.say(right === true ? `Is it a ${word.toLowerCase()}?` : "I would say it is a teapot.");
 await waitFor(() => screen.shell?.gameOver === true, "the reveal");
