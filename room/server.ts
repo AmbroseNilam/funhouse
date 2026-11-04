@@ -11,7 +11,7 @@ import type { Drawing } from "../providers/meta/image.ts";
 import { buildInfoFrom, type BuildInfo } from "../shared/build-info.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
 import { GAMES } from "../cartridges/index.ts";
-import { studioShelf } from "../studio/shelf.ts";
+import { showcaseShelf } from "../studio/shelf.ts";
 import { RoomDirectory } from "./directory.ts";
 import { roomOptions, type RoomOptions } from "./room-options.ts";
 import { AddressLimits, BUDGET } from "./limits.ts";
@@ -94,8 +94,8 @@ const HEARTBEAT_MILLISECONDS: number = 15000;
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
-/** A room opened with ?studio=1 gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. See mayShowHeldGames for the level that adds the games still on hold. */
-const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, GAMES, studioShelf(GAMES), studioShelf(GAMES, true));
+/** Every room gets the showcase shelf. See mayShowHeldGames for the level that adds the games still on hold. */
+const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, showcaseShelf(GAMES), showcaseShelf(GAMES, true));
 const limits: AddressLimits = new AddressLimits();
 setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 
@@ -132,16 +132,15 @@ function mayShowHeldGames(url: URL): boolean {
  * @param lively true for the lively host.
  * @param tapToTalk true for tap-to-talk.
  * @param fastReplies true when it's being opened to try the faster reply model.
- * @param studio true when it's being opened with the Studio shelf.
  * @param testing true when the Studio shelf also shows the games still on hold.
  * @returns the room, or null.
  */
-function openRoom(address: string, lively: boolean, tapToTalk: boolean, fastReplies: boolean, studio: boolean, testing: boolean): Room | null {
+function openRoom(address: string, lively: boolean, tapToTalk: boolean, fastReplies: boolean, testing: boolean): Room | null {
     const within: boolean = ROOM_LIMIT_ON === false || limits.mayOpenRoom(address, (code: string) => directory.find(code) !== undefined);
     if (within === false || BUDGET.hasRoom() === false) {
         return null;
     }
-    const room: Room | null = directory.create(lively, tapToTalk, fastReplies, studio, testing);
+    const room: Room | null = directory.create(lively, tapToTalk, fastReplies, testing);
     if (room !== null) {
         limits.roomOpened(address, room.code);
     }
@@ -272,7 +271,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         }
         const showHeld: boolean = mayShowHeldGames(url);
         const options: RoomOptions = roomOptions(url.searchParams);
-        const room: Room | null = existing ?? openRoom(address, options.lively, options.tapToTalk, options.fastReplies, url.searchParams.get("studio") === "1" || showHeld === true, showHeld);
+        const room: Room | null = existing ?? openRoom(address, options.lively, options.tapToTalk, options.fastReplies, showHeld);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;

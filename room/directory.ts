@@ -22,7 +22,6 @@ const SWEEP_MILLISECONDS: number = 30000;
 export class RoomDirectory {
     private readonly publicUrl: string;
     private readonly games: InstalledGame[];
-    private readonly studioGames: InstalledGame[];
     private readonly testingGames: InstalledGame[];
     private readonly rooms: Map<string, Room> = new Map();
     private readonly emptySince: Map<string, number> = new Map();
@@ -32,13 +31,11 @@ export class RoomDirectory {
      * Creates an empty directory and starts closing abandoned rooms.
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
      * @param games what every new room has on its shelf.
-     * @param studioGames what a room opened for Studio has on its shelf instead; the same games unless given.
-     * @param testingGames what a room opened for Studio testing has: the Studio shelf plus the games still on hold; the Studio shelf unless given.
+     * @param testingGames what a room opened for testing has: the same plus the games still on hold; the same games unless given.
      */
-    public constructor(publicUrl: string, games: InstalledGame[], studioGames: InstalledGame[] = games, testingGames: InstalledGame[] = studioGames) {
+    public constructor(publicUrl: string, games: InstalledGame[], testingGames: InstalledGame[] = games) {
         this.publicUrl = publicUrl;
         this.games = games;
-        this.studioGames = studioGames;
         this.testingGames = testingGames;
         setInterval(() => { this.closeEmptyRooms(); }, SWEEP_MILLISECONDS).unref();
     }
@@ -57,11 +54,10 @@ export class RoomDirectory {
      * @param lively true to try the livelier host in this room.
      * @param tapToTalk true to try tap-to-talk in this room.
      * @param fastReplies true to try the faster reply model in this room.
-     * @param studio true to give this room the Studio shelf: blueprint games beside the hand-written ones.
-     * @param testing true to give this room the Studio shelf and the games still on hold, each marked as testing.
+     * @param testing true to give this room the games still on hold too, each marked as testing.
      * @returns the room, or null when the server is at its limit.
      */
-    public create(lively: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, studio: boolean = false, testing: boolean = false): Room | null {
+    public create(lively: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, testing: boolean = false): Room | null {
         if (this.rooms.size >= MAX_ROOMS) {
             return null;
         }
@@ -69,7 +65,7 @@ export class RoomDirectory {
         while (this.rooms.has(code) === true) {
             code = makeRoomCode();
         }
-        const room: Room = new Room(code, this.publicUrl, testing === true ? this.testingGames : studio === true ? this.studioGames : this.games, lively, tapToTalk, fastReplies);
+        const room: Room = new Room(code, this.publicUrl, testing === true ? this.testingGames : this.games, lively, tapToTalk, fastReplies);
         this.rooms.set(code, room);
         log(`room ${code}`, `opened (${this.rooms.size} open)`);
         return room;
