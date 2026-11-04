@@ -65,14 +65,14 @@ function rightAnswer(): string {
  */
 function buttonFor(phone: FakePhone, right: boolean): string {
     const answer: string = rightAnswer();
-    return phone.options().find((option) => option.label.endsWith(`. ${answer}`) === right)?.id ?? "";
+    return phone.options().filter((option) => option.id !== "reveal-now").find((option) => option.label.endsWith(`. ${answer}`) === right)?.id ?? "";
 }
 
 let before: string = "";
 let samExpected: number = 0;
 let alexExpected: number = 0;
 for (let round = 1; round <= 3; round += 1) {
-    const sameOn = (phone: FakePhone): boolean => phone.options().map((option) => option.label).join() === onTv().join();
+    const sameOn = (phone: FakePhone): boolean => phone.options().filter((option) => option.id !== "reveal-now").map((option) => option.label).join() === onTv().join();
     await waitFor(() => onTv().length === 4 && screen.title() !== before && sameOn(sam) === true && sameOn(alex) === true, `question ${round}'s four answers on the TV and both phones`);
     const asked: string = screen.title();
     before = asked;
