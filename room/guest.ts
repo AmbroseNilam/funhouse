@@ -93,6 +93,8 @@ export interface GuestSeat {
     play(): GuestPlay;
     /** The running game's rules, as its box shows them to everyone at the table. */
     rules(): string;
+    /** Shows what this guest is doing on the TV. */
+    activity?(activity: "reading" | "thinking" | "sent" | "idle"): void;
     /** Counts one decision against the game's and the day's caps; false means play without the model. */
     mayAskModel(): boolean;
 }
@@ -340,6 +342,9 @@ export class GuestDriver {
         this.remember(view);
         const ask: Ask | null = askIn(view);
         const signature: string = ask === null ? "" : JSON.stringify(ask);
+        if (ask === null) {
+            this.seat.activity?.("idle");
+        }
         this.textTries = ask?.kind === "text" ? this.textTries : 0;
         if (signature === this.handled) {
             return;
@@ -347,6 +352,7 @@ export class GuestDriver {
         this.cancel();
         this.handled = signature;
         if (ask !== null) {
+            this.seat.activity?.("reading");
             void this.decide(ask, signature, this.generation);
         }
     }
@@ -426,6 +432,7 @@ export class GuestDriver {
             return;
         }
         if (move.kind === "press") {
+            this.seat.activity?.("sent");
             this.seat.press(move.optionId, move.controlIndex);
         }
         if (move.kind === "answer") {
@@ -450,6 +457,7 @@ export class GuestDriver {
             return fallbackMove(ask, this.random);
         }
         const put: Ask = mixedUp(ask, this.random);
+        this.seat.activity?.("thinking");
         const messages: SparkMessage[] = guestPrompt(this.seat.persona, this.latest as PhoneView, this.notes, put, this.seat.rules());
         const stopping: AbortController = new AbortController();
         this.stopModel = stopping;

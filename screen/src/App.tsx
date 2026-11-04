@@ -15,6 +15,7 @@ import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
+import { AgentCursors, nextSeatMove, type SeatMove } from "./AgentCursors.tsx";
 import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
@@ -279,6 +280,7 @@ export function App(): ReactElement {
     const leanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const previousShellRef = useRef<ShellView | null>(null);
     const screenRef = useRef<string>("");
+    const [seatMoves, setSeatMoves] = useState<Record<string, SeatMove>>({});
     const newestShellRef = useRef<Extract<RoomToScreenMessage, { type: "shell" }> | null>(null);
     const wasOverRef = useRef<boolean>(false);
     const [touchedId, setTouchedId] = useState<string | null>(null);
@@ -387,6 +389,14 @@ export function App(): ReactElement {
                     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches === false) {
                         document.querySelector(".host-spot .lantern-body")?.animate([{ translate: "0 0" }, { translate: "0 10px" }, { translate: "0 0" }], { duration: 260, easing: "ease-out" });
                     }
+                    return;
+                }
+                if (message.type === "seatActivity") {
+                    setSeatMoves((moves: Record<string, SeatMove>) => ({ ...moves, [message.playerId]: nextSeatMove(moves[message.playerId], message.activity, message.line, Date.now()) }));
+                    return;
+                }
+                if (message.type === "seatMovesCleared") {
+                    setSeatMoves({});
                     return;
                 }
                 if (message.type === "seatTouched") {
@@ -600,6 +610,7 @@ export function App(): ReactElement {
             {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             <div className="table-edge" />
             {state.started === true ? <PlaceCards seats={seats} turn={playing === true ? state.turn : null} touchedId={touchedId} /> : null}
+            {state.started === true ? <AgentCursors seats={seats} moves={seatMoves} /> : null}
             <div className="host-spot">
                 <Lantern
                     micRef={micRef}

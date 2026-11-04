@@ -13,7 +13,7 @@ import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts
 import { REVEAL_NOW, type Control, type GuestTable, type ListeningMode, type PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
-import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
+import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage, type SeatActivity } from "../shared/protocol.ts";
 import { isFitForRoom } from "../providers/meta/moderation.ts";
 import { SPARK_MODEL } from "../providers/meta/spark.ts";
 import { filterText, nicknameCategory, type FilterResult } from "./content-filter.ts";
@@ -309,6 +309,15 @@ const AGENT_SAY_LIMIT: number = 120;
 /** Least time between one agent's lines, as each wakes the host and costs a reply and a voice line. */
 const AGENT_SAY_GAP_MILLISECONDS: number = 5000;
 
+/** How long an agent may be quiet before its cursor rests. */
+const AGENT_QUIET_MILLISECONDS: number = 15000;
+
+/** Most an agent may say when only the TV shows it. */
+const AGENT_BUBBLE_LIMIT: number = 60;
+
+/** Why an agent can't put a line on the TV while answers are being written. */
+const AGENT_QUIET_WHILE_ANSWERING: string = "Not while anyone is still answering. It could give an answer away.";
+
 /** Most lines all a room's agents may say in one game. */
 const MAX_AGENT_LINES_PER_GAME: number = 40;
 
@@ -520,6 +529,8 @@ export class Room implements HostStage, AgentHost {
     private nextGuestPrompt: number = 1;
     /** People whose described guest is being written. */
     private readonly writingGuest: Set<string> = new Set();
+    /** What each machine at the table was last shown doing, so only a change reaches the TV. */
+    private readonly seatActivities: Map<string, SeatActivity> = new Map();
     /** Each person's unused agent link, by their seat. */
     private readonly agentLinks: Map<string, string> = new Map();
     /** The name of the agent each person brought last, by their seat, so their phone can say it sat down. */
@@ -1266,6 +1277,7 @@ export class Room implements HostStage, AgentHost {
             press: (optionId: string, controlIndex: number): void => { seated((player: Player) => { this.onControl(player, optionId, controlIndex); }); },
             answer: (controlId: string, value: string | number): void => { seated((player: Player) => { this.onAnswer(player, controlId, value); }); },
             paused: (): boolean => this.paused,
+            activity: (activity: "reading" | "thinking" | "sent" | "idle"): void => { this.showActivity(playerId, activity); },
             play: (): GuestPlay => this.runningBox()?.guests ?? "random",
             rules: (): string => {
                 const box: InstalledGame | undefined = this.runningBox();
@@ -1290,6 +1302,28 @@ export class Room implements HostStage, AgentHost {
         this.guestPrompts.set(playerId, { kind, id: this.nextGuestPrompt });
         this.nextGuestPrompt += 1;
         this.refreshPhones();
+    }
+
+    /**
+     * Wipes every machine's cursor and bubble off the TV, so nothing carries into the next game.
+     */
+    private clearSeatMoves(): void {
+        this.seatActivities.clear();
+        this.broadcastToScreens({ type: "seatMovesCleared" });
+    }
+
+    /**
+     * Shows what a machine at the table is doing on the TV, if that's changed. Machines only sit in games with
+     * no secret about who is acting, so this gives nothing away. The answer itself never goes with it.
+     * @param playerId the seat.
+     * @param activity what it's doing.
+     */
+    private showActivity(playerId: string, activity: SeatActivity): void {
+        if (this.seatActivities.get(playerId) === activity) {
+            return;
+        }
+        this.seatActivities.set(playerId, activity);
+        this.broadcastToScreens({ type: "seatActivity", playerId, activity, line: "" });
     }
 
     /**
@@ -1372,6 +1406,7 @@ export class Room implements HostStage, AgentHost {
         this.broadcastScene();
         this.broadcastShell();
         this.refreshPhones();
+        this.showActivity(playerId, "joined");
         this.host.notice(`(${name} just sat down. It is that person's own AI, from outside this room, not a person. Introduce it as their AI agent in a few words.)`, WAKE_DELAY_MILLISECONDS.join);
         return seat;
     }
@@ -1405,9 +1440,13 @@ export class Room implements HostStage, AgentHost {
      */
     public agentPress(seat: AgentSeat, optionId: string, controlIndex: number): void {
         const player: Player | undefined = this.players.get(seat.playerId);
-        if (player !== undefined) {
-            this.onControl(player, optionId, controlIndex);
+        if (player === undefined) {
+            return;
         }
+        if (this.paused === false) {
+            this.showActivity(seat.playerId, "sent");
+        }
+        this.onControl(player, optionId, controlIndex);
     }
 
     /**
@@ -1440,6 +1479,18 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
+     * Whether anyone at the table is still answering. A line on the TV now could give an answer away for others to copy.
+     * @returns true while an answer control is open on any seat.
+     */
+    private answersOpen(): boolean {
+        const game: RunningGame | null = this.game;
+        if (game === null || game.outcome() !== null) {
+            return false;
+        }
+        return [...this.gamePlayerIds].some((playerId: string) => game.controls(playerId).some((control: Control) => control.type === "textInput" || control.type === "numberInput" || control.type === "slider"));
+    }
+
+    /**
      * Says a line for an agent, past the same filter as a person's typing. It goes to the game and the
      * host as speech does, but never through voice commands, so it can't end or restart a game, and it
      * doesn't cut the host off.
@@ -1449,8 +1500,14 @@ export class Room implements HostStage, AgentHost {
      */
     public agentSay(seat: AgentSeat, text: string): string | null {
         const player: Player | undefined = this.players.get(seat.playerId);
-        if (player === undefined || this.agentMayTalk(player) === false) {
-            return "You can't say anything to the room right now.";
+        if (player === undefined) {
+            return "You're not at this table now.";
+        }
+        if (this.paused === true) {
+            return "The game is paused.";
+        }
+        if (this.agentMayTalk(player) === false && this.answersOpen() === true) {
+            return AGENT_QUIET_WHILE_ANSWERING;
         }
         if (Date.now() - player.lastTextAnswerAt < AGENT_SAY_GAP_MILLISECONDS) {
             return "Wait a few seconds, and hear the last answer first.";
@@ -1480,13 +1537,25 @@ export class Room implements HostStage, AgentHost {
             return this.agentChecks <= MAX_AGENT_CHECKS_PER_GAME && BUDGET.spend("guest") === true && await isFitForRoom(line);
         };
         const game: RunningGame | null = this.game;
-        const result: FilterResult = await filterText(text.slice(0, AGENT_SAY_LIMIT * 2), AGENT_SAY_LIMIT, classify);
-        if (this.game !== game || this.players.get(player.playerId) !== player || this.agentMayTalk(player) === false) {
+        // Where the game plays by talk the host hears the line. Everywhere else only the TV shows it, as a bubble, and no model reads it.
+        const hostHears: boolean = this.agentMayTalk(player);
+        const limit: number = hostHears === true ? AGENT_SAY_LIMIT : AGENT_BUBBLE_LIMIT;
+        const result: FilterResult = await filterText(text.slice(0, limit * 2), limit, classify);
+        if (this.game !== game || this.players.get(player.playerId) !== player || (hostHears === true && this.agentMayTalk(player) === false)) {
+            return;
+        }
+        if (hostHears === false && this.answersOpen() === true) {
+            seat.note = AGENT_QUIET_WHILE_ANSWERING;
             return;
         }
         if (result.allowed === false) {
             log(this.scope(), `${player.playerId} line filtered: ${result.category}`);
             seat.note = ANSWER_REFUSED_NOTE;
+            return;
+        }
+        this.broadcastToScreens({ type: "seatActivity", playerId: player.playerId, activity: "saying", line: result.text });
+        this.seatActivities.set(player.playerId, "saying");
+        if (hostHears === false) {
             return;
         }
         this.game?.event({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
@@ -1503,6 +1572,16 @@ export class Room implements HostStage, AgentHost {
      */
     public agentLooked(seat: AgentSeat): void {
         seat.lastSeenAt = Date.now();
+        // What the TV shows is only what this look really tells: a new question read, an old one still open, or nothing asked.
+        const asked: boolean = seat.ask() !== null;
+        const newQuestion: boolean = asked === true && seat.seenVersion !== seat.version;
+        seat.seenVersion = seat.version;
+        if (asked === false && this.seatActivities.get(seat.playerId) !== "joined" && this.seatActivities.get(seat.playerId) !== "saying") {
+            this.showActivity(seat.playerId, "idle");
+        }
+        if (asked === true) {
+            this.showActivity(seat.playerId, newQuestion === true ? "reading" : "thinking");
+        }
         const player: Player | undefined = this.players.get(seat.playerId);
         if (player?.phoneDown === true) {
             player.phoneDown = false;
@@ -1544,6 +1623,9 @@ export class Room implements HostStage, AgentHost {
                 log(this.scope(), `${player.playerId} agent went quiet`);
                 this.removePlayer(player);
                 continue;
+            }
+            if (quietFor >= AGENT_QUIET_MILLISECONDS) {
+                this.showActivity(player.playerId, "idle");
             }
             if (quietFor >= AGENT_AWAY_MILLISECONDS && player.phoneDown === false) {
                 player.phoneDown = true;
@@ -1792,6 +1874,10 @@ export class Room implements HostStage, AgentHost {
      */
     private acceptAnswer(player: Player, controlId: string, value: string | number): void {
         this.answered.add(`${player.playerId}|${controlId}`);
+        // The TV says a machine answered only once the answer has really gone in, past the filter.
+        if (player.guest !== null || player.agent !== null) {
+            this.showActivity(player.playerId, "sent");
+        }
         const event: RoomEvent = { type: "answered", at: Date.now(), playerId: player.playerId, controlId, value };
         this.record(event);
         this.game?.event(event);
@@ -2053,6 +2139,7 @@ export class Room implements HostStage, AgentHost {
         this.guestDecisions = 0;
         this.agentChecks = 0;
         this.agentLines = 0;
+        this.clearSeatMoves();
         this.guests().forEach((guest: Player) => { guest.guest?.newGame(); });
         log(this.scope(), `starting ${installed.manifest.id} with ${count}`);
         this.caption = null;
@@ -2081,6 +2168,7 @@ export class Room implements HostStage, AgentHost {
         log(this.scope(), `ended ${this.game.manifest.id}`);
         this.game.stop();
         this.game = null;
+        this.clearSeatMoves();
         this.guests().forEach((guest: Player) => { guest.guest?.newGame(); });
         this.answered.clear();
         this.checking.clear();
@@ -2321,6 +2409,7 @@ export class Room implements HostStage, AgentHost {
         this.agentLinks.delete(player.playerId);
         this.guestPrompts.delete(player.playerId);
         this.agentJoined.delete(player.playerId);
+        this.seatActivities.delete(player.playerId);
         for (const [ownerId, name] of this.agentJoined) {
             if (name === player.name) {
                 this.agentJoined.delete(ownerId);
