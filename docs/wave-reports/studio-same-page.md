@@ -97,7 +97,7 @@ question carries the exact pair of cards that looked alike.
 
 ```
 node tools/fake-meta.ts
-META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=standin GAME_ROOM_TEXT_ONLY=1 STUDIO_ALL=1 STUDIO_ALL_KEY=testing npm run room
+META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 STUDIO_ALL=1 STUDIO_ALL_KEY=testing npm run room
 ROOM_SWITCHES="studio=all&key=testing" SCENARIO_STAND_IN=1 node tools/scenarios/same-page.ts
 ```
 

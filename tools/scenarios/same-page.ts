@@ -11,7 +11,7 @@
 //
 // Run it with the stand-in model (the held game needs the held shelf, so give the room a key for it):
 //   node tools/fake-meta.ts
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=standin GAME_ROOM_TEXT_ONLY=1 STUDIO_ALL=1 STUDIO_ALL_KEY=testing npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 STUDIO_ALL=1 STUDIO_ALL_KEY=testing npm run room
 //   ROOM_SWITCHES="studio=all&key=testing" SCENARIO_STAND_IN=1 node tools/scenarios/same-page.ts
 // With real keys, the content check, the prompts and the closed question are the real model's, and the
 // closed question's answers will differ from the stand-in's; expect the bat round's stack to vary.
