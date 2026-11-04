@@ -1514,8 +1514,9 @@ export class Room implements HostStage {
      * @returns the content.
      */
     private async groundOr(prompt: string, grounding: ContentGrounding, written: Promise<string>, stopWriting: AbortController): Promise<SearchedText> {
-        const mayReuse: boolean = this.groundedPrompts.has(prompt) === false;
-        this.groundedPrompts.add(prompt);
+        const asked: string = prompt.toLowerCase();
+        const mayReuse: boolean = this.groundedPrompts.has(asked) === false;
+        this.groundedPrompts.add(asked);
         try {
             const reply: SearchedText = await groundedContent(CONTENT_SYSTEM, prompt, grounding, mayReuse);
             stopWriting.abort();
