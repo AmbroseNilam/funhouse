@@ -64,6 +64,8 @@ export interface PhoneView {
     turn: PhoneTurn | null;
     /** The AI guests at the table, for this phone's menu. */
     guests: GuestTable;
+    /** True while a game is being played in this room. */
+    gameOn: boolean;
 }
 
 /** The AI guests at the table and what this phone may do about them. */

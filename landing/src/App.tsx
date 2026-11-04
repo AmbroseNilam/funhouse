@@ -8,6 +8,7 @@ import { versionLine } from "../../shared/build-info.ts";
 import { useState, type FormEvent, type ReactElement } from "react";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import { GAMES, type GameBox } from "./games.ts";
+import { InstallCard, mayOfferInstall, useInstallWay, type InstallWay } from "./InstallCard.tsx";
 import { HostAtTable, LatePicture, NAMES, PhoneCard, VoteDemo, type Moment } from "./table.tsx";
 
 /** Letters in a room code. */
@@ -34,6 +35,8 @@ export function App(): ReactElement {
     const [moment, setMoment] = useState<Moment>(MISSING_ROOM !== null || FULL_ROOM !== null ? "turnedAway" : "arrived");
     const [look, setLook] = useState<number>(0);
     const ready: boolean = code.length === ROOM_CODE_LENGTH;
+    const installWay: InstallWay | null = useInstallWay();
+    const [installOpen, setInstallOpen] = useState<boolean>(mayOfferInstall);
 
     const join = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
@@ -113,6 +116,12 @@ export function App(): ReactElement {
                     <HostAtTable moment={moment} code={code} look={look} />
                 </div>
             </section>
+
+            {installWay !== null && installOpen === true ? (
+                <section className="install-section" aria-label="Add to your home screen">
+                    <InstallCard way={installWay} onDone={() => { setInstallOpen(false); }} />
+                </section>
+            ) : null}
 
             <section className="shelf-section" aria-labelledby="games">
                 <h2 id="games">Games</h2>
