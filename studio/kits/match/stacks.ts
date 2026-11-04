@@ -63,6 +63,21 @@ export function looksAlike(first: string, second: string): boolean {
     return stemsIn(second).some((stem: string) => mine.includes(stem) === true);
 }
 
+/** Words so small that a card means the same without them, so "sleep" and "sleep in" share a root. */
+const SMALL_WORDS: ReadonlySet<string> = new Set(["a", "an", "the", "my", "your", "our", "some", "in", "on", "up", "out", "off", "at", "to", "of", "for", "i", "im", "am", "is", "be"]);
+
+/**
+ * A card without its small words, so the merger sees "sleeping in" as "sleeping" and its stem meets "sleep".
+ * A card of nothing but small words stays as it is.
+ * @param text a card.
+ * @returns the words that carry its meaning.
+ */
+export function withoutSmallWords(text: string): string {
+    const words: string[] = text.toLowerCase().replace(/['’]/gu, "").split(/[^\p{L}\p{N}]+/u).filter((word: string) => word !== "");
+    const meaningful: string[] = words.filter((word: string) => SMALL_WORDS.has(word) === false);
+    return meaningful.length === 0 ? text : meaningful.join(" ");
+}
+
 /**
  * Groups cards that the local check calls the same, and leaves every other card alone in its own stack.
  * @param cards the round's cards, in seat order.
@@ -70,7 +85,7 @@ export function looksAlike(first: string, second: string): boolean {
  * @returns the stacks, ordered by the seat of their first card.
  */
 export function stackCards(cards: readonly Card[], merge: DuplicateMerger = mergeDuplicates): Stack[] {
-    const groups: MergedGroup[] = merge(cards.map((card: Card) => ({ playerId: card.playerId, text: card.text })));
+    const groups: MergedGroup[] = merge(cards.map((card: Card) => ({ playerId: card.playerId, text: withoutSmallWords(card.text) })));
     const stacks: Stack[] = cards.map((card: Card): Stack => groups.find((group: MergedGroup) => group.playerIds.includes(card.playerId) === true)?.playerIds ?? [card.playerId]);
     const seen: Set<string> = new Set();
     return stacks.filter((stack: Stack) => {

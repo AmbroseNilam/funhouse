@@ -10,8 +10,8 @@ import { commandByKeywords, VOICE_COMMANDS, type VoiceCommand } from "./voice-co
 /** How long one decision may take before its fallback is used. */
 const DECISION_TIME_LIMIT_MILLISECONDS: number = 800;
 
-/** Probability of yes at which two answers count as the same. Near-misses came well under it in the benchmark. */
-const SAME_ANSWER_PROBABILITY: number = 0.5;
+/** Probability of yes at which two answers go on to the game's closed question. Low, because matching is the fun and that question still has to agree. */
+const SAME_ANSWER_PROBABILITY: number = 0.35;
 
 /** How often to note that Jev isn't answering, so an outage doesn't fill the log. */
 const FAILURE_LOG_GAP_MILLISECONDS: number = 60000;
@@ -51,7 +51,7 @@ const KIND_CRITERIA: Record<UtteranceKind, string> = {
 };
 
 /** The question behind merging, in the words the benchmark measured. */
-const SAME_ANSWER_QUESTION: string = "Would players at a party game count these two answers as the same answer, allowing for spelling, articles, abbreviations and synonyms? Different things that merely look or sound alike are not the same.";
+const SAME_ANSWER_QUESTION: string = "Would players at a party game happily count these two answers as a match? Count them as a match if they mean the same thing or nearly so, allowing for spelling, articles, plurals, word forms, extra small words, abbreviations and synonyms. Different things that are merely related, or look or sound alike, are not a match.";
 
 let lastFailureLoggedAt: number = 0;
 

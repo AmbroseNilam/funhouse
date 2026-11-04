@@ -460,8 +460,8 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         });
         const request: string = [
             `The prompt was ${quoted(promptOf(state))}. For each pair below, say yes only if both of these are true.`,
-            "Someone could give each answer to this prompt, even as a joke. And the two are the same thing: a spelling variant, a plural, an abbreviation or a synonym.",
-            "Related is not the same, and neither is looking or sounding alike. If you are not sure, say no.",
+            "Someone could give each answer to this prompt, even as a joke. And friends at a party would happily count the two as a match: a spelling variant, a plural, another form of the word, extra small words, an abbreviation, a synonym, or nearly the same idea in other words, as with sleep and sleeping in, or coffee and drinking coffee.",
+            "Be generous, because matching is the fun of the game. But things that are merely related are different answers, such as cat and dog, beach and ocean, or a blanket and a sweater.",
             `Reply with one line per pair and nothing else, in the form "${state.round}.1 yes" or "${state.round}.2 no".`,
             ...lines,
         ].join("\n");
