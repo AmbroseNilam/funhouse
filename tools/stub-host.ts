@@ -36,6 +36,9 @@ function contentFor(prompt: string): string | null {
     if (prompt.includes("You are the clue-giver") === true) {
         return "harbour, 2";
     }
+    if (prompt.startsWith("Choose one secret word for a party game where each player says one word") === true) {
+        return "Category: a thing in a kitchen | Word: kettle";
+    }
     if (prompt.startsWith("Pick one place") === true) {
         return "Place: Lighthouse | Roles: keeper, sailor, painter, tourist, engineer, cook, inspector, fisher";
     }
@@ -61,7 +64,7 @@ export function hostReply(system: string, user: string): string {
     if (clue !== null) {
         return `${clue[1] ?? ""}, ${clue[2] ?? ""}. Go on.`;
     }
-    const place: string | undefined = /The place is: ([^.]+)\./.exec(system)?.[1];
+    const place: string | undefined = /The (?:place|word) is: ([^.]+)\./.exec(system)?.[1];
     if (place !== undefined && rulings.includes("right") === true) {
         const said: string = lines.at(-1) ?? "";
         return said.toLowerCase().includes(place.toLowerCase()) === true ? "[[right]]" : "[[wrong]]";

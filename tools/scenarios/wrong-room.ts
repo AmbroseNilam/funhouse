@@ -76,11 +76,12 @@ function headline(): { text: string; kicker: string } {
 }
 
 /**
- * Everything the TV shows, as one string.
+ * Everything the game puts on the TV, as one string. The room's live captions are left out: they are
+ * only a transcript of what was said aloud, and nothing in the game's own scene.
  * @returns the text.
  */
 function tvText(): string {
-    return (screen.scene?.blocks ?? []).map((block: SceneBlock) => JSON.stringify(block)).join(" ");
+    return (screen.scene?.blocks ?? []).filter((block: SceneBlock) => block.type !== "caption").map((block: SceneBlock) => JSON.stringify(block)).join(" ");
 }
 
 const gameStart: number = screen.hostLines.length;
