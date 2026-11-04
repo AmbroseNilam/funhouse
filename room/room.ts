@@ -771,7 +771,7 @@ export class Room implements HostStage, AgentHost {
                 return;
             }
             if (message?.type === "nav") {
-                if (steering === true && isPhoneMessage(message as unknown as { type: string } & Record<string, unknown>) === true) {
+                if (steering === true && isPhoneMessage(message) === true) {
                     this.lastActivityAt = Date.now();
                     this.shell.actFromScreen(message.action);
                 }
