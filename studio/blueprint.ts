@@ -4,21 +4,20 @@
 // checked names. This file is the one place that knows every kit.
 
 import type { Cartridge } from "../shared/cartridge.ts";
-import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
-import { createEstimateGame, estimateBlueprintProblems, type EstimateDecisions } from "./kits/estimate.ts";
-import { createGateGame, gateBlueprintProblems, type GateDecisions } from "./kits/gate.ts";
-import { createLineGame, lineBlueprintProblems, type LineDecisions } from "./kits/line.ts";
-import { clueBoardBlueprintProblems, createClueBoardGame, type ClueBoardDecisions } from "./kits/clueboard.ts";
-import { createOddWordGame, oddWordBlueprintProblems, type OddWordDecisions } from "./kits/oddword.ts";
-import { createStrangerGame, strangerBlueprintProblems, type StrangerDecisions } from "./kits/stranger.ts";
-
-import { chainBlueprintProblems, createChainGame, type ChainDecisions } from "./kits/chain.ts";
-import { createGalleryGame, galleryBlueprintProblems, type GalleryDecisions } from "./kits/gallery.ts";
-
-import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
-import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
-import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
-import { createWitGame, witBlueprintProblems, type WitDecisions } from "./kits/wit.ts";
+import type { Box, HiddenValue } from "./kit/kit.ts";
+import type { EstimateDecisions } from "./kits/estimate.ts";
+import type { GateDecisions } from "./kits/gate.ts";
+import type { LineDecisions } from "./kits/line.ts";
+import type { ClueBoardDecisions } from "./kits/clueboard.ts";
+import type { OddWordDecisions } from "./kits/oddword.ts";
+import type { StrangerDecisions } from "./kits/stranger.ts";
+import type { ChainDecisions } from "./kits/chain.ts";
+import type { GalleryDecisions } from "./kits/gallery.ts";
+import type { GuessingDecisions } from "./kits/guessing.ts";
+import type { PlantDecisions } from "./kits/plant.ts";
+import type { FitsDecisions } from "./kits/tap-fits.ts";
+import type { WitDecisions } from "./kits/wit.ts";
+import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
 export interface GuessingBlueprint {
@@ -108,12 +107,33 @@ export interface GalleryBlueprint {
 }
 
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint | ClueBoardBlueprint | StrangerBlueprint | OddWordBlueprint | ChainBlueprint | GalleryBlueprint;
+export type Blueprint =
+    | GuessingBlueprint
+    | PlantBlueprint
+    | TapBlueprint
+    | WitBlueprint
+    | GateBlueprint
+    | EstimateBlueprint
+    | LineBlueprint
+    | ClueBoardBlueprint
+    | StrangerBlueprint
+    | OddWordBlueprint
+    | ChainBlueprint
+    | GalleryBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
     cartridge: Cartridge<unknown>;
     hidden(state: unknown): HiddenValue[];
+}
+
+/**
+ * A blueprint's kit, looked up by the name the blueprint gives it.
+ * @param blueprint the blueprint.
+ * @returns the kit's definition.
+ */
+function kitOf(blueprint: Blueprint): KitDefinition<Blueprint> {
+    return KITS[blueprint.kit];
 }
 
 /**
@@ -123,40 +143,7 @@ export interface AnyKitGame {
  * @returns the problems found, in plain words; empty when it is runnable.
  */
 export function blueprintProblems(blueprint: Blueprint): string[] {
-    if (blueprint.kit === "guessing") {
-        return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "plant") {
-        return plantBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "wit") {
-        return witBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "gate") {
-        return gateBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "estimate") {
-        return estimateBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "line") {
-        return lineBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "clueboard") {
-        return clueBoardBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "stranger") {
-        return strangerBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "oddword") {
-        return oddWordBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "chain") {
-        return chainBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    if (blueprint.kit === "gallery") {
-        return galleryBlueprintProblems(blueprint.box, blueprint.decisions);
-    }
-    return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
+    return kitOf(blueprint).problems(blueprint);
 }
 
 /**
@@ -167,40 +154,7 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
  * @returns the game.
  */
 export function createKitGame(blueprint: Blueprint, random: () => number = Math.random): AnyKitGame {
-    if (blueprint.kit === "guessing") {
-        return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "plant") {
-        return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "wit") {
-        return erase(createWitGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "gate") {
-        return erase(createGateGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "estimate") {
-        return erase(createEstimateGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "line") {
-        return erase(createLineGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "clueboard") {
-        return erase(createClueBoardGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "stranger") {
-        return erase(createStrangerGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "oddword") {
-        return erase(createOddWordGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "chain") {
-        return erase(createChainGame(blueprint.box, blueprint.decisions, random));
-    }
-    if (blueprint.kit === "gallery") {
-        return erase(createGalleryGame(blueprint.box, blueprint.decisions, random));
-    }
-    return erase(createFitsGame(blueprint.box, blueprint.decisions));
+    return kitOf(blueprint).create(blueprint, random);
 }
 
 /**
@@ -209,23 +163,5 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
  * @returns the actions, by id and label.
  */
 export function blueprintPauseActions(blueprint: Blueprint): { id: string; label: string }[] {
-    if (blueprint.kit === "guessing") {
-        return blueprint.decisions.giveUpButton === true ? [{ id: "giveup", label: "We give up" }] : [];
-    }
-    if (blueprint.kit === "plant") {
-        return [{ id: PLANT_GIVE_UP_ACTION, label: "We give up" }];
-    }
-    return [];
+    return kitOf(blueprint).pauseActions(blueprint);
 }
-
-/**
- * Hides a kit game's state type, so the shelf and room can hold games of any kit. Safe because
- * the room only ever passes a game's own state back to it; TypeScript allows it because methods
- * compare their parameters both ways.
- * @param game a kit game.
- * @returns the same game.
- */
-function erase<State>(game: KitGame<State>): AnyKitGame {
-    return game;
-}
-
