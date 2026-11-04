@@ -2,6 +2,8 @@
 // so everything that costs money or memory is counted here. When a limit is hit the room stays
 // up and simply does less; nothing here throws.
 
+import { mayCharge, type Service } from "../providers/meter.ts";
+
 /**
  * Most model replies, spoken voice lines, pictures and pre-recorded lines the whole server may
  * spend in a day. The bank is counted apart from the voice: every room wake records about twenty
@@ -10,6 +12,9 @@
  * a busy day of solo tables must not spend the model replies every host needs.
  */
 const DAILY_BUDGET: Record<SpendKind, number> = { spark: 5000, voice: 2000, image: 200, bank: 4000, guest: 1500 };
+
+/** Which dollar stage each kind of spending answers to. */
+const METERED_AS: Record<SpendKind, Service> = { spark: "spark", voice: "voice", image: "image", bank: "voice", guest: "spark" };
 
 /** How long a day of budget lasts. */
 const BUDGET_PERIOD_MILLISECONDS: number = 86400000;
@@ -94,7 +99,7 @@ export class SpendBudget {
      */
     public spend(kind: SpendKind): boolean {
         this.rollOver();
-        if (this.spent[kind] >= this.limits[kind]) {
+        if (this.spent[kind] >= this.limits[kind] || mayCharge(METERED_AS[kind]) === false) {
             return false;
         }
         this.spent[kind] += 1;

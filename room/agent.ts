@@ -11,6 +11,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PhoneView } from "../shared/controls.ts";
 import type { Scene, SceneBlock } from "../shared/scene.ts";
 import { askIn, type Ask } from "./guest.ts";
+import { enterPayer, withPayer } from "../providers/meter.ts";
 import { RateWindow, type AddressLimits } from "./limits.ts";
 
 /** True when this server offers agent seats at all. */
@@ -126,6 +127,8 @@ export interface AgentTable {
 export interface AgentHost {
     /** The room's code, for the log only. */
     readonly code: string;
+    /** Who the room's spending is charged to. */
+    readonly payer: string;
     /**
      * Takes up an invitation.
      * @param ownerId who asked for the link.
@@ -227,7 +230,7 @@ setInterval(() => {
     for (const link of LINKS.values()) {
         rooms.add(link.room);
     }
-    rooms.forEach((room: AgentHost) => { room.agentSweep(); });
+    rooms.forEach((room: AgentHost) => { withPayer(room.payer, () => { room.agentSweep(); }); });
 }, SWEEP_MILLISECONDS).unref();
 
 /**
@@ -641,6 +644,7 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
         send(response, 404, "text/plain", LINK_ENDED);
         return true;
     }
+    enterPayer(link.room.payer);
     if (link.rate.allow() === false) {
         send(response, 429, "text/plain", `Too fast. Look at most every ${LOOK_AGAIN_SECONDS} seconds.`);
         return true;

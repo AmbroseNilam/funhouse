@@ -15,6 +15,15 @@ const EMPTY_ROOM_MILLISECONDS: number = 300000;
 /** How long a screen may sit with no players before the room closes anyway; a TV left on mustn't hold one forever. */
 const NO_PLAYERS_MILLISECONDS: number = 900000;
 
+/** How long a room with people in it may go with nobody doing anything, when limits are on. */
+const IDLE_MILLISECONDS: number = Number(process.env.COST_IDLE_MINUTES ?? 5) * 60000;
+
+/** How long a room that ran out gets to finish its sentence before the stop screen. */
+const REST_GRACE_MILLISECONDS: number = 12000;
+
+/** How often rooms are checked against their allowance. */
+const ALLOWANCE_CHECK_MILLISECONDS: number = 3000;
+
 /** How often empty rooms are looked for. */
 const SWEEP_MILLISECONDS: number = 30000;
 
@@ -26,6 +35,7 @@ export class RoomDirectory {
     private readonly rooms: Map<string, Room> = new Map();
     private readonly emptySince: Map<string, number> = new Map();
     private readonly noPlayersSince: Map<string, number> = new Map();
+    private readonly outSince: Map<string, number> = new Map();
 
     /**
      * Creates an empty directory and starts closing abandoned rooms.
@@ -38,6 +48,7 @@ export class RoomDirectory {
         this.games = games;
         this.testingGames = testingGames;
         setInterval(() => { this.closeEmptyRooms(); }, SWEEP_MILLISECONDS).unref();
+        setInterval(() => { this.checkAllowances(); }, ALLOWANCE_CHECK_MILLISECONDS).unref();
     }
 
     /**
@@ -55,9 +66,10 @@ export class RoomDirectory {
      * @param tapToTalk true to try tap-to-talk in this room.
      * @param fastReplies true to try the faster reply model in this room.
      * @param testing true to give this room the games still on hold too, each marked as testing.
+     * @param payer who the room's spending is charged to.
      * @returns the room, or null when the server is at its limit.
      */
-    public create(lively: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, testing: boolean = false): Room | null {
+    public create(lively: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, testing: boolean = false, payer: string = ""): Room | null {
         if (this.rooms.size >= MAX_ROOMS) {
             return null;
         }
@@ -65,10 +77,35 @@ export class RoomDirectory {
         while (this.rooms.has(code) === true) {
             code = makeRoomCode();
         }
-        const room: Room = new Room(code, this.publicUrl, testing === true ? this.testingGames : this.games, lively, tapToTalk, fastReplies);
+        const room: Room = new Room(code, this.publicUrl, testing === true ? this.testingGames : this.games, lively, tapToTalk, fastReplies, payer);
         this.rooms.set(code, room);
         log(`room ${code}`, `opened (${this.rooms.size} open)`);
         return room;
+    }
+
+    /** Sends rooms that ran out to the stop screen after a moment, and closes rooms nobody is doing anything in. */
+    private checkAllowances(): void {
+        const now: number = Date.now();
+        for (const [code, room] of this.rooms) {
+            if (room.isOutOfAllowance() === false) {
+                this.outSince.delete(code);
+            }
+            if (room.isOutOfAllowance() === true) {
+                this.outSince.set(code, this.outSince.get(code) ?? now);
+            }
+            const rested: boolean = now - (this.outSince.get(code) ?? now) >= REST_GRACE_MILLISECONDS;
+            const idle: boolean = process.env.COST_LIMITS === "1" && room.idleMilliseconds() >= IDLE_MILLISECONDS;
+            if (rested === false && idle === false) {
+                continue;
+            }
+            room.turnEveryoneAway(rested);
+            room.close();
+            this.rooms.delete(code);
+            this.outSince.delete(code);
+            this.emptySince.delete(code);
+            this.noPlayersSince.delete(code);
+            log(`room ${code}`, `closed, ${rested === true ? "out of allowance" : "idle"} (${this.rooms.size} open)`);
+        }
     }
 
     /** Closes rooms that have had nobody in them for long enough. */

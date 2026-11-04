@@ -2,6 +2,7 @@
 // Streams reply text. max_tokens covers Spark's hidden reasoning as well as the reply, so callers
 // leave room for both. Time to first text varies widely, so a slow start can be raced by a backup.
 
+import { chargeChatEstimate, mayCharge } from "../meter.ts";
 import { postJson, readServerSentEvents } from "./client.ts";
 
 /** Default host model. */
@@ -35,6 +36,7 @@ interface RacingStream {
 /** Shape of one streamed chunk, as far as this file reads it. */
 interface StreamChunk {
     choices?: { delta?: { content?: unknown } }[];
+    usage?: unknown;
 }
 
 /**
@@ -127,9 +129,18 @@ async function* streamChunks(messages: SparkMessage[], options: SparkOptions): A
         stream: true,
         max_tokens: options.maxTokens ?? 400,
         reasoning_effort: options.reasoningEffort ?? "minimal",
+        stream_options: { include_usage: true },
     };
+    if (mayCharge("spark") === false) {
+        throw new Error("The spending limit has been reached.");
+    }
+    const settle: (usage: unknown) => void = chargeChatEstimate("spark", JSON.stringify(messages).length);
     const response: Response = await postJson("/chat/completions", body, options.signal);
     for await (const event of readServerSentEvents(response)) {
-        yield event as StreamChunk;
+        const chunk: StreamChunk = event as StreamChunk;
+        if (chunk.usage !== undefined && chunk.usage !== null) {
+            settle(chunk.usage);
+        }
+        yield chunk;
     }
 }

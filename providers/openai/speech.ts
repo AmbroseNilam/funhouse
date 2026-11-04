@@ -2,6 +2,7 @@
 // comes from OpenAI's gpt-4o-mini-tts, steered by a style instruction so the same host can
 // whisper at night and boom at dawn. Swapping providers means replacing this file only.
 
+import { charge, PRICES } from "../meter.ts";
 /** Name of the environment variable that holds the OpenAI key. */
 export const OPENAI_KEY_VARIABLE: string = "OPENAI_API_KEY";
 
@@ -53,6 +54,7 @@ export class OpenAiSpeech implements TextToSpeech {
      * @param request what to say and how.
      */
     public async *speak(request: SpeechRequest): AsyncGenerator<Uint8Array> {
+        charge("voice", request.text.length * PRICES.voicePerCharacter);
         const response: Response = await fetch("https://api.openai.com/v1/audio/speech", {
             method: "POST",
             signal: request.signal ?? null,

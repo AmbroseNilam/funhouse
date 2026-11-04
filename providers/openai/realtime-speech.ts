@@ -5,6 +5,7 @@
 // The session allows one response at a time, so lines are generated strictly in order; each
 // still finishes faster than it plays, which keeps the next one ready.
 
+import { charge, PRICES } from "../meter.ts";
 import WebSocket from "ws";
 import { OPENAI_KEY_VARIABLE, type SpeechRequest, type TextToSpeech } from "./speech.ts";
 
@@ -71,6 +72,8 @@ export class OpenAiRealtimeSpeech implements TextToSpeech {
      * @param request what to say, the voice, the delivery, and a cancel signal.
      */
     public async *speak(request: SpeechRequest): AsyncGenerator<Uint8Array> {
+        // Unmeasured and dearer than a plain voice, so counted at five times the rate.
+        charge("voice", 5 * request.text.length * PRICES.voicePerCharacter);
         const state: LineState = { chunks: [], done: false, failure: null, wake: null };
         const line: ActiveLine = {
             push: (chunk: Uint8Array): void => {

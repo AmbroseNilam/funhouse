@@ -543,3 +543,8 @@
     font-size: calc(24 * var(--u));
     -webkit-line-clamp: 1;
 }
+
+/* The stop screen's code entry. */
+.judge-form { display: flex; gap: 8px; margin-top: 24px; }
+.judge-form input { font: inherit; padding: 10px; }
+.judge-form button { font: inherit; padding: 10px 14px; }
