@@ -199,7 +199,7 @@ export class FakePhone {
         this.nav({ kind: "select" });
         await waitFor(() => screen.shell?.screen === "game", "the game's page");
         this.nav({ kind: "select" });
-        await waitFor(() => screen.shell?.screen === "pick" || screen.shell?.screen === "play", "the game to start or ask what to pick");
+        await waitFor(() => screen.shell?.screen === "pick" || screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the game to start or ask what to pick");
         if (screen.shell?.screen === "pick") {
             // A scenario brings its own topic when it can say one; otherwise it takes the surprise.
             const own: number = screen.shell.menu.indexOf("Say your own topic");
