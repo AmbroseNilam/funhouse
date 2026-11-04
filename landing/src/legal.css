@@ -5,7 +5,8 @@ body { margin: 0; background: #17110c; color: #efe3c8; font-family: "Fraunces Va
 a { color: inherit; text-underline-offset: 3px; }
 :focus-visible { outline: 3px solid #e8a33d; outline-offset: 3px; }
 .legal { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; max-width: 44em; margin: 0 auto; padding: 32px 24px 48px; }
-.legal p, .legal ul, .legal h1 { margin: 0; }
+.legal p, .legal ul, .legal h1, .legal h2 { margin: 0; }
+.legal h2 { margin-top: 16px; font-size: 26px; font-weight: 600; line-height: 1.15; }
 .legal ul { display: flex; flex-direction: column; gap: 8px; padding-left: 1.2em; }
 .legal h1 { margin-bottom: 8px; font-size: clamp(36px, 5vw, 54px); font-weight: 500; line-height: 1.05; }
 .legal strong { font-weight: 600; }
