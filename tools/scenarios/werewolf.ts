@@ -18,7 +18,7 @@ const LOOK_MILLISECONDS: number = 250;
 /** The longest a whole game may take. */
 const GAME_LIMIT_MILLISECONDS: number = 210000;
 
-const count: number = Number(process.argv[2] ?? 6);
+const count: number = Number(process.argv[2] ?? process.env.WEREWOLF_PLAYERS ?? 6);
 const screen: FakeScreen = new FakeScreen();
 await waitFor(() => screen.code !== "", "a room");
 const players: Player[] = ["Sam", "Priya", "Jo", "Dana", "Leo", "Ivy"].slice(0, count).map((name: string) => ({ name, phone: new FakePhone(screen.code, name), role: "" }));
@@ -86,9 +86,6 @@ while (isFinished() === false) {
             const pick = options.find((option) => option.label !== player.name && option.label !== "Yourself");
             player.phone.press(pick?.id ?? options[0]?.id ?? "");
         }
-        if (title === "One last shot" && options.length > 0) {
-            player.phone.press(options[0]?.id ?? "");
-        }
         if ((title === "The vote" || title === "The final vote") && player.phone.view?.turn?.yours === true) {
             const wolf: Player | undefined = living().find((candidate: Player) => candidate.role === "werewolf");
             const notWolf: Player | undefined = living().find((candidate: Player) => candidate.role !== "werewolf" && candidate !== player);
@@ -96,6 +93,14 @@ while (isFinished() === false) {
             const chosen: string | undefined = optionFor(player, target === player ? notWolf?.name ?? "" : target?.name ?? "");
             if (chosen !== undefined) {
                 player.phone.press(chosen);
+            }
+        }
+    }
+    if (title === "One last shot") {
+        for (const player of players) {
+            const shot = player.phone.options().find((option) => option.id.startsWith("shoot:"));
+            if (shot !== undefined) {
+                player.phone.press(shot.id);
             }
         }
     }
@@ -116,8 +121,8 @@ while (isFinished() === false) {
 console.warn(`Result: ${screen.title()}. Screens: ${titles.join(" > ")}`);
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 6000); });
 
-for (const needed of ["Choose your village", "How it works", "Check your phone", "Night falls", "Dawn"]) {
-    if (titles.includes(needed) === false && needed !== "Choose your village") {
+for (const needed of ["How it works", "Check your phone", "Night falls", "Dawn"]) {
+    if (titles.includes(needed) === false) {
         throw new Error(`Never saw "${needed}". Screens: ${titles.join(" > ")}`);
     }
 }

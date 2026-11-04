@@ -661,7 +661,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 blocks: [
                     { type: "title", text: "Choose your village", kicker: `${state.seats.length} players` },
                     { type: "text", text: describeRoles(rolesFor(state.seats.length, state.setup)), emphasis: "large" },
-                    { type: "text", text: toggles === true ? "Tap the roles on your phone, or let the host decide." : `Tap on your phone, or ${HOST_NAME} decides.` },
+                    { type: "text", text: toggles === true ? `Tap the roles on your phone, or let ${HOST_NAME} decide.` : `Tap on your phone, or ${HOST_NAME} decides.` },
                     { type: "timer", seconds: PICK_SECONDS, label: `until ${HOST_NAME} decides`, running: true },
                 ],
             };
