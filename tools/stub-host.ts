@@ -69,6 +69,16 @@ export function hostReply(system: string, user: string): string {
         const said: string = lines.at(-1) ?? "";
         return said.toLowerCase().includes(place.toLowerCase()) === true ? "[[right]]" : "[[wrong]]";
     }
+    const said: string = (lines.at(-1) ?? "").replace(/^[^:]*:\s*/, "").trim();
+    if (rulings.includes("topic") === true && said !== "" && text.includes("(Game:") === false) {
+        return `[[topic: ${said.slice(0, 60)}]]`;
+    }
+    if (rulings.includes("no") === true && rulings.includes("yes") === true && said !== "" && text.includes("(Game:") === false) {
+        if (rulings.includes("giveup") === true && /give up/i.test(said) === true) {
+            return "[[giveup]]";
+        }
+        return said.length % 2 === 0 ? "[[yes]] Yes." : "[[no]] No.";
+    }
     if (rulings.includes("locked") === true && text.includes("(Game:") === false && text.trim() !== "") {
         return "[[locked]]";
     }
