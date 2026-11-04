@@ -57,6 +57,18 @@ export interface PhoneView {
     talkWaiting: boolean;
     /** What the game's turn means for this phone, if anything. */
     turn: PhoneTurn | null;
+    /** The AI guests at the table, for this phone's menu. */
+    guests: GuestTable;
+}
+
+/** The AI guests at the table and what this phone may do about them. */
+export interface GuestTable {
+    /** Who's sitting in. */
+    seated: { playerId: string; name: string; style: string }[];
+    /** True when this phone may seat another. */
+    canAdd: boolean;
+    /** True when this phone may send one home; guests only come and go between games. */
+    canRemove: boolean;
 }
 
 /** What a phone sends when a player uses a control. */

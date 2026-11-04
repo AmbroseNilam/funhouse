@@ -176,7 +176,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
                 {shell.seats.map((seat: Seat) => (
                     <li key={seat.playerId} className={seat.connected === false ? "away" : ""} style={{ background: seat.colour }}>
                         <strong>{seat.name}</strong>
-                        <small>{seat.connected === false ? "Phone's asleep" : seat.driving === true ? "Has the controller" : ""}</small>
+                        <small>{seat.guest === true ? "AI guest" : seat.connected === false ? "Phone's asleep" : seat.driving === true ? "Has the controller" : ""}</small>
                     </li>
                 ))}
             </ul>

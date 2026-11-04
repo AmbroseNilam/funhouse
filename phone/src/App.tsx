@@ -560,7 +560,7 @@ export function App(): ReactElement {
     const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
     const noMicRef = useRef<boolean>(noMic);
     noMicRef.current = noMic;
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -1284,6 +1284,7 @@ export function App(): ReactElement {
                                 {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
                                 {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
+                                {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0) ? <button onClick={() => { setMenu("guests"); }}>AI guests</button> : null}
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <button onClick={() => { setMenu("settings"); }}>Settings</button>
@@ -1310,6 +1311,22 @@ export function App(): ReactElement {
                                 <button type="submit" className="primary">Send</button>
                                 <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
                             </form>
+                        ) : null}
+                        {menu === "guests" ? (
+                            <>
+                                <p>Short of people? An AI guest takes a seat. It plays from its own phone, and it can't talk.</p>
+                                <ul className="guest-list">
+                                    {(view?.guests.seated ?? []).map((guest) => (
+                                        <li key={guest.playerId}>
+                                            <div><strong>{guest.name}</strong> <small className="guest-mark">AI guest</small><br />{guest.style}</div>
+                                            {view?.guests.canRemove === true ? <button className="quiet" onClick={() => { send({ type: "guest", action: "remove", playerId: guest.playerId }); }}>Remove</button> : null}
+                                        </li>
+                                    ))}
+                                </ul>
+                                {view?.guests.canAdd === true ? <button className="primary" onClick={() => { send({ type: "guest", action: "add" }); }}>Add a guest</button> : null}
+                                {view?.guests.canRemove === false && (view.guests.seated.length > 0) ? <p className="mic-note">Guests come and go between games.</p> : null}
+                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
+                            </>
                         ) : null}
                         {menu === "settings" ? (
                             <>

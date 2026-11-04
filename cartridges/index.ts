@@ -2,6 +2,7 @@
 // page and the host's brief all read from this list.
 
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
+import type { GuestPlay } from "../room/guest.ts";
 import { HOST_NAME } from "../shared/brand.ts";
 import type { CartridgeManifest } from "../shared/cartridge.ts";
 import type { StartPick } from "../shared/shell.ts";
@@ -28,6 +29,8 @@ export interface InstalledGame {
     pauseActions: { id: string; label: string }[];
     /** What the host may mutter when someone lingers on this box. Eight words at most. */
     remarks: string[];
+    /** How AI guests play it; left out, it isn't offered to a table with guests. */
+    guests?: GuestPlay;
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
     /** A few short lines shown before the first round in a room, if anything. */

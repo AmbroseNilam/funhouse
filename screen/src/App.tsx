@@ -213,6 +213,7 @@ export function App(): ReactElement {
     const leanRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const previousShellRef = useRef<ShellView | null>(null);
     const screenRef = useRef<string>("");
+    const newestShellRef = useRef<Extract<RoomToScreenMessage, { type: "shell" }> | null>(null);
     const wasOverRef = useRef<boolean>(false);
     const [touchedId, setTouchedId] = useState<string | null>(null);
     const touchTimerRef = useRef<number>(0);
@@ -336,9 +337,13 @@ export function App(): ReactElement {
                     speakerRef.current?.lineEnded();
                     return;
                 }
+                if (message.type === "shell") {
+                    newestShellRef.current = message;
+                }
                 if (message.type === "shell" && message.view.screen !== screenRef.current && "startViewTransition" in document && soundsRef.current !== null) {
                     screenRef.current = message.view.screen;
-                    const transition: ViewTransition = document.startViewTransition(() => { flushSync(() => { dispatch({ type: "message", message }); }); });
+                    // The transition applies its change a moment later, so it takes the newest console: an older one would overwrite anything that arrived since.
+                    const transition: ViewTransition = document.startViewTransition(() => { flushSync(() => { dispatch({ type: "message", message: newestShellRef.current ?? message }); }); });
                     transition.ready.catch(() => { /* a hidden page can't animate, and the change still applies */ });
                     return;
                 }

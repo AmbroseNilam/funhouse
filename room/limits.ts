@@ -6,9 +6,10 @@
  * Most model replies, spoken voice lines, pictures and pre-recorded lines the whole server may
  * spend in a day. The bank is counted apart from the voice: every room wake records about twenty
  * acknowledgements and remarks, and counting those as voice would let a busy day of room openings
- * lock new rooms out while the host had barely spoken.
+ * lock new rooms out while the host had barely spoken. AI guests count apart for the same reason:
+ * a busy day of solo tables must not spend the model replies every host needs.
  */
-const DAILY_BUDGET: Record<SpendKind, number> = { spark: 5000, voice: 2000, image: 200, bank: 4000 };
+const DAILY_BUDGET: Record<SpendKind, number> = { spark: 5000, voice: 2000, image: 200, bank: 4000, guest: 1500 };
 
 /** How long a day of budget lasts. */
 const BUDGET_PERIOD_MILLISECONDS: number = 86400000;
@@ -28,8 +29,8 @@ const MAX_CODE_MISSES_PER_MINUTE: number = 10;
 /** How long an address waits after too many wrong room codes. */
 const CODE_BLOCK_MILLISECONDS: number = 600000;
 
-/** What costs money: model replies, spoken lines, pictures, and the pre-recorded line bank. */
-export type SpendKind = "spark" | "voice" | "image" | "bank";
+/** What costs money: model replies, spoken lines, pictures, the pre-recorded line bank, and AI guests' decisions. */
+export type SpendKind = "spark" | "voice" | "image" | "bank" | "guest";
 
 /** Counts events in a rolling window of fixed length. */
 export class RateWindow {
@@ -75,7 +76,7 @@ export class RateWindow {
 /** The whole server's daily spend. */
 export class SpendBudget {
     private readonly limits: Record<SpendKind, number>;
-    private readonly spent: Record<SpendKind, number> = { spark: 0, voice: 0, image: 0, bank: 0 };
+    private readonly spent: Record<SpendKind, number> = { spark: 0, voice: 0, image: 0, bank: 0, guest: 0 };
     private periodStart: number = Date.now();
 
     /**
@@ -101,8 +102,8 @@ export class SpendBudget {
     }
 
     /**
-     * Whether anything new should start today. The bank is left out on purpose: a room with no
-     * pre-recorded lines still plays, so running out of them must not turn anyone away.
+     * Whether anything new should start today. The bank and the guests are left out on purpose: a
+     * room with no pre-recorded lines or guest decisions still plays, so running out must not turn anyone away.
      * @returns false once model replies or spoken lines have run out.
      */
     public hasRoom(): boolean {
@@ -120,6 +121,7 @@ export class SpendBudget {
         this.spent.voice = 0;
         this.spent.image = 0;
         this.spent.bank = 0;
+        this.spent.guest = 0;
     }
 }
 

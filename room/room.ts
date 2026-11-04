@@ -10,7 +10,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
 import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
-import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
+import type { Control, GuestTable, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
@@ -36,6 +36,8 @@ import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
 import type { HostMood } from "../shared/hostMood.ts";
 import type { PhoneTurn, Turn } from "../shared/turn.ts";
+import { GuestDriver, GUEST_PERSONAS, isStockWord, MAX_GUESTS, type GuestPersona, type GuestPlay } from "./guest.ts";
+import { GuestSocket } from "./guest-socket.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -78,6 +80,8 @@ interface Player {
     releasedAt: number;
     /** Latest partial transcript of the current utterance. */
     partial: string;
+    /** What plays this seat when it's an AI guest; null for a person. */
+    guest: GuestDriver | null;
 }
 
 /** The last line spoken in the room, shown as a caption; not final while still being said. */
@@ -284,6 +288,15 @@ const REMARK_CHANCE: number = 0.5;
 /** Most players one room seats. The largest game plays ten; two more can watch and talk. */
 const MAX_PLAYERS: number = 12;
 
+/** False when the server is started with GUESTS_OFF=1: no room can seat an AI guest, without a release. */
+const GUESTS_ON: boolean = process.env.GUESTS_OFF !== "1";
+
+/** Most model decisions all a room's guests may spend on one game; after that they play at random. */
+const MAX_GUEST_DECISIONS_PER_GAME: number = 120;
+
+/** Why a table with AI guests can't start a game that doesn't take them. */
+const NO_GUESTS_HERE: string = "AI guests can't play this one. Remove them first.";
+
 /** How long a released press may wait for its final text before it counts as not heard. */
 const FINAL_WAIT_MILLISECONDS: number = 6000;
 
@@ -445,6 +458,8 @@ export class Room implements HostStage {
     private readonly games: InstalledGame[];
     /** A replacement for the running game's shelf entry, installed when that game ends. */
     private waitingInstall: InstalledGame | null = null;
+    /** Model decisions the guests have spent on this game. */
+    private guestDecisions: number = 0;
 
     /**
      * Creates an empty room.
@@ -490,19 +505,35 @@ export class Room implements HostStage {
     }
 
     /**
-     * True when no screen or player is in the room.
+     * True when no screen or person is in the room. An AI guest never keeps a room open.
      * @returns whether the room is empty.
      */
     public isEmpty(): boolean {
-        return this.screens.size === 0 && this.players.size === 0;
+        return this.screens.size === 0 && this.people().length === 0;
     }
 
     /**
-     * True when anyone holds a seat, connected or not.
+     * True when a person holds a seat, connected or not. An AI guest doesn't count.
      * @returns whether the room has players.
      */
     public hasPlayers(): boolean {
-        return this.players.size > 0;
+        return this.people().length > 0;
+    }
+
+    /**
+     * The seats held by people.
+     * @returns every seat that isn't an AI guest.
+     */
+    private people(): Player[] {
+        return [...this.players.values()].filter((player: Player) => player.guest === null);
+    }
+
+    /**
+     * The seats held by AI guests.
+     * @returns them, oldest first.
+     */
+    private guests(): Player[] {
+        return [...this.players.values()].filter((player: Player) => player.guest !== null);
     }
 
     /** Tells every screen and phone the room is gone, so none of them waits on it or tries to come back. */
@@ -521,6 +552,7 @@ export class Room implements HostStage {
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
+        this.guests().forEach((guest: Player) => { guest.guest?.stop(); });
         this.shell.close();
         this.host.close();
         this.speech.close();
@@ -697,6 +729,10 @@ export class Room implements HostStage {
                 player = null;
                 return;
             }
+            if (message.type === "guest") {
+                this.onGuestRequest(player, message.action, message.playerId);
+                return;
+            }
             if (message.type === "answer") {
                 this.onAnswer(player, message.controlId, message.value);
                 return;
@@ -725,7 +761,7 @@ export class Room implements HostStage {
      */
     public brief(): string {
         if (this.game !== null) {
-            return [this.game.brief(), this.turnBrief()].filter((part: string) => part !== "").join("\n\n");
+            return [this.game.brief(), this.turnBrief(), this.guestBrief()].filter((part: string) => part !== "").join("\n\n");
         }
         const games: string[] = this.games.map((game: InstalledGame) => {
             const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
@@ -735,7 +771,8 @@ export class Room implements HostStage {
             "Right now: the lobby. Games you can start:",
             ...games,
             "When the group clearly asks to play one and there are enough players, write [[start: id]] first, then one short line. If there aren't enough, say how many more you need. People can also browse the shelf with their phones.",
-        ].join("\n");
+            this.guestBrief(),
+        ].filter((part: string) => part !== "").join("\n");
     }
 
     /**
@@ -950,6 +987,11 @@ export class Room implements HostStage {
      * @returns the player record, or null when the room is full.
      */
     private join(socket: WebSocket, rawName: string): Player | null {
+        // A person always outranks a guest for the last seat, if the seats aren't frozen by a game.
+        const makeWay: Player | undefined = this.players.size >= MAX_PLAYERS && this.game === null ? this.guests().at(-1) : undefined;
+        if (makeWay !== undefined) {
+            this.removePlayer(makeWay);
+        }
         if (this.players.size >= MAX_PLAYERS) {
             const rejected: RoomToPhoneMessage = { type: "rejected", reason: "roomFull" };
             socket.send(JSON.stringify(rejected));
@@ -963,7 +1005,7 @@ export class Room implements HostStage {
         const name: string = passedLocally === true && TEXT_ONLY === true ? this.freeName(wanted, null) : placeholder;
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = this.newSeat(playerId, name, socket);
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -982,6 +1024,144 @@ export class Room implements HostStage {
         }
         this.announceJoin(player);
         return player;
+    }
+
+    /**
+     * Makes the record for a new seat. Call it after taking the seat's number.
+     * @param playerId the seat's id.
+     * @param name the name on it.
+     * @param socket its connection.
+     * @returns the record.
+     */
+    private newSeat(playerId: string, name: string, socket: WebSocket): Player {
+        return { guest: null, playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+    }
+
+    /**
+     * Acts on a phone's request about AI guests. Seats freeze when a game starts, so guests come and
+     * go only between games, and a guest can't ask.
+     * @param player who's asking.
+     * @param action what they want.
+     * @param playerId which guest to send home; the newest if not said.
+     */
+    private onGuestRequest(player: Player, action: "add" | "remove", playerId: string | undefined): void {
+        if (player.guest !== null) {
+            return;
+        }
+        if (action === "add") {
+            this.addGuest();
+            return;
+        }
+        this.removeGuest(playerId);
+    }
+
+    /**
+     * Whether another AI guest could sit down now.
+     * @returns false during a game, at the guest cap, at the seat limit, with nobody here, or when guests are off.
+     */
+    private mayAddGuest(): boolean {
+        return GUESTS_ON === true && this.game === null && this.guests().length < MAX_GUESTS && this.players.size < MAX_PLAYERS && this.people().length > 0;
+    }
+
+    /** Seats the next preset guest and has the host introduce it as what it is. */
+    private addGuest(): void {
+        if (this.mayAddGuest() === false) {
+            return;
+        }
+        const taken: string[] = [...this.players.values()].map((player: Player) => player.name.toLowerCase());
+        const persona: GuestPersona | undefined = GUEST_PERSONAS.find((candidate: GuestPersona) => taken.includes(candidate.name.toLowerCase()) === false);
+        if (persona === undefined) {
+            return;
+        }
+        this.wake();
+        const playerId: string = `p${this.nextPlayerNumber}`;
+        this.nextPlayerNumber += 1;
+        const driver: GuestDriver = this.guestDriver(playerId, persona);
+        const socket: GuestSocket = new GuestSocket((view: PhoneView) => { driver.see(view); });
+        const player: Player = { ...this.newSeat(playerId, persona.name, socket as unknown as WebSocket), guest: driver };
+        this.players.set(playerId, player);
+        this.record({ type: "playerJoined", at: Date.now(), playerId, name: persona.name });
+        log(this.scope(), `${playerId} joined as an AI guest`);
+        this.shell.seatsChanged();
+        this.welcome(player);
+        this.broadcastScene();
+        this.broadcastShell();
+        this.refreshPhones();
+        this.host.notice(`(${persona.name} just sat down. It is an AI guest, not a person. ${persona.style} Introduce it as an AI guest in a few words.)`, WAKE_DELAY_MILLISECONDS.join);
+    }
+
+    /**
+     * Sends an AI guest home.
+     * @param playerId which one; the newest if not said.
+     */
+    private removeGuest(playerId?: string): void {
+        const guests: Player[] = this.guests();
+        const guest: Player | undefined = playerId === undefined ? guests.at(-1) : guests.find((candidate: Player) => candidate.playerId === playerId);
+        if (guest === undefined || this.game !== null) {
+            return;
+        }
+        this.removePlayer(guest);
+    }
+
+    /**
+     * Gives a guest the same two ways to act that a phone has, and only those.
+     * @param playerId the guest's seat.
+     * @param persona who it is.
+     * @returns the driver.
+     */
+    private guestDriver(playerId: string, persona: GuestPersona): GuestDriver {
+        const seated = (act: (player: Player) => void): void => {
+            const player: Player | undefined = this.players.get(playerId);
+            if (player !== undefined) {
+                act(player);
+            }
+        };
+        return new GuestDriver({
+            playerId,
+            persona,
+            press: (optionId: string, controlIndex: number): void => { seated((player: Player) => { this.onControl(player, optionId, controlIndex); }); },
+            answer: (controlId: string, value: string | number): void => { seated((player: Player) => { this.onAnswer(player, controlId, value); }); },
+            paused: (): boolean => this.paused,
+            play: (): GuestPlay => this.runningBox()?.guests ?? "random",
+            rules: (): string => {
+                const box: InstalledGame | undefined = this.runningBox();
+                return box === undefined ? "" : [box.pitch, ...box.howToPlay].join(" ");
+            },
+            mayAskModel: (): boolean => {
+                if (this.guestDecisions >= MAX_GUEST_DECISIONS_PER_GAME || BUDGET.spend("guest") === false) {
+                    return false;
+                }
+                this.guestDecisions += 1;
+                return true;
+            },
+        });
+    }
+
+    /**
+     * The shelf entry of the running game.
+     * @returns the entry, if a game is running.
+     */
+    private runningBox(): InstalledGame | undefined {
+        return this.games.find((game: InstalledGame) => game.manifest.id === this.game?.manifest.id);
+    }
+
+    /**
+     * What the host must know about AI guests, so it never presents one as a person.
+     * @returns the line, or an empty string with none at the table.
+     */
+    private guestBrief(): string {
+        const names: string[] = this.guests().map((guest: Player) => guest.name);
+        return names.length === 0 ? "" : `AI guests at this table: ${names.join(", ")}. They are AI, not people, and they can't speak or hear. Never present one as a person, and don't wait for one to talk.`;
+    }
+
+    /**
+     * The AI guests as one phone's menu shows them.
+     * @param player whose phone.
+     * @returns the guests and what this phone may do.
+     */
+    private guestTable(player: Player): GuestTable {
+        const seated: GuestTable["seated"] = this.guests().map((guest: Player) => ({ playerId: guest.playerId, name: guest.name, style: GUEST_PERSONAS.find((persona: GuestPersona) => persona.name === guest.name)?.style ?? "" }));
+        return { seated, canAdd: player.guest === null && this.mayAddGuest() === true, canRemove: player.guest === null && this.game === null && seated.length > 0 };
     }
 
     /**
@@ -1156,7 +1336,13 @@ export class Room implements HostStage {
         this.checking.add(key);
         this.refused.delete(key);
         this.refreshPhones();
-        const classify = async (line: string): Promise<boolean> => BUDGET.spend("spark") === true && await isFitForRoom(line);
+        // With the day's guest budget gone a guest plays on with its own stock words, which still pass the filter's local layer.
+        const classify = async (line: string): Promise<boolean> => {
+            if (BUDGET.spend(player.guest === null ? "spark" : "guest") === false) {
+                return player.guest !== null && isStockWord(line);
+            }
+            return await isFitForRoom(line);
+        };
         const result: FilterResult = await filterText(text.slice(0, limit * 2), limit, classify);
         this.checking.delete(key);
         if (this.game !== game || game === null || this.answerControl(player, controlId) === undefined) {
@@ -1206,7 +1392,8 @@ export class Room implements HostStage {
     private shellStage(): ShellStage {
         return {
             games: (): ShelfGame[] => this.games.map((game: InstalledGame) => this.shelfGame(game)),
-            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk, phoneDown }: Player) => ({
+            seats: (): Omit<Seat, "driving">[] => [...this.players.values()].map(({ playerId, name, colour, connected, holdingToTalk, phoneDown, guest }: Player) => ({
+                guest: guest !== null,
                 playerId,
                 name,
                 colour,
@@ -1219,6 +1406,9 @@ export class Room implements HostStage {
             })),
             startGame: (gameId: string, pick?: string): void => { this.startGame(gameId, false, pick); },
             pickOpened: (hostLine: string): void => { this.noticeIfAnyoneIsThere(`(Game: ${hostLine} One short line.)`, WAKE_DELAY_MILLISECONDS.screen); },
+            mayAddGuest: (): boolean => this.mayAddGuest(),
+            addGuest: (): void => { this.addGuest(); },
+            removeGuest: (): void => { this.removeGuest(); },
             endGame: (): void => { this.endGame(); },
             gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
             focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
@@ -1258,7 +1448,8 @@ export class Room implements HostStage {
 
     /** Makes the game wait once every seat has been gone a moment, and carries on as soon as one is back. */
     private checkSteppedOut(): void {
-        const seats: Player[] = [...this.gamePlayerIds].flatMap((playerId: string) => this.players.get(playerId) ?? []);
+        // Only people count: a guest is always "connected", and must not play on to an empty table.
+        const seats: Player[] = [...this.gamePlayerIds].flatMap((playerId: string) => this.players.get(playerId) ?? []).filter((seat: Player) => seat.guest === null);
         const allGone: boolean = this.game !== null && this.game.outcome() === null && seats.length > 0 && seats.every((seat: Player) => seat.connected === false);
         if (allGone === true) {
             if (this.steppedOut === false && this.stepOutTimer === null) {
@@ -1321,9 +1512,10 @@ export class Room implements HostStage {
         const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
         const count: number = this.players.size;
         const short: number = minPlayers - count;
-        const blocked: string | null = short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
+        const guestsBarred: boolean = game.guests === undefined && this.guests().length > 0;
+        const blocked: string | null = guestsBarred === true ? NO_GUESTS_HERE : short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
         const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
-        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, startCard: game.startCard ?? null, blocked };
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, startCard: game.startCard ?? null, blocked, guestsWelcome: GUESTS_ON === true && game.guests !== undefined };
     }
 
     /**
@@ -1406,11 +1598,17 @@ export class Room implements HostStage {
             this.host.notice(`(Game: ${name} needs ${minPlayers} to ${maxPlayers} players and there are ${count}.)`, WAKE_DELAY_MILLISECONDS.screen);
             return;
         }
+        if (installed.guests === undefined && this.guests().length > 0) {
+            this.host.notice(`(Game: ${NO_GUESTS_HERE})`, WAKE_DELAY_MILLISECONDS.screen);
+            return;
+        }
         if (replay === false && Date.now() - this.lastGameStartAt < GAME_START_GAP_MILLISECONDS) {
             return;
         }
         this.lastGameStartAt = Date.now();
         this.gamePlayerIds = new Set(this.players.keys());
+        this.guestDecisions = 0;
+        this.guests().forEach((guest: Player) => { guest.guest?.newGame(); });
         log(this.scope(), `starting ${installed.manifest.id} with ${count}`);
         this.caption = null;
         const chosen: string | undefined = pick ?? (replay === true ? this.lastPicks.get(installed.manifest.id) : undefined);
@@ -1437,6 +1635,7 @@ export class Room implements HostStage {
         log(this.scope(), `ended ${this.game.manifest.id}`);
         this.game.stop();
         this.game = null;
+        this.guests().forEach((guest: Player) => { guest.guest?.newGame(); });
         this.answered.clear();
         this.checking.clear();
         this.refused.clear();
@@ -1629,6 +1828,7 @@ export class Room implements HostStage {
             clearTimeout(player.leaveTimer);
             player.leaveTimer = null;
         }
+        player.guest?.stop();
         player.connected = false;
         player.transcribe?.abort();
         player.standby?.abort();
@@ -1640,12 +1840,17 @@ export class Room implements HostStage {
         this.record(left);
         this.game?.event(left);
         log(this.scope(), `${player.playerId} left`);
-        // With no seats left nobody could ever play on, because seats are fixed when a game starts.
-        if ([...this.gamePlayerIds].some((playerId: string) => this.players.has(playerId)) === false) {
+        // With no person left in their seat nobody could ever play on, because seats are fixed when a game starts.
+        if ([...this.gamePlayerIds].some((playerId: string) => this.players.has(playerId) === true && this.players.get(playerId)?.guest === null) === false) {
             this.endGame();
         }
+        // Guests don't sit at a table with no people. This calls itself until the last one has gone.
+        const lastGuest: Player | undefined = this.people().length === 0 ? this.guests()[0] : undefined;
+        if (lastGuest !== undefined) {
+            this.removePlayer(lastGuest);
+        }
         this.checkSteppedOut();
-        if (this.players.size > 0) {
+        if (this.people().length > 0) {
             this.noticeIfAnyoneIsThere(`(${player.name} left the room)`, WAKE_DELAY_MILLISECONDS.leave);
         }
         this.shell.seatsChanged();
@@ -2412,6 +2617,9 @@ export class Room implements HostStage {
             if (player.connected === false) {
                 entry.badge = "reconnecting";
             }
+            if (player.guest !== null) {
+                entry.badge = "AI guest";
+            }
             return entry;
         });
     }
@@ -2458,7 +2666,7 @@ export class Room implements HostStage {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player) };
+        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
     }
 
     /**

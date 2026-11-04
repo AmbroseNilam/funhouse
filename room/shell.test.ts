@@ -19,6 +19,7 @@ interface Told {
 }
 
 const GAME: ShelfGame = {
+    guestsWelcome: false,
     id: "doors",
     name: "Doors",
     pitch: "",
@@ -38,7 +39,7 @@ const GAME: ShelfGame = {
  * @returns the seat.
  */
 function seat(playerId: string, name: string): Omit<Seat, "driving"> {
-    return { playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false };
+    return { playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false };
 }
 
 /**
@@ -63,6 +64,9 @@ function shellWith(told: Told): Shell {
         gameAction: () => undefined,
         edge: () => undefined,
         changed: () => undefined,
+        mayAddGuest: () => false,
+        addGuest: () => undefined,
+        removeGuest: () => undefined,
     };
     shell = new Shell(stage);
     return shell;
@@ -333,8 +337,8 @@ describe("the console", () => {
 
     it("lets someone in the game take over a pause from a holder who's only watching", () => {
         const seats = [
-            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false },
-            { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false },
+            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false },
+            { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false },
         ];
         const shell: Shell = new Shell({
             games: () => [],
@@ -351,6 +355,9 @@ describe("the console", () => {
             gameAction: () => undefined,
             edge: () => undefined,
             changed: () => undefined,
+            mayAddGuest: () => false,
+            addGuest: () => undefined,
+            removeGuest: () => undefined,
         });
         shell.seatsChanged();
         shell.gameStarted("doors");

@@ -254,6 +254,15 @@ export class FakePhone {
         await this.chooseRow(screen, label);
     }
 
+    /**
+     * Seats or sends home an AI guest from the phone's menu.
+     * @param action what to do.
+     * @param playerId which guest; the newest if not said.
+     */
+    public guest(action: "add" | "remove", playerId?: string): void {
+        this.socket.send(JSON.stringify({ type: "guest", action, ...(playerId === undefined ? {} : { playerId }) }));
+    }
+
     /** Leaves the table for good, as the phone menu does. */
     public leave(): void {
         console.warn(`${this.name} leaves the table`);
