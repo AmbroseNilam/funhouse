@@ -54,7 +54,8 @@ left and a clock.
 
 **Awkward cases.** Three players: it works, but a challenge is a coin flip against two cups. Eight:
 twenty-four dice and a table that is mostly out of the conversation for a minute at a time; the twelve
-challenge cap and the exact-bid penalty are there to keep it to about twenty minutes. Someone leaving
+challenge cap and the exact-bid penalty are there to bound the length. How long it really runs with people
+is not measured: the script's four-player game took about six minutes for seven challenges. Someone leaving
 mid-round: the round is rerolled. Someone idle: the clock bids or calls for them. A player who is out:
 they watch, and cannot see any die. Two people holding the same dice: nothing is shown that could tell
 them apart. A player peeking while someone looks over their shoulder: that is the game.
