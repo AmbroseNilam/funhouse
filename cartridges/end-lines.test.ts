@@ -228,11 +228,13 @@ describe("Quizmaster's four answers", () => {
         const started = game.apply(thinking, "a", "setup-start");
         assert.equal(game.phaseOf(started.state), "preparing");
         assert.equal(started.state.count, QUESTION_COUNT);
-        assert.equal(started.state.questionSeconds, 30);
+        assert.equal(started.state.questionSeconds, null, "no timer unless someone asks for one");
     });
 
     it("shows the clock, nudges near the end, and says when time ran out", () => {
-        const { game, state } = inQuestion();
+        const { game, state: untimed } = inQuestion();
+        assert.equal(JSON.stringify(game.publicScene(untimed)).includes('"drain"'), false);
+        const state = { ...untimed, questionSeconds: 30 };
         assert.match(JSON.stringify(game.publicScene(state)), /"drain"/);
         assert.match(JSON.stringify(game.privateControls(state, "a")), /"drain"/);
         const nudge = game.onEvent(state, { type: "timerFired", at: 0, timerId: "hurry-0" });
@@ -261,6 +263,8 @@ describe("Quizmaster's four answers", () => {
         const items = Array.from({ length: 7 }, (_unused: unknown, index: number) => ({ question: `Q${index} what?`, answer: `Right${index}`, wrong: [`Bad${index}a`, `Bad${index}b`, `Bad${index}c`] }));
         const begun = game.onEvent(state, { type: "contentReady", at: 0, text: JSON.stringify(items) });
         assert.deepEqual(begun.timers ?? {}, {});
+        const waiting = game.apply(begun.state, "a", "answer:0:0").state;
+        assert.equal(game.turn?.(waiting)?.label, "Still answering: Alex");
         assert.equal(JSON.stringify(game.publicScene(begun.state)).includes('"drain"'), false);
         assert.match(JSON.stringify(game.privateControls(begun.state, "a")), /Reveal now/);
         assert.equal(game.phaseOf(game.apply(begun.state, "a", "reveal-now").state), "lockedIn");

@@ -43,6 +43,9 @@ const NUDGE_FROM_SECONDS: number = 30;
 /** How long the model gets to write a follow-up before setup carries on without one. */
 const FOLLOW_UP_WAIT_SECONDS: number = 5;
 
+/** Most names listed on the TV as still answering, before it just counts them. */
+const STILL_ANSWERING_NAMES: number = 3;
+
 /** What ends a question whose clock ran out. */
 const TIME_UP: string = "Time is up.";
 
@@ -50,7 +53,7 @@ const TIME_UP: string = "Time is up.";
 const SETUP_QUESTIONS: readonly SetupQuestion[] = [
     { id: "level", prompt: "How hard?", options: [{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }] },
     { id: "count", prompt: "How many questions?", options: [{ id: "5", label: "5" }, { id: "10", label: "10" }] },
-    { id: "time", prompt: "How long for each one?", options: [{ id: "relaxed", label: "Relaxed" }, { id: "normal", label: "Normal" }, { id: "quick", label: "Quick" }, { id: "none", label: "No timer" }] },
+    { id: "time", prompt: "How long for each one?", options: [{ id: "none", label: "No timer" }, { id: "relaxed", label: "Relaxed" }, { id: "normal", label: "Normal" }, { id: "quick", label: "Quick" }] },
 ];
 
 /** Seconds for each question at each pace; No timer has none. */
@@ -324,8 +327,8 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         const chosen: Record<string, string> = state.setup?.chosen ?? {};
         const followUp: SetupQuestion | undefined = state.setup?.questions.find((question: SetupQuestion) => question.id === "follow-up");
         const focus: string = followUp?.options.find((option) => option.id === chosen["follow-up"])?.label ?? "";
-        const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "normal"];
-        return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace === undefined ? QUESTION_SECONDS : pace }, state.topic);
+        const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "none"];
+        return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace ?? null }, state.topic);
     };
 
     /**
@@ -503,7 +506,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", setup: null, count: QUESTION_COUNT, level: "medium", focus: "", questionSeconds: QUESTION_SECONDS, gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
+            const state: QuizmasterState = { phase: "topic", setup: null, count: QUESTION_COUNT, level: "medium", focus: "", questionSeconds: null, gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
@@ -759,7 +762,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return { kind: "anyone", label: "" };
             }
             if (state.phase === "question") {
-                return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label: "Everyone answers once" };
+                const left: string[] = state.players.filter((player) => state.answered.includes(player.playerId) === false).map((player) => player.name);
+                const label: string = state.answered.length === 0 ? "Everyone answers once" : left.length > STILL_ANSWERING_NAMES ? `${left.length} still answering` : `Still answering: ${left.join(", ")}`;
+                return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label };
             }
             return null;
         },
