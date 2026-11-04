@@ -46,6 +46,8 @@ export interface RunningGame {
     hostMayInterject(): boolean;
     /** True when players are mostly talking to each other, not the host. */
     hostMostlyQuiet(): boolean;
+    /** True when this player could take this action right now. */
+    hasAction(playerId: string, actionId: string): boolean;
     /** What the host needs to know right now, safe for it to act on. */
     brief(): string;
     scene(): Scene;
@@ -142,6 +144,16 @@ export class GameSession<State> implements RunningGame {
      */
     public allowsRuling(ruling: string): boolean {
         return this.phase()?.hostRulings?.[ruling] !== undefined;
+    }
+
+    /**
+     * Whether a player could take an action right now.
+     * @param playerId who.
+     * @param actionId the action.
+     * @returns true when the rules offer it.
+     */
+    public hasAction(playerId: string, actionId: string): boolean {
+        return this.state !== null && this.cartridge.legalActions(this.state, playerId).some((action) => action.actionId === actionId);
     }
 
     /**

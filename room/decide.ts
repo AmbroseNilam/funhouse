@@ -5,6 +5,7 @@
 import { askJev, jevConfigured, type JevAsk } from "../providers/typesafe/jev.ts";
 import type { AnswerGroup } from "../shared/timeline.ts";
 import { log } from "./log.ts";
+import { commandByKeywords, VOICE_COMMANDS, type VoiceCommand } from "./voice-commands.ts";
 
 /** How long one decision may take before its fallback is used. */
 const DECISION_TIME_LIMIT_MILLISECONDS: number = 800;
@@ -14,6 +15,12 @@ const SAME_ANSWER_PROBABILITY: number = 0.5;
 
 /** How often to note that Jev isn't answering, so an outage doesn't fill the log. */
 const FAILURE_LOG_GAP_MILLISECONDS: number = 60000;
+
+/** Longest press worth asking about; commands are short, and longer talk goes straight to the host. */
+const COMMAND_WORD_LIMIT: number = 8;
+
+/** How sure Jev must be before a loose phrasing counts as a command, since a wrong one acts on the game. */
+const COMMAND_CONFIDENCE: number = 0.8;
 
 /** Most answers merged at once; a table holds twelve people. */
 const MERGE_ANSWER_LIMIT: number = 16;
@@ -95,6 +102,29 @@ export async function utteranceKind(said: string, asker: JevAsk = askJev): Promi
         return { value: answer.choice as UtteranceKind, source: "jev" };
     }
     return { value: kindByRule(said), source: "fallback" };
+}
+
+/**
+ * Decides whether a press was one of the room's voice commands. Sure phrasings need no model.
+ * @param said the transcript.
+ * @param askModel false to use only the sure phrasings.
+ * @param asker how to reach Jev; tests pass a stub.
+ * @returns the command, or null for ordinary talk, which goes to the host as usual.
+ */
+export async function voiceCommand(said: string, askModel: boolean, asker: JevAsk = askJev): Promise<Decision<VoiceCommand | null>> {
+    const sure: VoiceCommand | null = commandByKeywords(said);
+    if (sure !== null || askModel === false || said.trim().split(/\s+/).length > COMMAND_WORD_LIMIT) {
+        return { value: sure, source: "fallback" };
+    }
+    const answer = await ask("voice-command", asker, async () => asker(said, {
+        type: "choice",
+        instructions: "Players at a party game talk to the host by holding their phones. This is a transcript of one press. Is it telling the game to do one of these things? Answers to a question, guesses and ordinary talk are none.",
+        criteria: { ...VOICE_COMMANDS, none: "None of these: an answer, a guess, a question about the game, or ordinary talk." },
+    }, DECISION_TIME_LIMIT_MILLISECONDS));
+    if (answer?.type === "choice" && Object.hasOwn(VOICE_COMMANDS, answer.choice) === true && (answer.confidence ?? 0) >= COMMAND_CONFIDENCE) {
+        return { value: answer.choice as VoiceCommand, source: "jev" };
+    }
+    return { value: null, source: answer === null ? "fallback" : "jev" };
 }
 
 /**

@@ -14,7 +14,7 @@ export type JevQuestion =
     | { type: "choice"; instructions: string; criteria: Record<string, string> };
 
 /** Jev's answer: a probability of yes, or the label it picked. */
-export type JevAnswer = { type: "noul"; noul: number } | { type: "choice"; choice: string };
+export type JevAnswer = { type: "noul"; noul: number } | { type: "choice"; choice: string; confidence?: number };
 
 /** Asks one question about a piece of text. Anything but an answer throws. */
 export type JevAsk = (state: string, question: JevQuestion, timeoutMilliseconds: number) => Promise<JevAnswer>;
@@ -47,13 +47,13 @@ export const askJev: JevAsk = async (state: string, question: JevQuestion, timeo
         await response.body?.cancel();
         throw new Error(`Jev responded ${response.status}.`);
     }
-    const parsed = await response.json().catch(() => { throw new Error("Jev returned an answer of an unexpected shape."); }) as { answers?: { answer?: { noul?: unknown; choice?: unknown } } };
-    const answer: { noul?: unknown; choice?: unknown } | undefined = parsed.answers?.answer;
+    const parsed = await response.json().catch(() => { throw new Error("Jev returned an answer of an unexpected shape."); }) as { answers?: { answer?: { noul?: unknown; choice?: unknown; confidence?: unknown } } };
+    const answer: { noul?: unknown; choice?: unknown; confidence?: unknown } | undefined = parsed.answers?.answer;
     if (question.type === "noul" && typeof answer?.noul === "number") {
         return { type: "noul", noul: answer.noul };
     }
     if (question.type === "choice" && typeof answer?.choice === "string" && question.criteria[answer.choice] !== undefined) {
-        return { type: "choice", choice: answer.choice };
+        return { type: "choice", choice: answer.choice, ...(typeof answer.confidence === "number" ? { confidence: answer.confidence } : {}) };
     }
     throw new Error("Jev returned an answer of an unexpected shape.");
 };
