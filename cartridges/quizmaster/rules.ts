@@ -204,6 +204,30 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
     };
 
     /**
+     * Says who won a finished quiz.
+     * @param state the finished game.
+     * @returns the headline.
+     */
+    const endHeadline = (state: QuizmasterState): string => {
+        const names: string[] = leaders(state).map((player: CartridgePlayer) => player.name);
+        if (names.length === 0) {
+            return "Nobody scored";
+        }
+        return names.length === 1 ? `${names[0] ?? ""} wins` : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""} tie`;
+    };
+
+    /**
+     * Explains the points of a finished quiz in one plain line.
+     * @param state the finished game.
+     * @returns the line.
+     */
+    const endLine = (state: QuizmasterState): string => {
+        const top: number = Math.max(0, ...state.players.map((player: CartridgePlayer) => scoreOf(state, player.playerId)));
+        const scored: string = top === 0 ? "" : `${top} out of ${state.questions.length * RIGHT_POINTS}. `;
+        return `${scored}${RIGHT_POINTS} points for a right answer, ${CLOSE_POINTS} for a close one.`;
+    };
+
+    /**
      * Reveals the current answer and moves to the next question, or ends the game after the last.
      * @param state the state.
      * @param why what just happened, for the host.
@@ -372,7 +396,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             }));
             const last: SceneBlock[] = state.lastAnswer === "" ? [] : [{ type: "text", text: `Last answer: ${state.lastAnswer}${state.lastSource === "" ? "" : ` · Source: ${state.lastSource}`}`, emphasis: "whisper" }];
             if (state.phase === "end") {
-                const board: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: "Final scores" }, { type: "tally", title: "Scores", rows }, ...last];
+                const board: SceneBlock[] = [{ type: "title", text: endHeadline(state), kicker: "Final scores" }, { type: "text", text: endLine(state), emphasis: "large" }, { type: "tally", title: "Scores", rows }, ...last];
                 return { mood: winners.length > 0 ? "victory" : "neutral", transition: "fade", blocks: board };
             }
             return {
@@ -395,7 +419,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];
             }
             if (state.phase === "end") {
-                return [{ type: "waiting", text: "That's the quiz." }];
+                return [{ type: "waiting", text: `${endHeadline(state)}. ${endLine(state)}` }];
             }
             const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
             return [{ type: "waiting", text: line }];

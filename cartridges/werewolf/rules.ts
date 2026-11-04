@@ -742,10 +742,22 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         const revealed = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: false, badge: seat.role }));
         const ghostsRight: string[] = Object.entries(state.ghostGuesses).filter(([, guess]) => seatOf(state, guess)?.role === "werewolf").map(([ghost]) => nameOf(state, ghost));
         const blocks: SceneBlock[] = [{ type: "title", text: state.winner === "villagers" ? "The village wins" : "The werewolves win", kicker: `After ${state.round} ${state.round === 1 ? "day" : "days"}` }, { type: "roster", players: revealed }];
+        blocks.splice(1, 0, { type: "text", text: wolvesLine(state), emphasis: "large" });
         if (ghostsRight.length > 0) {
             blocks.push({ type: "text", text: `The dead who called it: ${ghostsRight.join(", ")}.` });
         }
         return { mood: state.winner === "villagers" ? "victory" : "defeat", transition: "fade", blocks };
+    };
+
+    /**
+     * Names the wolves once the game is over.
+     * @param state the finished game.
+     * @returns the line.
+     */
+    const wolvesLine = (state: WerewolfState): string => {
+        const wolves: string[] = state.seats.filter((seat) => seat.role === "werewolf").map((seat) => seat.name);
+        const named: string = wolves.length > 1 ? `${wolves.slice(0, -1).join(", ")} and ${wolves.at(-1) ?? ""}` : wolves[0] ?? "nobody";
+        return wolves.length === 1 ? `The wolf was ${named}.` : `The wolves were ${named}.`;
     };
 
     return {
@@ -930,7 +942,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 ];
             }
             if (state.phase === "end") {
-                return [{ type: "waiting", text: "That's the game" }];
+                return [{ type: "waiting", text: `${state.winner === "villagers" ? "The village wins" : "The werewolves win"}. ${wolvesLine(state)}` }];
             }
             const card: Control = { type: "roleCard", title: `You are ${withArticle(seat.role)}`, body: roleBlurb(seat.role), secret: true, startHidden: state.phase !== "roles" };
             if (state.phase === "hunter" && state.hunterId === playerId) {
