@@ -1,7 +1,6 @@
 {
     "id": "paintedWhispers",
     "kit": "chain",
-    "level": "held",
-    "reason": "not in the five; held, not deleted",
+    "level": "visible",
     "order": 200
 }

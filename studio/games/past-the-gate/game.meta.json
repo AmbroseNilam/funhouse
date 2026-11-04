@@ -1,6 +1,7 @@
 {
     "id": "pastTheGate",
     "kit": "gate",
-    "level": "visible",
-    "order": 70
+    "level": "held",
+    "order": 70,
+    "reason": "Ambrose dropped it from the showcase; held, not deleted"
 }

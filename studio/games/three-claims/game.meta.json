@@ -1,6 +1,7 @@
 {
     "id": "threeClaims",
     "kit": "claims",
-    "level": "visible",
-    "order": 200
+    "level": "held",
+    "order": 200,
+    "reason": "Ambrose dropped it from the showcase; held, not deleted"
 }
