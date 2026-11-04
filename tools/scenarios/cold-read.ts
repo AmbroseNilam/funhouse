@@ -21,7 +21,7 @@
 // This is test tooling: it prints the questions and the host's lines to its own terminal.
 
 import type { SceneBlock } from "../../shared/scene.ts";
-import { COLD_READ_BLUEPRINT } from "../../studio/games/cold-read.ts";
+import { COLD_READ_BLUEPRINT } from "../../studio/games/cold-read/blueprint.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** Which plan this run plays. */

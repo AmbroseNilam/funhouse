@@ -5,7 +5,7 @@
 // match the humans' style. The experience script and the host's lines are in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { BotBlueprint } from "../../blueprint.ts";
+import type { BotBlueprint } from "../../kits/bot/index.ts";
 
 /** Ghost Writer, written as decisions on the bot kit. */
 export const GHOST_WRITER_BLUEPRINT: BotBlueprint = {

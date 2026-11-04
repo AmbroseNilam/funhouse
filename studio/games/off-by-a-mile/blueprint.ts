@@ -4,7 +4,7 @@
 // script is in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { EstimateBlueprint } from "../../blueprint.ts";
+import type { EstimateBlueprint } from "../../kits/estimate/index.ts";
 import { QUESTIONS } from "./questions.ts";
 
 /** Off by a Mile, written as decisions on the estimate kit. */

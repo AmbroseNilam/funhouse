@@ -24,7 +24,7 @@ for the original phases, with the changes below.
 
 - `studio/blueprint.ts`: a game as data, Phase 0 shape. `studio/interpreter.ts`: turns one into a
   `Cartridge<State>`. `studio/rehearse.ts`: a structural rehearsal with paper players and no
-  model. `studio/shelf.ts`: installs blueprints and swaps them in for hand-written games with
+  model. `studio/discovery.ts` finds games and kits by scanning folders, and `studio/shelf.ts` installs blueprints and swaps them in for hand-written games with
   the same id. `studio/games/twenty-doors.ts`: Twenty Doors as a blueprint.
 - A room opened with `/screen/?studio=1` gets the Studio shelf: the blueprint Twenty Doors in
   place of the hand-written one, and blueprint games with new ids after the hand-written ones.
@@ -161,3 +161,17 @@ beside the game.
 - Logs never contain what anyone said, what the host replied, or a player's name. Never read or
   print `.env`. Nothing that costs money runs without approval.
 - `DESIGN.md` governs everything a player sees, including the host's words.
+
+## How to add a game
+
+Create a folder `studio/games/<name>/` with `blueprint.ts`, exporting exactly one blueprint (build it with the kit's
+typed `defineGame` or its `<Kit>Blueprint` type from `studio/kits/<kit>/index.ts`), and `game.meta.json` with
+`{ "id", "kit", "level", "reason", "order" }`: `id` must equal the blueprint's `box.id`, `kit` names the kit it runs on,
+`level` is `visible` (on the shelf), `testing` or `held` (both hidden unless the shelf is switched to show them, and
+marked "Testing." when shown; they need a `reason`), and `order` is an optional shelf position, lowest first, with
+unordered games last by id. Put notes, tests and helper modules in the same folder. A new kit is likewise a folder
+`studio/kits/<kit>/` with `kit.meta.json` (`{ "kit": "<name blueprints use>" }`) and an `index.ts` exporting `KIT` (a
+`KitDefinition`: `problems`, `create`, `check`, `pauseActions`), its blueprint type, `defineGame` and its paper
+players in `personas.ts`. Nothing else needs editing: startup scans both folders. A folder that lacks its metadata,
+names an unknown kit, won't load or fails its kit's `problems` is left off the shelf and logged as `LEFT OUT`, naming
+the folder and why, so it can't stop the room; `npm run check` fails on any such folder, so it never reaches a server.

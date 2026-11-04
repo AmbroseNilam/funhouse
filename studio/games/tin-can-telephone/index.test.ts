@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
-import { clueBoardContent } from "../../personas.ts";
-import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./index.ts";
+import { clueBoardContent } from "../../kits/clueboard/personas.ts";
+import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./blueprint.ts";
 
 describe("tin can telephone: the check every blueprint passes", () => {
     it("is a runnable blueprint", () => {

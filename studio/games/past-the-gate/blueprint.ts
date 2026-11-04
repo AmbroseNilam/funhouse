@@ -3,7 +3,7 @@
 // player is smuggling a word on their phone. The experience script is in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { GateBlueprint } from "../../blueprint.ts";
+import type { GateBlueprint } from "../../kits/gate/index.ts";
 import { CARGO, KEEPERS } from "./keepers.ts";
 
 /** Past the Gate, written as decisions on the gate kit. */

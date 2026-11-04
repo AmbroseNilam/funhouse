@@ -20,9 +20,9 @@
 
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
-import { PANTOMIME_PANIC_PROMPTS } from "../../studio/games/pantomime-panic-prompts.ts";
+import { PANTOMIME_PANIC_PROMPTS } from "../../studio/games/pantomime-panic/pantomime-panic-prompts.ts";
 import { ruleGuess, wordsOf } from "../../studio/kit/matching.ts";
-import type { Prompt } from "../../studio/kits/charades.ts";
+import type { Prompt } from "../../studio/kits/charades/charades.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** One fake player. */

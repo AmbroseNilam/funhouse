@@ -21,7 +21,7 @@
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
 import { QUESTIONS } from "../../studio/games/off-by-a-mile/questions.ts";
-import { formatNumber, guessControlId, type EstimateQuestion } from "../../studio/kits/estimate.ts";
+import { formatNumber, guessControlId, type EstimateQuestion } from "../../studio/kits/estimate/estimate.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** Rounds in a game. */

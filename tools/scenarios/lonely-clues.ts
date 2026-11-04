@@ -22,7 +22,7 @@
 
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
-import { isFormOfWord } from "../../studio/kits/clue.ts";
+import { isFormOfWord } from "../../studio/kits/clue/clue.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** Milliseconds between two answers from one phone; the room refuses faster ones. */

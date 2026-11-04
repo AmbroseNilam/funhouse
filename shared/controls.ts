@@ -9,6 +9,16 @@ import type { PhoneTurn } from "./turn.ts";
 export type ListeningMode = "muted" | "holdToTalk" | "openFloor" | "hostSpeaking";
 
 /**
+ * Whether a phone in this listening mode asks for the microphone and shows hold-to-talk. A game that
+ * declares "muted" for a phase (tap-only games do) never listens, so the phone offers neither.
+ * @param mode the listening mode the room sent this phone.
+ * @returns true when holding to talk can do anything.
+ */
+export function listeningAllowsTalk(mode: ListeningMode): boolean {
+    return mode === "holdToTalk" || mode === "openFloor";
+}
+
+/**
  * One interactive element on a phone. A textInput, numberInput or slider is answered once: the room
  * checks the answer, then hands the game an "answered" event with the control's id, and a text
  * answer only gets that far once the content filter has passed it. Give each question its own id.

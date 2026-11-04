@@ -4,7 +4,7 @@
 // script is in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { LineBlueprint } from "../../blueprint.ts";
+import type { LineBlueprint } from "../../kits/line/index.ts";
 import { CARDS } from "./cards.ts";
 
 /** Mind the Gap, written as decisions on the line kit. */

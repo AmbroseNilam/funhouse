@@ -1,0 +1,7 @@
+{
+    "id": "clueGallery",
+    "kit": "gallery",
+    "level": "held",
+    "reason": "no run with the real picture model; its cost and latency are unmeasured",
+    "order": 210
+}

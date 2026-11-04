@@ -8,9 +8,9 @@ import { describe, it } from "node:test";
 import { createTwentyDoors, type AskedQuestion, type TwentyDoorsState } from "../cartridges/twenty-doors/rules.ts";
 import type { Cartridge, CartridgePlayer } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
-import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
+import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors/blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
-import { createGuessingGame, type GuessingState, type SaidLine } from "./kits/guessing.ts";
+import { createGuessingGame, type GuessingState, type SaidLine } from "./kits/guessing/guessing.ts";
 import { PAPER_PLAYERS } from "./rehearse.ts";
 
 /** Three at the table. */

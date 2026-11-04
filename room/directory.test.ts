@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 
 process.env.GAME_ROOM_TEXT_ONLY = "1";
 const { GAMES } = await import("../cartridges/index.ts");
-const { studioShelf } = await import("../studio/shelf.ts");
+const { HELD_BACK, studioShelf } = await import("../studio/shelf.ts");
 const { RoomDirectory } = await import("./directory.ts");
 
 describe("room directory shelves", () => {
@@ -36,9 +36,11 @@ describe("room directory shelves", () => {
         const curated = directory.create(false, false, false, true);
         const testing = directory.create(false, false, false, true, true);
         assert.ok(curated !== null && testing !== null);
-        assert.equal(curated.brief().includes("paintedWhispers"), false);
-        assert.equal(testing.brief().includes("paintedWhispers"), true);
-        assert.equal(testing.brief().includes("Testing."), true);
+        for (const held of Object.keys(HELD_BACK)) {
+            assert.equal(curated.brief().includes(held), false, held);
+            assert.equal(testing.brief().includes(held), true, held);
+            assert.equal(testing.brief().includes("Testing."), true);
+        }
         curated.close();
         testing.close();
     });

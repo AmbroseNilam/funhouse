@@ -3,7 +3,7 @@
 // reveal. None is a record that changes: if a figure can be beaten or re-measured, the line says
 // which measurement. Prompts carry no digits, and ranges are wide enough that a wild guess is allowed.
 
-import type { EstimateQuestion } from "../../kits/estimate.ts";
+import type { EstimateQuestion } from "../../kits/estimate/estimate.ts";
 
 /** The question bank. A game asks five of these, none twice. */
 export const QUESTIONS: EstimateQuestion[] = [
