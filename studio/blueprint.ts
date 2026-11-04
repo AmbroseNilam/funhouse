@@ -5,6 +5,7 @@
 
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
+import { createEstimateGame, estimateBlueprintProblems, type EstimateDecisions } from "./kits/estimate.ts";
 import { createGateGame, gateBlueprintProblems, type GateDecisions } from "./kits/gate.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
@@ -30,8 +31,15 @@ export interface GateBlueprint {
     decisions: GateDecisions;
 }
 
+/** An estimate game: a numeric question, secret guesses, and bets on whose guess is closest. */
+export interface EstimateBlueprint {
+    kit: "estimate";
+    box: Box;
+    decisions: EstimateDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | GateBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | GateBlueprint | EstimateBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -52,6 +60,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "gate") {
         return gateBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "estimate") {
+        return estimateBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -68,6 +79,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "gate") {
         return erase(createGateGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "estimate") {
+        return erase(createEstimateGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
