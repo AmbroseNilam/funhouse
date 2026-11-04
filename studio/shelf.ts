@@ -7,13 +7,14 @@
 import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
-import { blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
+import { blueprintPauseActions, blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
+import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, WHO_FITS_BLUEPRINT];
 
 /**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
@@ -33,7 +34,7 @@ export function installBlueprint(given: Blueprint): InstalledGame {
         pitch: blueprint.box.pitch,
         howToPlay: [...blueprint.box.howToPlay],
         art: blueprint.box.art,
-        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || blueprint.decisions.giveUpButton === true),
+        pauseActions: blueprintPauseActions(blueprint),
         remarks: [...blueprint.box.remarks],
         create: (stage: GameStage): RunningGame => {
             log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);
