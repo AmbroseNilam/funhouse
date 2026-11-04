@@ -36,6 +36,13 @@ const REMOVE_GUEST: string = "Remove an AI guest";
 const REMOVE_AGENT: string = "Remove an agent";
 const BACK_TO_SHELF: string = "Back to the shelf";
 
+/** The rows for adding someone from the table. */
+const ADD_PLAYER: string = "Add a player";
+const AI_GUEST: string = "AI guest";
+const BRING_AGENT: string = "Bring your agent";
+const CREATE_GUEST: string = "Create your own";
+const BACK: string = "Back";
+
 /** Rows once a game has been decided. */
 const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
 
@@ -72,6 +79,16 @@ export interface ShellStage {
     addGuest(): void;
     /** Sends the newest AI guest home. */
     removeGuest(): void;
+    /** The guests who could sit down now, by name, with a label for the row. */
+    guestPicks(): { name: string; label: string }[];
+    /** Seats the guest with this name. */
+    addNamedGuest(name: string): void;
+    /** Whether someone could bring their own agent now. */
+    mayBringAgent(): boolean;
+    /** Sends this person's phone to describe a guest. */
+    askGuestLine(playerId: string): void;
+    /** Sends this person's phone to the sheet with their agent's link. The link never goes on the TV. */
+    askAgentLink(playerId: string): void;
 }
 
 /** One room's console. */
@@ -334,7 +351,16 @@ export class Shell {
             return [this.currentGame()?.blocked === null ? "Play" : "Can't start yet", ...this.guestRows(), BACK_TO_SHELF];
         }
         if (this.screen === "players") {
-            return [BACK_TO_SHELF];
+            return [...(this.stage.mayAddGuest() === true || this.stage.mayBringAgent() === true ? [ADD_PLAYER] : []), ...this.removeRow(), BACK_TO_SHELF];
+        }
+        if (this.screen === "addPlayer") {
+            return [...(this.stage.mayAddGuest() === true ? [AI_GUEST] : []), ...(this.stage.mayBringAgent() === true ? [BRING_AGENT] : []), BACK];
+        }
+        if (this.screen === "addGuest") {
+            return this.stage.mayAddGuest() === true ? [...this.stage.guestPicks().map((pick) => pick.label), CREATE_GUEST, BACK] : [BACK];
+        }
+        if (this.screen === "guestLine" || this.screen === "agentOnPhone") {
+            return [BACK];
         }
         if (this.screen === "pick") {
             return (this.currentGame()?.startPick?.choices ?? []).map((choice) => choice.label);
@@ -364,6 +390,14 @@ export class Shell {
         if (this.currentGame()?.guestsWelcome === true && this.stage.mayAddGuest() === true) {
             return [ADD_GUEST];
         }
+        return this.removeRow();
+    }
+
+    /**
+     * The row that sends the newest machine at the table home, if there is one.
+     * @returns the labels.
+     */
+    private removeRow(): string[] {
         const newest: Omit<Seat, "driving"> | undefined = this.stage.seats().filter((seat) => seat.guest === true).at(-1);
         if (newest === undefined) {
             return [];
@@ -395,7 +429,7 @@ export class Shell {
      * @returns the label, or null.
      */
     private backLabel(): string | null {
-        if (this.screen === "game" || this.screen === "pick" || this.screen === "startCard" || this.screen === "players" || this.screen === "howTo" || this.screen === "confirmEnd") {
+        if (this.screen === "game" || this.screen === "pick" || this.screen === "startCard" || this.screen === "players" || this.screen === "addPlayer" || this.screen === "addGuest" || this.screen === "guestLine" || this.screen === "agentOnPhone" || this.screen === "howTo" || this.screen === "confirmEnd") {
             return "Back";
         }
         if (this.screen === "pause") {
@@ -446,7 +480,11 @@ export class Shell {
             this.beginGame();
             return;
         }
-        if (this.screen === "players" || this.screen === "howTo") {
+        if (this.screen === "players" || this.screen === "addPlayer" || this.screen === "addGuest") {
+            this.selectAtTable(playerId);
+            return;
+        }
+        if (this.screen === "guestLine" || this.screen === "agentOnPhone" || this.screen === "howTo") {
             this.back(playerId);
             return;
         }
@@ -469,6 +507,51 @@ export class Shell {
         this.stage.focusChanged(null);
         this.gameId = game?.id ?? this.gameId;
         this.screen = game === undefined ? "players" : "game";
+        this.focus = 0;
+        this.stage.changed();
+    }
+
+    /**
+     * Does what the highlighted row says on the screens for adding someone from the table.
+     * @param playerId who chose it.
+     */
+    private selectAtTable(playerId: string): void {
+        const row: string | undefined = this.menu()[this.focus];
+        const opened: Partial<Record<string, ShellScreen>> = { [ADD_PLAYER]: "addPlayer", [AI_GUEST]: "addGuest", [BRING_AGENT]: "agentOnPhone", [CREATE_GUEST]: "guestLine" };
+        const next: ShellScreen | undefined = row === undefined ? undefined : opened[row];
+        if (next !== undefined) {
+            if (row === BRING_AGENT) {
+                this.stage.askAgentLink(playerId);
+            }
+            if (row === CREATE_GUEST) {
+                this.stage.askGuestLine(playerId);
+            }
+            this.screen = next;
+            this.focus = 0;
+            this.stage.changed();
+            return;
+        }
+        if (row === REMOVE_GUEST || row === REMOVE_AGENT) {
+            this.stage.removeGuest();
+            this.focus = Math.max(0, Math.min(this.focus, this.itemCount() - 1));
+            this.stage.changed();
+            return;
+        }
+        const pick: { name: string; label: string } | undefined = this.stage.guestPicks().find((candidate) => candidate.label === row);
+        if (pick !== undefined && this.screen === "addGuest") {
+            this.stage.addNamedGuest(pick.name);
+            this.guestSeated();
+            return;
+        }
+        this.back(playerId);
+    }
+
+    /** A guest has just sat down, so the screens for adding one go back to the table to show it. */
+    public guestSeated(): void {
+        if (this.screen !== "addGuest" && this.screen !== "guestLine") {
+            return;
+        }
+        this.screen = "players";
         this.focus = 0;
         this.stage.changed();
     }
@@ -733,6 +816,15 @@ export class Shell {
     private parentScreen(): ShellScreen | null {
         if (this.screen === "game" || this.screen === "players") {
             return "home";
+        }
+        if (this.screen === "addPlayer") {
+            return "players";
+        }
+        if (this.screen === "addGuest" || this.screen === "agentOnPhone") {
+            return "addPlayer";
+        }
+        if (this.screen === "guestLine") {
+            return "addGuest";
         }
         if (this.screen === "pick") {
             return "game";

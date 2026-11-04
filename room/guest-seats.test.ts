@@ -90,7 +90,8 @@ test("nobody adds a guest: no guest on the TV, nothing on the phone, the usual g
     const { phone, screen } = table();
     assert.deepEqual(seatsOn(screen).map((seat) => seat.guest), [false]);
     const view = phone.latest("view")?.view as { guests: { seated: unknown[]; canAdd: boolean; canRemove: boolean } };
-    assert.deepEqual(view.guests, { seated: [], canAdd: true, canRemove: false, agents: null }, "agents are off unless the server turns them on");
+    assert.deepEqual([view.guests.seated, view.guests.canAdd, view.guests.canRemove], [[], true, false]);
+    assert.equal((view.guests as unknown as { agents: unknown }).agents, null, "agents are off unless the server turns them on");
     phone.say({ type: "nav", action: { kind: "select" } });
     const shell = screen.latest("shell")?.view as { screen: string; menu: string[]; games: { id: string }[]; focus: number };
     assert.equal(shell.screen, "game");
@@ -154,6 +155,41 @@ test("a person takes the last seat from a guest", () => {
     assert.equal(seats.some((seat) => seat.name === "Late"), true);
     assert.equal(seats.filter((seat) => seat.guest === true).length, 1);
     assert.equal((phone.latest("view")?.view as { guests: { canAdd: boolean } }).guests.canAdd, false, "no guest over twelve seats");
+});
+
+test("from the table on the TV: add a player, pick a guest, and the screen shows them sitting", () => {
+    const { phone, screen } = table();
+    const console = (): { screen: string; menu: string[]; focus: number; games: unknown[]; seats: { name: string }[] } => screen.latest("shell")?.view as { screen: string; menu: string[]; focus: number; games: unknown[]; seats: { name: string }[] };
+    phone.say({ type: "nav", action: { kind: "step", delta: console().games.length } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.equal(console().screen, "players");
+    assert.deepEqual(console().menu, ["Add a player", "Back to the shelf"]);
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.deepEqual(console().menu, ["AI guest", "Back"], "agents are off here, so that's not offered");
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.deepEqual(console().menu.slice(-2), ["Create your own", "Back"]);
+    assert.equal(console().menu[0], "Pip: eager");
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.equal(console().screen, "players");
+    assert.equal(console().seats.at(-1)?.name, "Pip the AI");
+    assert.deepEqual(console().menu, ["Add a player", "Remove an AI guest", "Back to the shelf"]);
+});
+
+test("create your own from the TV sends that phone to the sheet, and only that phone", () => {
+    const { phone, screen, room } = table();
+    const other: FakeSocket = new FakeSocket();
+    room.attachPhone(other as unknown as WebSocket);
+    other.say({ type: "hello", name: "Spoon" });
+    const shelf = screen.latest("shell")?.view as { games: unknown[] };
+    phone.say({ type: "nav", action: { kind: "step", delta: shelf.games.length } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    phone.say({ type: "nav", action: { kind: "step", delta: 4 } });
+    phone.say({ type: "nav", action: { kind: "select" } });
+    assert.equal((screen.latest("shell")?.view as { screen: string }).screen, "guestLine");
+    assert.equal((phone.latest("view")?.view as { guests: { prompt: { kind: string } | null } }).guests.prompt?.kind, "line");
+    assert.equal((other.latest("view")?.view as { guests: { prompt: unknown } }).guests.prompt, null);
 });
 
 test("a game that doesn't take guests is blocked until they're gone, with the way out on its page", () => {

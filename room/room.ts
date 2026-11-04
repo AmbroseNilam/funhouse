@@ -39,6 +39,7 @@ import type { PhoneTurn, Turn } from "../shared/turn.ts";
 import { GuestDriver, GUEST_PERSONAS, isStockWord, MAX_GUESTS, type GuestPersona, type GuestPlay } from "./guest.ts";
 import { AGENT_AWAY_MILLISECONDS, AGENT_GONE_MILLISECONDS, AGENTS_ON, AgentSeat, endAgentLinks, endUnusedAgentLink, issueAgentLink, MAX_AGENTS_PER_ROOM, sceneLines, type AgentHost, type AgentTable } from "./agent.ts";
 import { GuestSocket } from "./guest-socket.ts";
+import { personaFromLine, type PersonaResult } from "./guest-persona.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
 import { log } from "./log.ts";
@@ -85,6 +86,8 @@ interface Player {
     guest: GuestDriver | null;
     /** The link's end of this seat when it's someone's own agent; null otherwise. */
     agent: AgentSeat | null;
+    /** The guest's manner, shown on the phone's list; empty for a person. */
+    guestStyle: string;
 }
 
 /** The last line spoken in the room, shown as a caption; not final while still being said. */
@@ -315,6 +318,12 @@ const NO_AGENTS_HERE: string = "Agents can't join this one. Remove them first.";
 /** What could pass for the host's own markup, which no agent's words may carry. */
 const HOST_MARKUP: RegExp = /\[\[|\]\]|\(\s*game\s*:/i;
 
+/** Most guests described by people that one room will write. Each costs a few model calls. */
+const MAX_WRITTEN_GUESTS: number = 8;
+
+/** Least time between one person's descriptions. */
+const GUEST_LINE_GAP_MILLISECONDS: number = 5000;
+
 /** Why a table with AI guests can't start a game that doesn't take them. */
 const NO_GUESTS_HERE: string = "AI guests can't play this one. Remove them first.";
 
@@ -389,6 +398,15 @@ function frameLevel(frame: Buffer): number {
  */
 function cleanName(raw: string): string {
     return raw.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/[()[\]:]/g, "").replace(/\s+/g, " ").trim().slice(0, NAME_CHARACTER_LIMIT);
+}
+
+/**
+ * A preset guest as a row or a button: the name without its label, and the first word of its manner.
+ * @param persona the guest.
+ * @returns its name and label.
+ */
+function guestPick(persona: GuestPersona): { name: string; label: string } {
+    return { name: persona.name, label: `${persona.name.replace(/ the AI$/, "")}: ${(persona.style.split(/[.,]/)[0] ?? "").toLowerCase()}` };
 }
 
 /** The room runtime. One instance per live room. */
@@ -485,6 +503,14 @@ export class Room implements HostStage, AgentHost {
     private agentChecks: number = 0;
     /** Lines from agents this game. */
     private agentLines: number = 0;
+    /** Guests written from a person's line in this room. */
+    private writtenGuests: number = 0;
+    /** What the TV has sent each phone to do. */
+    private readonly guestPrompts: Map<string, { kind: "line" | "agent"; id: number }> = new Map();
+    /** Numbers those, so a phone opens each once. */
+    private nextGuestPrompt: number = 1;
+    /** People whose described guest is being written. */
+    private readonly writingGuest: Set<string> = new Set();
     /** Each person's unused agent link, by their seat. */
     private readonly agentLinks: Map<string, string> = new Map();
     /** The site's address, for the links this room gives out. */
@@ -761,7 +787,7 @@ export class Room implements HostStage, AgentHost {
                 return;
             }
             if (message.type === "guest") {
-                this.onGuestRequest(player, message.action, message.playerId);
+                this.onGuestRequest(player, message.action, message.playerId, message.name, message.text);
                 return;
             }
             if (message.type === "answer") {
@@ -1065,7 +1091,7 @@ export class Room implements HostStage, AgentHost {
      * @returns the record.
      */
     private newSeat(playerId: string, name: string, socket: WebSocket): Player {
-        return { guest: null, agent: null, playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        return { guest: null, agent: null, guestStyle: "", playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
     }
 
     /**
@@ -1074,8 +1100,10 @@ export class Room implements HostStage, AgentHost {
      * @param player who's asking.
      * @param action what they want.
      * @param playerId which guest to send home; the newest if not said.
+     * @param name which guest to seat, by name; the next free one if not said.
+     * @param text a person's description of a guest.
      */
-    private onGuestRequest(player: Player, action: "add" | "remove" | "inviteAgent", playerId: string | undefined): void {
+    private onGuestRequest(player: Player, action: "add" | "remove" | "inviteAgent" | "create", playerId: string | undefined, name?: string, text?: string): void {
         if (player.guest !== null || player.agent !== null) {
             return;
         }
@@ -1083,8 +1111,12 @@ export class Room implements HostStage, AgentHost {
             this.inviteAgent(player);
             return;
         }
+        if (action === "create") {
+            void this.createGuest(player, text ?? "");
+            return;
+        }
         if (action === "add") {
-            this.addGuest();
+            this.addGuest(name);
             return;
         }
         this.removeGuest(playerId);
@@ -1098,13 +1130,68 @@ export class Room implements HostStage, AgentHost {
         return GUESTS_ON === true && this.game === null && this.guests().length < MAX_GUESTS && this.players.size < MAX_PLAYERS && this.people().length > 0;
     }
 
-    /** Seats the next preset guest and has the host introduce it as what it is. */
-    private addGuest(): void {
+    /**
+     * The preset guests who could still sit down.
+     * @returns them, in order.
+     */
+    private freePresets(): GuestPersona[] {
+        const taken: string[] = [...this.players.values()].map((player: Player) => player.name.toLowerCase());
+        return GUEST_PERSONAS.filter((candidate: GuestPersona) => taken.includes(candidate.name.toLowerCase()) === false);
+    }
+
+    /**
+     * Seats a guest from someone's own description. The line is untrusted, so the whole trip goes through
+     * the filter, and anything that doesn't come back clean ends in a preset, with a joke if the line was
+     * refused. The host never hears what was refused.
+     * @param player who described it.
+     * @param line what they typed.
+     */
+    private async createGuest(player: Player, line: string): Promise<void> {
+        if (this.mayAddGuest() === false || this.writingGuest.has(player.playerId) === true) {
+            return;
+        }
+        if (Date.now() - player.lastTextAnswerAt < GUEST_LINE_GAP_MILLISECONDS) {
+            this.setHint(player, "One at a time.");
+            return;
+        }
+        player.lastTextAnswerAt = Date.now();
+        this.writingGuest.add(player.playerId);
+        this.setHint(player, "Writing them in.");
+        this.refreshPhones();
+        const classify = async (text: string): Promise<boolean> => BUDGET.spend("guest") === true && await isFitForRoom(text);
+        const overBudget: boolean = this.writtenGuests >= MAX_WRITTEN_GUESTS || BUDGET.spend("guest") === false;
+        this.writtenGuests += 1;
+        const result: PersonaResult = overBudget === true ? { persona: null, refused: false } : await personaFromLine(line, this.host.persona.name, classify).catch((): PersonaResult => ({ persona: null, refused: false }));
+        this.writingGuest.delete(player.playerId);
+        log(this.scope(), `${player.playerId} described a guest: ${result.persona !== null ? "written" : result.refused === true ? "refused" : "preset"}`);
+        if (this.players.get(player.playerId) !== player || this.mayAddGuest() === false) {
+            this.refreshPhones();
+            return;
+        }
+        const joke: string = result.refused === true ? `(Someone described a guest the door wouldn't let in. Make one dry joke about it in a few words, without guessing what they said.) ` : "";
+        if (result.refused === true) {
+            this.setHint(player, "The door turned that one away. Here's someone else.");
+        }
+        if (result.persona === null && result.refused === false) {
+            this.setHint(player, "Couldn't picture that one. Here's someone else.");
+        }
+        this.addGuest(result.persona?.name, result.persona ?? undefined, joke);
+        this.shell.guestSeated();
+    }
+
+    /**
+     * Seats a guest and has the host introduce it as what it is.
+     * @param name which preset, by name; the next free one if not said or not free.
+     * @param written a persona written from someone's description, instead of a preset.
+     * @param before anything the host should be told first.
+     */
+    private addGuest(name?: string, written?: GuestPersona, before: string = ""): void {
         if (this.mayAddGuest() === false) {
             return;
         }
+        const free: GuestPersona[] = this.freePresets();
         const taken: string[] = [...this.players.values()].map((player: Player) => player.name.toLowerCase());
-        const persona: GuestPersona | undefined = GUEST_PERSONAS.find((candidate: GuestPersona) => taken.includes(candidate.name.toLowerCase()) === false);
+        const persona: GuestPersona | undefined = written !== undefined && taken.includes(written.name.toLowerCase()) === false ? written : free.find((candidate: GuestPersona) => candidate.name === name) ?? free[0];
         if (persona === undefined) {
             return;
         }
@@ -1113,7 +1200,7 @@ export class Room implements HostStage, AgentHost {
         this.nextPlayerNumber += 1;
         const driver: GuestDriver = this.guestDriver(playerId, persona);
         const socket: GuestSocket = new GuestSocket((view: PhoneView) => { driver.see(view); });
-        const player: Player = { ...this.newSeat(playerId, persona.name, socket as unknown as WebSocket), guest: driver };
+        const player: Player = { ...this.newSeat(playerId, persona.name, socket as unknown as WebSocket), guest: driver, guestStyle: persona.style };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name: persona.name });
         log(this.scope(), `${playerId} joined as an AI guest`);
@@ -1122,7 +1209,7 @@ export class Room implements HostStage, AgentHost {
         this.broadcastScene();
         this.broadcastShell();
         this.refreshPhones();
-        this.host.notice(`(${persona.name} just sat down. It is an AI guest, not a person. ${persona.style} Introduce it as an AI guest in a few words.)`, WAKE_DELAY_MILLISECONDS.join);
+        this.host.notice(`${before}(${persona.name} just sat down. It is an AI guest, not a person. ${persona.style} Introduce it as an AI guest in a few words.)`, WAKE_DELAY_MILLISECONDS.join);
     }
 
     /**
@@ -1170,6 +1257,17 @@ export class Room implements HostStage, AgentHost {
                 return true;
             },
         });
+    }
+
+    /**
+     * Sends one phone to a sheet, because the TV asked for something only a phone should do.
+     * @param playerId whose phone.
+     * @param kind which sheet.
+     */
+    private promptPhone(playerId: string, kind: "line" | "agent"): void {
+        this.guestPrompts.set(playerId, { kind, id: this.nextGuestPrompt });
+        this.nextGuestPrompt += 1;
+        this.refreshPhones();
     }
 
     /**
@@ -1447,10 +1545,11 @@ export class Room implements HostStage, AgentHost {
      */
     private guestTable(player: Player): GuestTable {
         const machines: Player[] = [...this.players.values()].filter((seat: Player) => seat.guest !== null || seat.agent !== null);
-        const seated: GuestTable["seated"] = machines.map((guest: Player) => ({ playerId: guest.playerId, name: guest.name, style: GUEST_PERSONAS.find((persona: GuestPersona) => persona.name === guest.name)?.style ?? "", agent: guest.agent !== null }));
+        const seated: GuestTable["seated"] = machines.map((guest: Player) => ({ playerId: guest.playerId, name: guest.name, style: guest.guestStyle, agent: guest.agent !== null }));
         const person: boolean = player.guest === null && player.agent === null;
         const agents: GuestTable["agents"] = AGENTS_ON === false || person === false ? null : { canInvite: this.mayInviteAgent(), link: this.agentLinks.get(player.playerId) ?? "", games: this.agentGames() };
-        return { seated, canAdd: person === true && this.mayAddGuest() === true, canRemove: person === true && this.game === null && seated.length > 0, agents };
+        const picks: GuestTable["picks"] = person === true && this.mayAddGuest() === true ? this.freePresets().map(guestPick) : [];
+        return { seated, canAdd: person === true && this.mayAddGuest() === true, canRemove: person === true && this.game === null && seated.length > 0, agents, picks, prompt: this.guestPrompts.get(player.playerId) ?? null, writing: this.writingGuest.has(player.playerId) };
     }
 
     /**
@@ -1701,6 +1800,17 @@ export class Room implements HostStage, AgentHost {
             startGame: (gameId: string, pick?: string): void => { this.startGame(gameId, false, pick); },
             pickOpened: (hostLine: string): void => { this.noticeIfAnyoneIsThere(`(Game: ${hostLine} One short line.)`, WAKE_DELAY_MILLISECONDS.screen); },
             mayAddGuest: (): boolean => this.mayAddGuest(),
+            guestPicks: (): { name: string; label: string }[] => this.freePresets().map(guestPick),
+            addNamedGuest: (name: string): void => { this.addGuest(name); },
+            mayBringAgent: (): boolean => this.mayInviteAgent(),
+            askGuestLine: (playerId: string): void => { this.promptPhone(playerId, "line"); },
+            askAgentLink: (playerId: string): void => {
+                const asker: Player | undefined = this.players.get(playerId);
+                if (asker !== undefined) {
+                    this.inviteAgent(asker);
+                }
+                this.promptPhone(playerId, "agent");
+            },
             addGuest: (): void => { this.addGuest(); },
             removeGuest: (): void => { this.removeGuest(); },
             endGame: (): void => { this.endGame(); },

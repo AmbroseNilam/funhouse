@@ -3,7 +3,7 @@
 // only ever says which way the thumb went.
 
 /** Which screen the TV is on. */
-export type ShellScreen = "home" | "game" | "pick" | "startCard" | "players" | "play" | "pause" | "howTo" | "confirmEnd";
+export type ShellScreen = "home" | "game" | "pick" | "startCard" | "players" | "addPlayer" | "addGuest" | "guestLine" | "agentOnPhone" | "play" | "pause" | "howTo" | "confirmEnd";
 
 /** Which way a phone's swipes move the highlight, if at all. */
 export type NavAxis = "x" | "y" | null;

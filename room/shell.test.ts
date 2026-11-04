@@ -67,6 +67,11 @@ function shellWith(told: Told): Shell {
         mayAddGuest: () => false,
         addGuest: () => undefined,
         removeGuest: () => undefined,
+        guestPicks: () => [],
+        addNamedGuest: () => undefined,
+        mayBringAgent: () => false,
+        askGuestLine: () => undefined,
+        askAgentLink: () => undefined,
     };
     shell = new Shell(stage);
     return shell;
@@ -358,6 +363,11 @@ describe("the console", () => {
             mayAddGuest: () => false,
             addGuest: () => undefined,
             removeGuest: () => undefined,
+            guestPicks: () => [],
+            addNamedGuest: () => undefined,
+            mayBringAgent: () => false,
+            askGuestLine: () => undefined,
+            askAgentLink: () => undefined,
         });
         shell.seatsChanged();
         shell.gameStarted("doors");

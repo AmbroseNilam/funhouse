@@ -113,7 +113,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
             <header className="shelf-heading" key={focused?.id ?? "players"}>
                 {empty === true
                     ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.</p></>
-                    : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here."}</p></>}
+                    : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here, or add a player."}</p></>}
             </header>
             <div className={`shelf ${empty === true ? "dimmed" : ""}`}>
                 <div className="shelf-rail" style={{ transform: `translateX(calc(${-shelfShift(boxCount, shell.focus)} * var(--u)))` }}>
@@ -129,7 +129,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                         {shell.seats.slice(0, TABLE_BOX_NAMES).map((seat: Seat) => <li key={seat.playerId} style={{ background: seat.colour }}>{seat.name}</li>)}
                         {shell.seats.length > TABLE_BOX_NAMES ? <li className="more">and {shell.seats.length - TABLE_BOX_NAMES} more</li> : null}
                     </ul>
-                    <span className="box-name">At the table</span>
+                    <span className="box-name">At the table<small>Add a player</small></span>
                     {shell.focus === shell.games.length ? <DriverFlag seat={driver} /> : null}
                 </div>}
                 </div>
@@ -171,7 +171,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
     const { shell, driver } = props;
     return (
         <section className="screen players-screen">
-            <h1>{shell.seats.length === 1 ? "Just you so far" : `${shell.seats.length} at the table`}</h1>
+            <h1>{shell.screen === "addPlayer" ? "Add a player" : shell.screen === "addGuest" ? "Who's sitting in?" : shell.screen === "guestLine" ? "Who should sit down?" : shell.screen === "agentOnPhone" ? "Bring your agent" : shell.seats.length === 1 ? "Just you so far" : `${shell.seats.length} at the table`}</h1>
             <ul className="seats">
                 {shell.seats.map((seat: Seat) => (
                     <li key={seat.playerId} className={seat.connected === false ? "away" : ""} style={{ background: seat.colour }}>
@@ -180,7 +180,9 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
                     </li>
                 ))}
             </ul>
-            <p className="players-hint">Talk to {HOST_NAME} from your phone. Whoever slides next takes the controller. Anyone else can scan in.</p>
+            {shell.screen === "guestLine" ? <p className="players-hint">Describe them on {driver?.name ?? "your"}'s phone, in a line.</p> : null}
+            {shell.screen === "agentOnPhone" ? <p className="players-hint">The link is on {driver?.name ?? "your"}'s phone. Paste it to your agent there.</p> : null}
+            <p className="players-hint" hidden={shell.screen !== "players"}>Talk to {HOST_NAME} from your phone. Whoever slides next takes the controller. Anyone else can scan in.</p>
             <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
             <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
         </section>
@@ -273,7 +275,7 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
     if (shell.screen === "game" && game !== undefined) {
         return <GamePage shell={shell} driver={driver} game={game} />;
     }
-    if (shell.screen === "players") {
+    if (shell.screen === "players" || shell.screen === "addPlayer" || shell.screen === "addGuest" || shell.screen === "guestLine" || shell.screen === "agentOnPhone") {
         return <PlayersPage shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
     }
     return null;

@@ -258,9 +258,10 @@ export class FakePhone {
      * Seats or sends home an AI guest from the phone's menu.
      * @param action what to do.
      * @param playerId which guest; the newest if not said.
+     * @param text a description of a guest to write.
      */
-    public guest(action: "add" | "remove" | "inviteAgent", playerId?: string): void {
-        this.socket.send(JSON.stringify({ type: "guest", action, ...(playerId === undefined ? {} : { playerId }) }));
+    public guest(action: "add" | "remove" | "inviteAgent" | "create", playerId?: string, text?: string): void {
+        this.socket.send(JSON.stringify({ type: "guest", action, ...(playerId === undefined ? {} : { playerId }), ...(text === undefined ? {} : { text }) }));
     }
 
     /** Leaves the table for good, as the phone menu does. */
