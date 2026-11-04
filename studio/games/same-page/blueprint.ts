@@ -1,4 +1,4 @@
-// Same Page as a blueprint: the match kit for three to eight people. Eight prompts, twenty seconds
+// Same Page as a blueprint: the match kit for three to eight people. Eight prompts, thirty seconds
 // to type a short card in secret, ten seconds to look at the stacks. Matching cards stack and score;
 // the card that sits alone wears the hat, and whoever holds the hat at the end loses points. The
 // host writes each prompt from a fixed stem; the 24 fallback prompts and the stems are original to
@@ -76,7 +76,7 @@ export const SAME_PAGE_BLUEPRINT: MatchBlueprint = {
             { kind: "room", text: "A job someone here would be good at" },
             { kind: "room", text: "A word this group says too often" },
         ],
-        writeSeconds: 20,
+        writeSeconds: 30,
         revealSeconds: 10,
         settleSeconds: 3,
         askSeconds: 5,

@@ -38,7 +38,12 @@ export interface ControlOption {
     id: string;
     label: string;
     disabled?: boolean;
+    /** Shown only to whoever holds the controller, and refused from anyone else. */
+    holderOnly?: boolean;
 }
+
+/** The button that ends a question with no timer, for the controller's holder. */
+export const REVEAL_NOW: string = "reveal-now";
 
 /** Everything one phone needs to render itself. */
 export interface PhoneView {

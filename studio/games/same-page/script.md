@@ -1,6 +1,6 @@
 # Same Page: experience script
 
-Match-the-crowd on the match kit. Three to eight players; eight prompts, 20 seconds to type, 10 seconds
+Match-the-crowd on the match kit. Three to eight players; eight prompts, 30 seconds to type, 10 seconds
 to look; about six minutes. Written for `DESIGN.md`: the host is a plain, dry, warm lantern; the TV is a
 table with paper cards on it; the phone is what is in your hand. The host's lines below are the register
 the brief asks for, not a transcript: the live host writes its own words, and the rules, the stacks, the
@@ -10,7 +10,7 @@ scores and the hat are code.
 
 | Moment | The host says | The TV shows | A phone |
 | --- | --- | --- | --- |
-| Prompt opens | "Something you always lose. Twenty seconds. Match the room." | The prompt large, "Prompt 1 of 8", "Type what you think the room will say", cards-in marks, a countdown | The prompt above a box and "what will the room say" |
+| Prompt opens | "Something you always lose. Thirty seconds. Match the room." | The prompt large, "Prompt 1 of 8", "Type what you think the room will say", cards-in marks, a countdown | The prompt above a box and "what will the room say" |
 | A player sends | Nothing. The host is not told and cannot hint. | One more mark filled | "Your card is in." The card is never shown back, even to its author. |
 | All in, or the clock ends | Nothing; "Stacking the cards." holds for a moment (a few seconds at most). | The prompt and "Stacking the cards." | "The cards are being stacked." |
 | Cards turn | "Keys, three of you. And one lone potato. I respect it." | One paper card per stack, biggest first: "keys, stack of 3", "potato, alone, wears the hat" (wine card). Points table. Ten seconds. | "You scored 2." or "No match this round." The hat's holder also reads "You have the hat." |

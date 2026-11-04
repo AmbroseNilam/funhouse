@@ -25,6 +25,8 @@ sam.nav({ kind: "select" });
 await waitFor(() => screen.title() === "Choose a topic…" || screen.title() === "Quizmaster", "the topic step");
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 4000); });
 sam.type("Easy plus sums, like what is 2 plus 3");
+await waitFor(() => sam.options().some((option) => option.label === "Just start"), "setup");
+sam.press("Just start");
 
 /**
  * The four answers on the TV right now.

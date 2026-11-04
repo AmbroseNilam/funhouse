@@ -22,6 +22,8 @@ export interface GameStage {
     requestContent(prompt: string, grounding?: ContentGrounding): void;
     /** Asks which answers say the same thing; the result arrives as answersMerged. */
     requestMerge(id: string, question: string, answers: string[]): void;
+    /** Asks the fast model for a setup follow-up; the result arrives as followUpReady. */
+    requestFollowUp(id: string, prompt: string): void;
     /** Draws a picture; the result arrives as drawingReady. */
     requestDrawing(id: string, prompt: string): void;
     /** Records something that happened on the room's timeline. */
@@ -315,6 +317,9 @@ export class GameSession<State> implements RunningGame {
         }
         if (step.mergeRequest !== undefined) {
             this.stage.requestMerge(step.mergeRequest.id, step.mergeRequest.question, step.mergeRequest.answers);
+        }
+        if (step.followUpRequest !== undefined) {
+            this.stage.requestFollowUp(step.followUpRequest.id, step.followUpRequest.prompt);
         }
         for (const draw of step.draws ?? []) {
             this.stage.requestDrawing(draw.id, draw.prompt);

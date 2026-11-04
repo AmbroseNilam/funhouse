@@ -28,6 +28,7 @@ export type RoomEvent =
     | { type: "hostRuled"; at: number; ruling: string; detail: string; playerId: string | null }
     | { type: "contentReady"; at: number; text: string; sources?: string[] }
     | { type: "answersMerged"; at: number; id: string; groups: AnswerGroup[] }
+    | { type: "followUpReady"; at: number; id: string; text: string }
     | { type: "drawingReady"; at: number; id: string; src: string };
 
 /** Maximum events a room keeps in memory; older ones roll off the front. */
