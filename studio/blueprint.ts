@@ -24,6 +24,8 @@ import type { HostGuessDecisions } from "./kits/host-guess.ts";
 import type { HandDecisions } from "./kits/hand.ts";
 import type { ClueDecisions } from "./kits/clue.ts";
 import type { CharadesDecisions } from "./kits/charades.ts";
+import type { BluffDecisions } from "./kits/bluff.ts";
+import type { BotDecisions } from "./kits/bot.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -148,6 +150,20 @@ export interface CharadesBlueprint {
     decisions: CharadesDecisions;
 }
 
+/** A bluff game: a real fact with a blank, fakes written in secret, and a pick. */
+export interface BluffBlueprint {
+    kit: "bluff";
+    box: Box;
+    decisions: BluffDecisions;
+}
+
+/** A bot game: everyone answers in secret, the host writes one more, and the table votes for the machine's. */
+export interface BotBlueprint {
+    kit: "bot";
+    box: Box;
+    decisions: BotDecisions;
+}
+
 /** Any game as data. */
 export type Blueprint =
     | GuessingBlueprint
@@ -166,7 +182,9 @@ export type Blueprint =
     | HostGuessBlueprint
     | HandBlueprint
     | ClueBlueprint
-    | CharadesBlueprint;
+    | CharadesBlueprint
+    | BluffBlueprint
+    | BotBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {

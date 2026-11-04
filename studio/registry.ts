@@ -2,8 +2,8 @@
 // its pause menu. A new kit adds an import line, a type in blueprint.ts and one entry here, and
 // nothing else changes; Blueprint's keys and this table must agree, which the compiler checks.
 
-import type { Blueprint, AnyKitGame, CharadesBlueprint, ClueBlueprint, HandBlueprint, HostGuessBlueprint, IdentityBlueprint, ChainBlueprint, ClueBoardBlueprint, EstimateBlueprint, GalleryBlueprint, GateBlueprint, GuessingBlueprint, LineBlueprint, OddWordBlueprint, PlantBlueprint, StrangerBlueprint, TapBlueprint, WitBlueprint } from "./blueprint.ts";
-import { CHECK_SEEDS, rehearsePictureGame, SEED_SPREAD } from "./check-support.ts";
+import type { Blueprint, AnyKitGame, BluffBlueprint, BotBlueprint, CharadesBlueprint, ClueBlueprint, HandBlueprint, HostGuessBlueprint, IdentityBlueprint, ChainBlueprint, ClueBoardBlueprint, EstimateBlueprint, GalleryBlueprint, GateBlueprint, GuessingBlueprint, LineBlueprint, OddWordBlueprint, PlantBlueprint, StrangerBlueprint, TapBlueprint, WitBlueprint } from "./blueprint.ts";
+import { addTallies, CHECK_SEEDS, rehearsePictureGame, SEED_SPREAD } from "./check-support.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingState } from "./kits/guessing.ts";
@@ -25,9 +25,11 @@ import { createHostGuessGame, hostGuessBlueprintProblems, type HostGuessState } 
 import { createHandGame, handBlueprintProblems, type HandState } from "./kits/hand.ts";
 import { createClueGame, clueBlueprintProblems, type ClueState } from "./kits/clue.ts";
 import { createCharadesGame, charadesBlueprintProblems, type CharadesState } from "./kits/charades.ts";
+import { bluffBlueprintProblems, createBluffGame, type BluffState } from "./kits/bluff.ts";
+import { botBlueprintProblems, createBotGame, type BotState } from "./kits/bot.ts";
 import { PLANT_GIVE_UP_ACTION } from "./kits/plant.ts";
 import { chainPersonas, dicePersonas, diceSecrecyCheck, pushChoiceCheck, pushPersonas, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck, identityNameCheck, identityPersonas, hostGuessPersonas, handPersonas, cluePersonas, charadesPersonas } from "./personas.ts";
-import { witPersonas } from "./personas-text.ts";
+import { bluffPersonas, botPersonas, witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** What the shelf needs to know about one kit's blueprints. */
@@ -235,5 +237,31 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             return rehearseMany(make, charadesPersonas(blueprint.decisions), CHECK_SEEDS, options);
         },
         pauseActions: giveUpRow,
+    },
+    bluff: {
+        problems: (blueprint: BluffBlueprint): string[] => bluffBlueprintProblems(blueprint.box, blueprint.decisions),
+        create: (blueprint: BluffBlueprint, random: () => number): AnyKitGame => erase(createBluffGame(blueprint.box, blueprint.decisions, random)),
+        check(blueprint: BluffBlueprint, options: RehearsalOptions): Tally {
+            const make = (seed: number): KitGame<BluffState> => createBluffGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+            // Once with the model failing, and once with its second look "finding" the first two answers alike,
+            // which turns the first fake into the true answer, so both ways a round can go are rehearsed.
+            const failing: Tally = rehearseMany(make, bluffPersonas(), CHECK_SEEDS, options);
+            const matching: Tally = rehearseMany(make, bluffPersonas(), CHECK_SEEDS, { ...options, content: options.content ?? "1, 2" });
+            return addTallies(failing, matching);
+        },
+        pauseActions: NO_PAUSE,
+    },
+    bot: {
+        problems: (blueprint: BotBlueprint): string[] => botBlueprintProblems(blueprint.box, blueprint.decisions),
+        create: (blueprint: BotBlueprint, random: () => number): AnyKitGame => erase(createBotGame(blueprint.box, blueprint.decisions, random)),
+        check(blueprint: BotBlueprint, options: RehearsalOptions): Tally {
+            const make = (seed: number): KitGame<BotState> => createBotGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+            // Once with the model failing, and once with it writing one line for everything it is asked, which
+            // gives the game a prompt of the model's and a machine's answer of the model's to place among the humans'.
+            const failing: Tally = rehearseMany(make, botPersonas(), CHECK_SEEDS, options);
+            const writing: Tally = rehearseMany(make, botPersonas(), CHECK_SEEDS, { ...options, content: options.content ?? "Gerald the goldfish" });
+            return addTallies(failing, writing);
+        },
+        pauseActions: NO_PAUSE,
     },
 };

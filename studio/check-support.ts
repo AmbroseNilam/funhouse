@@ -54,3 +54,23 @@ const PICTURE_FEW_SECONDS: number = 12;
 
 /** Seconds past the game's wait that a late picture arrives. */
 const PICTURE_LATE_EXTRA_SECONDS: number = 20;
+
+/**
+ * Adds two sets of rehearsal counts together.
+ * @param first one tally.
+ * @param second another.
+ * @returns their sum; a phase is never reached only if neither reached it.
+ */
+export function addTallies(first: Tally, second: Tally): Tally {
+    const outcomes: Record<string, number> = { ...first.outcomes };
+    for (const [outcome, count] of Object.entries(second.outcomes)) {
+        outcomes[outcome] = (outcomes[outcome] ?? 0) + count;
+    }
+    return {
+        rehearsals: first.rehearsals + second.rehearsals,
+        ended: first.ended + second.ended,
+        outcomes,
+        phasesNeverReached: first.phasesNeverReached.filter((phase: string) => second.phasesNeverReached.includes(phase) === true),
+        problems: [...first.problems, ...second.problems],
+    };
+}

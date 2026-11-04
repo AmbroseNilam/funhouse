@@ -24,6 +24,8 @@ import { COLD_READ_BLUEPRINT } from "./games/cold-read.ts";
 import { BLANK_VERDICT_BLUEPRINT } from "./games/blank-verdict.ts";
 import { LONELY_CLUES_BLUEPRINT } from "./games/lonely-clues.ts";
 import { PANTOMIME_PANIC_BLUEPRINT } from "./games/pantomime-panic.ts";
+import { BLANK_TRUTH_BLUEPRINT } from "./games/blank-truth/blueprint.ts";
+import { GHOST_WRITER_BLUEPRINT } from "./games/ghost-writer/blueprint.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
@@ -44,6 +46,8 @@ export const BLUEPRINTS: readonly Blueprint[] = [
     TIN_CAN_TELEPHONE_BLUEPRINT,
     WRONG_ROOM_BLUEPRINT,
     STRAY_WORD_BLUEPRINT,
+    BLANK_TRUTH_BLUEPRINT,
+    GHOST_WRITER_BLUEPRINT,
     PANTOMIME_PANIC_BLUEPRINT,
     LONELY_CLUES_BLUEPRINT,
     BLANK_VERDICT_BLUEPRINT,
@@ -59,6 +63,8 @@ export const BLUEPRINTS: readonly Blueprint[] = [
  * scripted runs that prove them.
  */
 export const HELD_BACK: Readonly<Record<string, string>> = {
+    blankTruth: "no run with the real host yet",
+    ghostWriter: "no run with the real host yet",
     pantomimePanic: "no run with the real host yet",
     lonelyClues: "no run with the real host yet",
     blankVerdict: "no run with the real host yet",

@@ -46,6 +46,38 @@ const PROMPT_POOL: readonly string[] = [
     "A pigeon's resignation letter, first line",
 ];
 
+/** Facts for a bluffing game. One is deliberately false and marked, so a scenario can see the second look drop it. */
+const FACT_POOL: readonly string[] = [
+    "The tallest animal on land is the ____ | giraffe",
+    "A group of crows is called a ____ | murder",
+    "FALSEFACT: the Moon is made of ____ | cheese",
+    "Spiders have eight ____ | legs",
+    "A baby kangaroo is called a ____ | joey",
+];
+
+/** What the stand-in "machine" writes when asked for an answer, polished on purpose so the game's style trimming has work to do. */
+export const GHOST_ANSWER: string = "Probably a goose, honestly.";
+
+/** Words the stand-in treats as meaning the same, so the game's merge step has something to find. */
+const SYNONYMS: readonly (readonly string[])[] = [["giraffe", "camelopard"], ["napoleon", "bonaparte"], ["legs", "limbs"], ["murder", "homicide"]];
+
+/**
+ * Finds groups of items that share a synonym set, as the real model would be asked to.
+ * @param items the answers, the first being the true one.
+ * @returns lines of one-based item numbers.
+ */
+function groupsFor(items: readonly string[]): string {
+    const lines: string[] = [];
+    for (const set of SYNONYMS) {
+        const hits = (item: string): boolean => set.some((word: string) => item.toLowerCase().includes(word));
+        const found: number[] = items.map((item: string, index: number) => (hits(item) ? index + 1 : 0)).filter((index: number) => index > 0);
+        if (found.length >= 2) {
+            lines.push(found.join(", "));
+        }
+    }
+    return lines.length === 0 ? "none" : lines.join("\n");
+}
+
 /**
  * What the game's model would write for a content request, by what the request asks for.
  * @param prompt the request.
@@ -55,6 +87,20 @@ export function contentFor(prompt: string): string {
     const prompts: RegExpMatchArray | null = /Write (\d+) prompts/.exec(prompt);
     if (prompts !== null) {
         return PROMPT_POOL.slice(0, Number(prompts[1])).join("\n");
+    }
+    if (prompt.startsWith("Write one answer to this party-game prompt") === true) {
+        return GHOST_ANSWER;
+    }
+    const facts: RegExpMatchArray | null = /Write (\d+) true facts/.exec(prompt);
+    if (facts !== null) {
+        return FACT_POOL.slice(0, Number(facts[1]) + 1).join("\n");
+    }
+    if (prompt.startsWith("Below are numbered trivia statements") === true) {
+        return prompt.split("\n").filter((line: string) => /^\d+\. /.test(line)).map((line: string) => `${line.split(".")[0] ?? ""} ${line.includes("FALSEFACT") ? "wrong" : "ok"}`).join("\n");
+    }
+    if (prompt.startsWith("Below is a JSON list") === true) {
+        const listed: string = prompt.slice(prompt.lastIndexOf("["));
+        return groupsFor(JSON.parse(listed) as string[]);
     }
     return "";
 }

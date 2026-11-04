@@ -186,7 +186,9 @@ export async function typeRefused(seat: Seat, text: string, label: string, scree
     }
     console.warn(`  ok: ${label} was refused and the box stayed open`);
     const marker: string = squash(text).slice(0, 18);
-    if (squash(everythingOnScreen(screen)).includes(marker) === true || seats.some((other: Seat) => other !== seat && squash(everythingOnPhone(other)).includes(marker) === true) === true) {
+    const onScreen: boolean = squash(everythingOnScreen(screen)).includes(marker);
+    const onAnotherPhone: boolean = seats.some((other: Seat) => other !== seat && squash(everythingOnPhone(other)).includes(marker) === true);
+    if (onScreen === true || onAnotherPhone === true) {
         throw new Error(`${label} was shown to someone after it was refused.`);
     }
 }
