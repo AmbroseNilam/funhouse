@@ -1380,15 +1380,20 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
-     * A seat's agent is leaving, which it may do only between games, like a guest. During a game the
-     * clock goes on without it.
+     * A seat's agent is leaving, which it may do only between games: seats are frozen, and leaving could
+     * take a game below its minimum and end it for everyone. During a game the clock goes on without it.
      * @param seat the seat.
+     * @returns a line saying why it can't leave yet, or null when it has gone.
      */
-    public agentLeaves(seat: AgentSeat): void {
+    public agentLeaves(seat: AgentSeat): string | null {
+        if (this.game !== null) {
+            return "A game is on. You can leave when it ends.";
+        }
         const player: Player | undefined = this.players.get(seat.playerId);
         if (player !== undefined) {
             this.removePlayer(player);
         }
+        return null;
     }
 
     /** Marks quiet agents as away, and lets go of those long gone, between games. */

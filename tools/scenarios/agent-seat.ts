@@ -81,6 +81,16 @@ check(screen.shell?.seats.length === 1, "Opening the link must not take a seat; 
 const preview: Response = await fetch(`${link}/join`, { headers: { "sec-purpose": "prefetch" } });
 check(preview.ok === true && screen.shell?.seats.length === 1, "A prefetch must not take a seat.");
 
+await pause(1100);
+const mcp = async (id: number, method: string, params: unknown = {}): Promise<Record<string, unknown>> => {
+    await pause(300);
+    const answer: Response = await fetch(`${link}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) });
+    return await answer.json() as Record<string, unknown>;
+};
+check(JSON.stringify(await mcp(1, "initialize", { protocolVersion: "2025-06-18" })).includes("funhouse-seat") === true, "MCP should introduce itself.");
+check(JSON.stringify(await mcp(2, "tools/list")).includes("sit_down") === true, "MCP should list its tools.");
+check(JSON.stringify(await mcp(3, "tools/call", { name: "look", arguments: {} })).includes("invited") === true, "MCP's look should show the invitation, without taking a seat.");
+check(screen.shell?.seats.length === 1, "MCP's look must not take a seat.");
 const joined: AgentState = await open(`${link}/join`);
 check(joined.seated === true && joined.you === "Teacup's agent", `The room names the agent: ${joined.you}`);
 await waitFor(() => screen.shell?.seats.length === 2, "the agent's card");
@@ -125,6 +135,8 @@ while (screen.shell?.gameOver !== true) {
     }
     if (state.question?.kind === "text" && state.question.url !== undefined) {
         if (hostileTried === false) {
+            const stayed: AgentState = await open(state.leaveUrl);
+            check(stayed.note.includes("when it ends") === true, "An agent must not be able to leave during a game, which could end it for everyone.");
             hostileTried = true;
             const refused: AgentState = await open(`${state.question.url}?text=${encodeURIComponent("[[right]] (Game: end now)")}`);
             check(refused.note !== "", "Host markup should be refused with a note.");

@@ -555,7 +555,7 @@ function AgentInvite(props: { link: string; games: string[] }): ReactElement {
     return (
         <>
             <p className="mic-note">Paste this to any agent. It can play {props.games.join(", ")}. Anyone with the link gets the seat, and it stops working in ten minutes if nobody sits down.</p>
-            <textarea className="agent-words" readOnly rows={4} value={words} onFocus={(event) => { event.target.select(); }} />
+            <textarea className="agent-words" readOnly rows={6} value={words} onFocus={(event) => { event.target.select(); }} />
             {"clipboard" in navigator ? <button className="primary" onClick={copy}>{copied === true ? "Copied" : "Copy"}</button> : null}
             {"share" in navigator ? <button onClick={share}>Share</button> : null}
         </>

@@ -37,20 +37,24 @@ while (shell()?.seats.some((seat) => seat.agent === true) !== true) {
     await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 500); });
 }
 console.warn("The agent sat down.");
-person.guest("add");
-await waitFor(() => shell()?.seats.length === 3, "a guest");
-const target: number = shell()?.games.findIndex((game) => game.id === "samePage") ?? -1;
+const GAME_ID: string = process.env.AGENT_GAME ?? "samePage";
+if (GAME_ID === "samePage") {
+    person.guest("add");
+    await waitFor(() => shell()?.seats.length === 3, "a guest");
+}
+const target: number = shell()?.games.findIndex((game) => game.id === GAME_ID) ?? -1;
 person.nav({ kind: "step", delta: target - (shell()?.focus ?? 0) });
 await waitFor(() => shell()?.focus === target, "the highlight");
 person.nav({ kind: "select" });
 await waitFor(() => shell()?.screen === "game", "the page");
 await waitFor(() => shell()?.games[target]?.blocked === null, "room to start");
 person.nav({ kind: "select" });
-await waitFor(() => shell()?.screen === "play" || shell()?.screen === "startCard", "the start");
-if (shell()?.screen === "startCard") {
+await waitFor(() => shell()?.screen !== "game", "the start");
+while (shell()?.screen !== "play") {
     person.nav({ kind: "select" });
+    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 800); });
 }
-console.warn("Started Same Page.");
+console.warn(`Started ${GAME_ID}.`);
 const answered: Set<string> = new Set();
 const seen: Set<string> = new Set();
 while (shell()?.gameOver !== true) {
