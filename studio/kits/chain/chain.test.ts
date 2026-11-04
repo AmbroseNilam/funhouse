@@ -276,6 +276,21 @@ describe("the chain kit", () => {
         assert.equal(/nothing of|survived|remarkably/.test(over), false, "no claim beyond the words");
     });
 
+    it("ends on the whole chain side by side, with every writer named", () => {
+        const run: Run = start();
+        for (let index = 0; index < FOUR.length; index += 1) {
+            write(run, `A plain line ${"wxyz"[index] ?? ""} here`);
+            paint(run);
+        }
+        for (let beat = 0; run.state.phase === "reveal" && beat < 12; beat += 1) {
+            play(run, { type: "timerFired", at: 100 + beat, timerId: `beat:${run.state.beat}` });
+        }
+        assert.equal(run.state.phase, "end");
+        const gallery: SceneBlock | undefined = blocks(run).find((block: SceneBlock) => block.type === "gallery");
+        assert.equal(gallery?.type === "gallery" ? gallery.items.length : 0, FOUR.length);
+        assert.deepEqual(gallery?.type === "gallery" ? gallery.items.map((item) => item.heading) : [], run.state.links.map((link) => link.writerName));
+    });
+
     it("never credits a player with a stock line at the reveal", () => {
         const run: Run = start();
         const timedOut: Step<ChainState> = play(run, { type: "timerFired", at: 1, timerId: "write:0" });

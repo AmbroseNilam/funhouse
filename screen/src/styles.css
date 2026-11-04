@@ -392,3 +392,51 @@
     .mood-victory { --ink: #14170c; }
     .mood-defeat { --ink: #1d0f13; }
 }
+
+/* A row of pictures with who made each, for a finished chain. */
+.gallery {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.5vmin;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gallery.many {
+    gap: 1vmin;
+}
+
+.gallery li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5vmin;
+    min-width: 0;
+}
+
+.gallery img,
+.gallery-empty {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 1vmin;
+}
+
+.gallery-empty {
+    background: rgb(255 255 255 / 8%);
+}
+
+.gallery strong {
+    font-size: 2.6vmin;
+}
+
+.gallery span {
+    font-size: 2.2vmin;
+    line-height: 1.2;
+}
+
+.gallery.many img,
+.gallery.many .gallery-empty {
+    aspect-ratio: 16 / 9;
+}
