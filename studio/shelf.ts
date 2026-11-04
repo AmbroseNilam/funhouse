@@ -105,10 +105,14 @@ export function installBlueprint(given: Blueprint): InstalledGame {
  * A shelf where every shipped blueprint stands in for the hand-written game with the same id,
  * and blueprints with new ids come after the hand-written games.
  * @param handWritten the games written in TypeScript.
+ * @param showHeld true to include the games on hold, each marked as testing in its pitch.
  * @returns the shelf.
  */
-export function studioShelf(handWritten: InstalledGame[]): InstalledGame[] {
-    const installed: InstalledGame[] = BLUEPRINTS.filter((blueprint: Blueprint) => process.env.STUDIO_SHOW_HELD === "1" || HELD_BACK[blueprint.box.id] === undefined).map(installBlueprint);
+export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = false): InstalledGame[] {
+    const installed: InstalledGame[] = BLUEPRINTS.filter((blueprint: Blueprint) => showHeld === true || process.env.STUDIO_SHOW_HELD === "1" || HELD_BACK[blueprint.box.id] === undefined).map((blueprint: Blueprint) => {
+        const game: InstalledGame = installBlueprint(blueprint);
+        return HELD_BACK[blueprint.box.id] === undefined ? game : { ...game, pitch: `Testing. ${game.pitch}` };
+    });
     const replaced: InstalledGame[] = handWritten.map((game: InstalledGame) => installed.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
     const added: InstalledGame[] = installed.filter((game: InstalledGame) => handWritten.some((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) === false);
     return [...replaced, ...added];

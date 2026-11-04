@@ -102,3 +102,10 @@ held with the reason "no run with the real host yet" until someone plays it with
 Scenarios in `tools/scenarios/`: games on the stub model use `tools/stub-model.ts` (Cold Read needs
 `tools/stub-host-model.ts` with `STUB_PLAN=win` or `lose`; Blank Truth, Ghost Writer and Two Takes use
 `tools/fake-meta.ts`). Blank Verdict and Lonely Clues take about five minutes on real clocks.
+
+## Shelf levels
+
+- `/screen/?studio=1`: the curated Studio shelf (games not on `HELD_BACK`).
+- `/screen/?studio=all`: the same plus every held game, each with "Testing." at the start of its pitch. The
+  new-room button keeps the query, so a testing room stays a testing room.
+- Anything else: the plain shelf.

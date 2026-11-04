@@ -89,8 +89,8 @@ const HEARTBEAT_MILLISECONDS: number = 15000;
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
-/** A room opened with ?studio=1 gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. */
-const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, GAMES, studioShelf(GAMES));
+/** A room opened with ?studio=1 (or ?studio=all, which adds the games still on hold, marked as testing) gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. */
+const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, GAMES, studioShelf(GAMES), studioShelf(GAMES, true));
 const limits: AddressLimits = new AddressLimits();
 setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 
@@ -112,14 +112,15 @@ function addressOf(request: IncomingMessage): string {
  * @param tapToTalk true when it's being opened to try tap-to-talk.
  * @param fastReplies true when it's being opened to try the faster reply model.
  * @param studio true when it's being opened with the Studio shelf.
+ * @param testing true when the Studio shelf also shows the games still on hold.
  * @returns the room, or null.
  */
-function openRoom(address: string, lively: boolean, tapToTalk: boolean, fastReplies: boolean, studio: boolean): Room | null {
+function openRoom(address: string, lively: boolean, tapToTalk: boolean, fastReplies: boolean, studio: boolean, testing: boolean): Room | null {
     const within: boolean = ROOM_LIMIT_ON === false || limits.mayOpenRoom(address, (code: string) => directory.find(code) !== undefined);
     if (within === false || BUDGET.hasRoom() === false) {
         return null;
     }
-    const room: Room | null = directory.create(lively, tapToTalk, fastReplies, studio);
+    const room: Room | null = directory.create(lively, tapToTalk, fastReplies, studio, testing);
     if (room !== null) {
         limits.roomOpened(address, room.code);
     }
@@ -244,7 +245,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "roomClosed");
             return;
         }
-        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("tap") === "1", url.searchParams.get("fast") === "1", url.searchParams.get("studio") === "1");
+        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("tap") === "1", url.searchParams.get("fast") === "1", url.searchParams.get("studio") === "1" || url.searchParams.get("studio") === "all", url.searchParams.get("studio") === "all");
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;
