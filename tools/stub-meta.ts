@@ -5,8 +5,8 @@
 // held no blocked text and carried the house rule. This is test tooling: it keeps prompts in
 // memory and answers on localhost only, so never point a real room at it.
 //
-//   STUB_PORT=8799 STUB_IMAGE_MS=300 node tools/stub-meta.ts
-//   META_BASE_URL=http://127.0.0.1:8799/v1 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 GAME_ROOM_DRAW=1 npm run room
+//   STUB_PORT=8798 STUB_IMAGE_MS=300 node tools/stub-meta.ts
+//   META_BASE_URL=http://127.0.0.1:8798/v1 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 GAME_ROOM_DRAW=1 npm run room
 //
 // STUB_IMAGE_MS is how long a picture takes (default 300). STUB_IMAGE_FAIL=1 makes every picture
 // fail with a 500, as a refused or broken drawing does. STUB_IMAGE_FAIL_EVERY=3 fails each third.
@@ -15,7 +15,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { deflateSync } from "node:zlib";
 
 /** Port the stub listens on. */
-const PORT: number = Number(process.env.STUB_PORT ?? 8799);
+const PORT: number = Number(process.env.STUB_PORT ?? 8798);
 
 /** Milliseconds a picture takes. */
 const IMAGE_MILLISECONDS: number = Number(process.env.STUB_IMAGE_MS ?? 300);

@@ -37,6 +37,9 @@ and others as they report.
 
 ## Housekeeping found while merging
 
-- Three stub servers exist (`tools/stub-host.ts`, `stub-model.ts`, `stub-meta.ts`) and two want port 8799.
-- Every new kit edits the same if-chains in `studio/blueprint.ts`, `studio/check.ts` and `studio/shelf.ts`,
-  and appends to `studio/personas.ts`; each merge conflicts there. A kit registry would end that.
+- Stub servers: `tools/stub-model.ts` (port 8799, text host; it serves `stub-host.ts`) and `tools/stub-meta.ts`
+  (port 8798, images and the classifier). Use one or the other per room.
+- Kits now register in `studio/registry.ts`: a new kit is an import, a blueprint type and one entry there, and
+  its games are one line in `studio/shelf.ts`. `.gitattributes` keeps both sides' lines when two branches add.
+- Tin Can Telephone's scenario timed out once in five runs ("waiting for the guesser's turn"), only while other
+  scenarios were running at the same time; it passes alone. Not made deterministic; treat as load-sensitive.
