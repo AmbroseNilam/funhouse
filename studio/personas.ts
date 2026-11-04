@@ -7,8 +7,10 @@ import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
 import type { PlantBlueprint, TapBlueprint } from "./blueprint.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
+import { BACK_ACTION, CHALLENGE_ACTION, createDiceGame, FACE_PREFIX, QUANTITY_PREFIX, type DiceDecisions, type DiceState } from "./kits/tap-dice.ts";
 import { createFitsGame, FITS_PREFIX, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
-import type { KitGame } from "./kit/kit.ts";
+import type { Box, KitGame } from "./kit/kit.ts";
+import { seededRandom } from "./kit/primitives.ts";
 import type { Glimpse, Move, Persona, RoleCheck, TraceEvent } from "./rehearse.ts";
 
 /** Seconds a quiet table lets pass at a time. */
@@ -280,7 +282,7 @@ export function fitsPersonas(): Persona<FitsState>[] {
  * @param blueprint the game.
  * @returns the check.
  */
-export function fitsTapCheck(blueprint: TapBlueprint & { decisions: FitsDecisions }): RoleCheck<FitsState> {
+export function fitsTapCheck(blueprint: TapBlueprint<FitsDecisions>): RoleCheck<FitsState> {
     const script: TraceEvent[] = [
         { type: "contentReady", at: 0, text: "" },
         { type: "input", playerId: "paper1", actionId: `${FITS_PREFIX}paper2` },
@@ -313,6 +315,101 @@ export function fitsTapCheck(blueprint: TapBlueprint & { decisions: FitsDecision
                 },
                 hidden: (state: FitsState) => game.hidden(state),
             };
+        },
+        script,
+    };
+}
+
+/**
+ * Under the Cup's personas: a careful table that challenges after two bids, a table that challenges
+ * the moment a bid stands, a table that always bids as high as it can until nobody can raise, a
+ * table that never touches a phone so the clock plays, one where a player walks out mid-round, and
+ * one where everyone but one walks out.
+ * @param decisions the game's decisions.
+ * @returns the personas.
+ */
+export function dicePersonas(decisions: DiceDecisions): Persona<DiceState>[] {
+    const pause: Move = { kind: "wait", seconds: Math.max(decisions.lookSeconds, decisions.liftSeconds, decisions.revealSeconds) + 1 };
+    /**
+     * The bidder's move: challenge when the persona wants to and may, else press the lowest or the
+     * highest quantity, then the lowest or the highest face.
+     * @param glimpse what the persona sees.
+     * @param challengeAfter bids that must stand before the persona challenges.
+     * @param high whether to raise as high as the buttons allow.
+     * @returns the move, or a wait when it is nobody's turn to bid.
+     */
+    const bid = (glimpse: Glimpse<DiceState>, challengeAfter: number, high: boolean): Move => {
+        const bidderId: string | null = glimpse.state.bidderId;
+        if (glimpse.phase !== "bidding" || bidderId === null) {
+            return pause;
+        }
+        const actions: string[] = glimpse.legal(bidderId).map((action: LegalAction) => action.actionId);
+        const raises: string[] = actions.filter((actionId: string) => actionId.startsWith(glimpse.state.draft === null ? QUANTITY_PREFIX : FACE_PREFIX) === true);
+        const canChallenge: boolean = actions.includes(CHALLENGE_ACTION);
+        const raise: string | undefined = high === true ? raises.at(-1) : raises[0];
+        const fallback: string | undefined = canChallenge === true ? CHALLENGE_ACTION : actions.find((actionId: string) => actionId !== BACK_ACTION);
+        const chosen: string | undefined = glimpse.state.bids.length >= challengeAfter && canChallenge === true ? CHALLENGE_ACTION : raise ?? fallback;
+        return chosen === undefined ? pause : { kind: "press", playerId: bidderId, actionId: chosen };
+    };
+    return [
+        { name: "the careful table", move: (glimpse: Glimpse<DiceState>): Move => bid(glimpse, 2, false) },
+        { name: "the quick callers", move: (glimpse: Glimpse<DiceState>): Move => bid(glimpse, 1, false) },
+        { name: "the high rollers", move: (glimpse: Glimpse<DiceState>): Move => bid(glimpse, 99, true) },
+        { name: "the table that never taps", move: (): Move => ({ kind: "wait", seconds: decisions.bidSeconds + 1 }) },
+        {
+            name: "the one who walks out",
+            move(glimpse: Glimpse<DiceState>): Move {
+                const leaver: string | undefined = glimpse.players[1]?.playerId;
+                if (glimpse.phase === "bidding" && glimpse.state.challenges === 1 && leaver !== undefined && glimpse.players.length > 3) {
+                    return { kind: "leave", playerId: leaver };
+                }
+                return bid(glimpse, 2, false);
+            },
+        },
+        {
+            name: "the emptying table",
+            move(glimpse: Glimpse<DiceState>): Move {
+                const others: CartridgePlayer[] = glimpse.players.filter((player: CartridgePlayer) => player.playerId !== glimpse.state.bidderId);
+                const leaver: string | undefined = others.find((player: CartridgePlayer) => (glimpse.state.diceLeft[player.playerId] ?? 0) > 0)?.playerId;
+                return glimpse.phase === "bidding" && glimpse.state.bids.length >= 1 && leaver !== undefined ? { kind: "leave", playerId: leaver } : bid(glimpse, 3, false);
+            },
+        },
+    ];
+}
+
+/**
+ * Under the Cup's secrecy check: the same bids are played at the same table, except that one
+ * player's dice are different in each game. Nothing the TV, the host's brief or any other phone
+ * shows may change before the cups are lifted, through the opening bids and the challenge itself.
+ * @param box the box.
+ * @param decisions the decisions.
+ * @returns the check.
+ */
+export function diceSecrecyCheck(box: Box, decisions: DiceDecisions): RoleCheck<DiceState> {
+    const script: TraceEvent[] = [
+        { type: "timerFired", at: 8, timerId: "look1" },
+        { type: "input", playerId: "paper1", actionId: `${QUANTITY_PREFIX}1` },
+        { type: "input", playerId: "paper1", actionId: `${FACE_PREFIX}2` },
+        { type: "input", playerId: "paper2", actionId: `${QUANTITY_PREFIX}1` },
+        { type: "input", playerId: "paper2", actionId: `${FACE_PREFIX}3` },
+        { type: "input", playerId: "paper3", actionId: CHALLENGE_ACTION },
+    ];
+    return {
+        deal(seat: number): KitGame<DiceState> {
+            const base: () => number = seededRandom(11);
+            let drawn: number = 0;
+            /**
+             * The next draw, shifted by half a turn when it rolls a die of the seat being changed, so
+             * every one of that player's dice shows a different face.
+             * @returns a number in [0, 1).
+             */
+            const draw = (): number => {
+                const value: number = base();
+                const owner: number = Math.floor(drawn / decisions.startingDice);
+                drawn += 1;
+                return owner === seat ? (value + 0.5) % 1 : value;
+            };
+            return createDiceGame(box, decisions, draw);
         },
         script,
     };

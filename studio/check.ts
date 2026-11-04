@@ -7,8 +7,9 @@ import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
+import { createDiceGame, type DiceDecisions, type DiceState } from "./kits/tap-dice.ts";
 import { createFitsGame, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
-import { fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { dicePersonas, diceSecrecyCheck, fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -29,7 +30,12 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
         const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
     }
-    const fits: TapBlueprint & { decisions: FitsDecisions } = { ...blueprint, decisions: blueprint.decisions };
+    if (blueprint.decisions.style === "dice") {
+        const dice: DiceDecisions = blueprint.decisions;
+        const makeDice = (seed: number): KitGame<DiceState> => createDiceGame(blueprint.box, dice, seededRandom(seed));
+        return rehearseMany(makeDice, dicePersonas(dice), CHECK_SEEDS, { ...options, roleCheck: diceSecrecyCheck(blueprint.box, dice) });
+    }
+    const fits: TapBlueprint<FitsDecisions> = { ...blueprint, decisions: blueprint.decisions };
     const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);
     return rehearseMany(makeFits, fitsPersonas(), CHECK_SEEDS, { ...options, roleCheck: fitsTapCheck(fits) });
 }
