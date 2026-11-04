@@ -55,6 +55,9 @@ const FACT_POOL: readonly string[] = [
     "A baby kangaroo is called a ____ | joey",
 ];
 
+/** What the stand-in "machine" writes when asked for an answer, polished on purpose so the game's style trimming has work to do. */
+export const GHOST_ANSWER: string = "Probably a goose, honestly.";
+
 /** Words the stand-in treats as meaning the same, so the game's merge step has something to find. */
 const SYNONYMS: readonly (readonly string[])[] = [["giraffe", "camelopard"], ["napoleon", "bonaparte"], ["legs", "limbs"], ["murder", "homicide"]];
 
@@ -83,6 +86,9 @@ export function contentFor(prompt: string): string {
     const prompts: RegExpMatchArray | null = /Write (\d+) prompts/.exec(prompt);
     if (prompts !== null) {
         return PROMPT_POOL.slice(0, Number(prompts[1])).join("\n");
+    }
+    if (prompt.startsWith("Write one answer to this party-game prompt") === true) {
+        return GHOST_ANSWER;
     }
     const facts: RegExpMatchArray | null = /Write (\d+) true facts/.exec(prompt);
     if (facts !== null) {
