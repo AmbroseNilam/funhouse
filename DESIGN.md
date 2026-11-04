@@ -48,13 +48,13 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
   scrolling waveform, live words and a small Stop, and stops itself on silence, at a time limit, or when
   the page is hidden. It waits while the host speaks. A phone can choose Tap or Hold in its settings, kept
   in that browser, and `?tap=0` or `?hold=1` opens a room with holding only.
-- **Pre-roll:** the mic stays open from join and keeps the last 320ms. On hold, send that first, so
+- **Pre-roll:** the mic opens on the first talk of a session, so nobody who taps or types is ever asked, then stays open and keeps the last 320ms. Nothing is sent until someone talks. On hold, send that first, so
   first words survive. Send 300ms more after release.
 - **Corners:** back top-left and phone menu top-right, 60pt. Touches starting there never swipe.
   Back goes to the parent; in a game it pauses.
 - **Browser leaks are bugs:** `touch-action: none`, fixed root, no callout or selection, non-passive
-  touchmove block, swipe-back blocked in 20px edges. Installing to the home screen is optional and
-  never asked for. The QR link must always work in the browser, and the app opens to a code screen.
+  touchmove block, swipe-back blocked in 20px edges. Installing to the home screen is optional:
+  a quiet offer sits on the landing page, in the phone menu, and once after a game, and a "not now" is remembered. Never during a game or on the way into one. The QR link must always work in the browser, and the app opens to a code screen.
 - **Vibration is a bonus only.** iPhones can't be relied on. Feedback comes from the TV.
 - **Slow choices may look down.** Secret roles and votes appear on the phone as paper cards, with
   the touch surface below them. Instructions always stay on the TV.

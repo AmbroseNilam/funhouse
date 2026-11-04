@@ -73,8 +73,8 @@ export const GAMES: InstalledGame[] = [
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],
         startPick: QUIZMASTER_PICK,
         startCard: QUIZ_MULTIPLE_CHOICE === true
-            ? ["Six questions, with four answers on screen.", "Tap your answer on your phone, or say it. One try each.", "Two points for a right answer."]
-            : ["Six questions, read out loud.", "Everyone answers out loud. One try each.", "Two points if you're right, one if you're close."],
+            ? ["Every question has four answers on screen.", "Tap your answer on your phone, or say it. One try each.", "Two points for a right answer."]
+            : ["Questions read out loud.", "Everyone answers out loud. One try each.", "Two points if you're right, one if you're close."],
         create: (stage: GameStage, pick?: string) => new GameSession(createQuizmaster(pick, Math.random, QUIZ_MULTIPLE_CHOICE), stage),
     },
     {

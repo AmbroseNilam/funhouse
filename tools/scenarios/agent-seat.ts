@@ -28,6 +28,7 @@ interface AgentState {
     tv: string[];
     phone: string[];
     leaveUrl: string;
+    pageUrl: string;
 }
 
 /**
@@ -71,7 +72,8 @@ check(stranger.status === 404, "A made-up link should find nothing.");
 
 person.guest("inviteAgent");
 await waitFor(() => (person.view?.guests.agents?.link ?? "") !== "", "the link");
-const link: string = person.view?.guests.agents?.link ?? "";
+const invitation: string = person.view?.guests.agents?.link ?? "";
+let link: string = invitation;
 console.warn(`Link issued; the person's phone holds it.`);
 
 await pause(1100);
@@ -95,6 +97,9 @@ const tooBig: Response = await fetch(`${link}/join`, { method: "POST", body: "x"
 check(tooBig.ok === false && screen.shell?.seats.length === 1, "A body that's too big must do nothing.");
 const joined: AgentState = await open(`${link}/join`);
 check(joined.seated === true && joined.you === "Teacup's agent", `The room names the agent: ${joined.you}`);
+const taken: Response = await fetch(invitation);
+check(taken.status === 404, "An invitation is single use: once taken, the link that travelled must be dead.");
+link = joined.pageUrl;
 await waitFor(() => screen.shell?.seats.length === 2, "the agent's card");
 const card = screen.shell?.seats.find((seat) => seat.agent === true);
 check(card?.guest === true && card.driving === false, "The agent is marked as a machine and never holds the controller.");

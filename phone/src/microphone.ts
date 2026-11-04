@@ -29,19 +29,6 @@ export interface MicrophoneCapture {
 }
 
 /**
- * Whether the browser says the microphone is already allowed, so opening it won't put up a prompt.
- * @returns true only when it's sure; browsers that can't say give false.
- */
-export async function microphoneAllowed(): Promise<boolean> {
-    try {
-        const status: PermissionStatus = await navigator.permissions.query({ name: "microphone" });
-        return status.state === "granted";
-    } catch {
-        return false;
-    }
-}
-
-/**
  * Starts capturing and calls onFrame with each 24 kHz 16-bit mono PCM frame.
  * @param onFrame receives raw frame bytes.
  * @returns a handle to stop capture and release the microphone.

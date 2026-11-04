@@ -56,7 +56,7 @@ const LOOK_AGAIN_SECONDS: number = 5;
 const SLOW_DOWN: string = "Too many tries. Wait a few minutes.";
 
 /** What a dead link says. */
-const LINK_ENDED: string = "This link has ended. Ask the person at the table for a new one.";
+const LINK_ENDED: string = "This link has ended or been used. If you sat down with it, use the address you were given then. If not, ask the person at the table for a new one.";
 
 /** What a seat knows about one agent. */
 export class AgentSeat {
@@ -137,6 +137,8 @@ export interface AgentHost {
     agentSay(seat: AgentSeat, text: string): string | null;
     /** The seat's agent looked at its link. */
     agentLooked(seat: AgentSeat): void;
+    /** Whether this seat is still at the table. */
+    agentHolds(seat: AgentSeat | null): boolean;
     /** The seat's agent wants to leave, which it can only do between games. Says why not if it can't. */
     agentLeaves(seat: AgentSeat): string | null;
     /** Checks on this room's agents: who's away, who has gone. */
@@ -151,6 +153,8 @@ interface AgentLink {
     rate: RateWindow;
     /** A line about the last move, kept until the page after it is shown. */
     note: string;
+    /** The MCP session that sat down, which is then the only thing this key answers. */
+    mcpSession: string | null;
 }
 
 /** The links in use on this server. A link is random and can't be guessed from a room code. */
@@ -180,7 +184,7 @@ export function issueAgentLink(room: AgentHost, ownerId: string): string | null 
         return null;
     }
     const key: string = randomBytes(16).toString("base64url");
-    LINKS.set(key, { room, ownerId, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "" });
+    LINKS.set(key, { room, ownerId, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "", mcpSession: null });
     return key;
 }
 
@@ -382,6 +386,7 @@ ${moves.join("\n")}
 <h2>On the TV</h2>${list(state.tv)}
 <h2>On your phone</h2>${list(state.phone)}
 <h2>To keep playing</h2>
+${state.seated === true ? "<p>The link you came in by no longer works. This page's links are yours now.</p>" : ""}
 <p><a href="${escaped(state.freshUrl)}">Look again</a> every ${LOOK_AGAIN_SECONDS} seconds or so. This link is new each time, so use the newest one: ${escaped(state.freshUrl)}. If you don't look for a minute the table is told you're away, and after three minutes between games you lose the seat.</p>
 <p>Games that take agents: ${escaped(state.games.join(", "))}. In any other game you'll be told to wait.</p>
 <p><a href="${escaped(state.leaveUrl)}">Leave the table</a></p>
@@ -650,16 +655,34 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
         return true;
     }
     const format: string = url.searchParams.get("format") ?? (request.method === "POST" || request.headers.accept === "application/json" ? "json" : "html");
-    const base: string = `${publicUrl.replace(/\/$/, "")}/a/${key ?? ""}`;
+    let base: string = `${publicUrl.replace(/\/$/, "")}/a/${key ?? ""}`;
     if (link.seat !== null) {
         link.room.agentLooked(link.seat);
+    }
+    const session: string | undefined = typeof request.headers["mcp-session-id"] === "string" ? request.headers["mcp-session-id"] : undefined;
+    // Once an MCP client has sat down, this key answers only that client.
+    if (link.mcpSession !== null && (action !== "mcp" || session !== link.mcpSession)) {
+        send(response, 404, "text/plain", LINK_ENDED);
+        return true;
     }
     if (action === "mcp") {
         if (request.method !== "POST") {
             send(response, 405, "text/plain", "This MCP server answers POST only.");
             return true;
         }
+        if (body.method === "initialize") {
+            response.setHeader("mcp-session-id", randomBytes(16).toString("base64url"));
+        }
+        const params: Record<string, unknown> = typeof body.params === "object" && body.params !== null ? body.params as Record<string, unknown> : {};
+        if (body.method === "tools/call" && params.name === "sit_down" && link.seat === null && session === undefined) {
+            send(response, 200, "application/json", JSON.stringify({ jsonrpc: "2.0", id: body.id ?? null, result: { isError: true, content: [{ type: "text", text: "This client didn't keep its MCP session, so it can't take a seat here. Open the link as a web page instead." }] } }));
+            return true;
+        }
+        const wasSeated: boolean = link.seat !== null;
         const result: unknown = mcpResult(link, base, key ?? "", body);
+        if (wasSeated === false && link.seat !== null) {
+            link.mcpSession = session ?? null;
+        }
         if (result === null) {
             response.setHeader("cache-control", "no-store");
             const known: boolean = String(body.method).startsWith("notifications/");
@@ -675,7 +698,15 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     }
     const raw: unknown = body.text ?? body.value ?? url.searchParams.get("text") ?? undefined;
     const value: string | number | undefined = typeof raw === "string" || typeof raw === "number" ? raw : undefined;
+    const wasSeated: boolean = link.seat !== null;
     const played: string = action === undefined || action === "" || prefetch === true ? "" : playMove(link, action, rest, value);
+    // The invitation is single use: sitting down swaps it for a new key, so the one that travelled, and may sit in a log, is dead.
+    if (wasSeated === false && link.seat !== null) {
+        const seatKey: string = randomBytes(16).toString("base64url");
+        LINKS.delete(key ?? "");
+        LINKS.set(seatKey, link);
+        base = `${publicUrl.replace(/\/$/, "")}/a/${seatKey}`;
+    }
     const moved: boolean = action !== undefined && action !== "" && prefetch === false;
     // A page that came from a move goes on to the plain address, so reloading it can't play the move again.
     if (moved === true && format !== "json" && action !== "leave") {
@@ -689,7 +720,7 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     if (link.seat !== null) {
         link.seat.note = "";
     }
-    if (action === "leave" && LINKS.has(key ?? "") === false) {
+    if (action === "leave" && link.room.agentHolds(link.seat) === false) {
         send(response, 200, "text/plain", "You've left the table. Thanks for playing.");
         return true;
     }

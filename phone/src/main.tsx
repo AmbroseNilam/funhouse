@@ -15,5 +15,3 @@ if (root === null) {
 createRoot(root).render(<StrictMode><App /></StrictMode>);
 reloadWhenUpdated();
 fitAboveKeyboard();
-// Installing is optional and never asked for, so Chrome's own prompt stays out of the way.
-addEventListener("beforeinstallprompt", (event: Event) => { event.preventDefault(); });

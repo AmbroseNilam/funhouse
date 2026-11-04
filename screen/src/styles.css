@@ -236,8 +236,8 @@
     .answer-choices.revealed li.right { opacity: 1; background: var(--lamp); color: var(--lamp-ink); transform: scale(1.05); transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), background 200ms ease-out; }
     .answer-choices.revealed ~ .text { animation: reveal-rise 300ms ease-out 400ms backwards; }
     .answer-choices.revealed ~ .tally { animation: reveal-rise 300ms ease-out 700ms backwards; }
-    .play-column .blocks:has(.answer-choices.revealed) { flex-flow: row wrap; align-content: flex-start; align-items: center; column-gap: calc(36 * var(--u)); }
-    .play-column .blocks:has(.answer-choices.revealed) > :is(.title, .answer-choices) { flex: 0 0 100%; }
+    .play-column .blocks:is(:has(.answer-choices.revealed), :has(.answer-choices ~ .timer)) { flex-flow: row wrap; align-content: flex-start; align-items: center; column-gap: calc(36 * var(--u)); }
+    .play-column .blocks:is(:has(.answer-choices.revealed), :has(.answer-choices ~ .timer)) > :is(.title, .answer-choices) { flex: 0 0 100%; }
     .answer-choices.revealed ~ .tally caption { display: none; }
     .answer-choices.revealed ~ .tally tbody { display: flex; flex-wrap: wrap; column-gap: calc(40 * var(--u)); row-gap: calc(4 * var(--u)); }
     .answer-choices.revealed ~ .tally tr { display: flex; gap: calc(12 * var(--u)); }

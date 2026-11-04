@@ -96,6 +96,17 @@ test("someone holding a link nobody has taken up sees nothing of the room", () =
     assert.deepEqual(room.agentTable("p1", null).tv, []);
 });
 
+test("taking a disconnected seat by its name doesn't bring its link along", () => {
+    const { room, phone } = table();
+    phone.say({ type: "guest", action: "inviteAgent" });
+    assert.notEqual(phone.agents().link, "");
+    phone.emit("close", 1001);
+    const other: FakePhone = new FakePhone();
+    room.attachPhone(other as unknown as WebSocket);
+    other.say({ type: "hello", name: "Teacup", sameName: "takeSeat" });
+    assert.equal(other.agents().link, "");
+});
+
 test("the phone is told when the agent sits, and the link is used up", () => {
     const { room, phone } = table();
     phone.say({ type: "guest", action: "inviteAgent" });

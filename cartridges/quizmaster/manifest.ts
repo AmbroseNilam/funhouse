@@ -27,6 +27,20 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
             },
         },
         {
+            id: "thinking",
+            hostBrief: "You are having a quick think about the topic. Say one short line at most, then wait.",
+            listening: { "*": "holdToTalk" },
+            hostMayInterject: false,
+            silenceSeconds: 0,
+        },
+        {
+            id: "setup",
+            hostBrief: "The players are making a few quick choices on their phones and the TV shows them. Stay quiet until you're told the questions are ready.",
+            listening: { "*": "holdToTalk" },
+            hostMayInterject: false,
+            silenceSeconds: 0,
+        },
+        {
             id: "preparing",
             hostBrief: "You are writing the questions. Say one short line at most, then wait.",
             listening: { "*": "holdToTalk" },

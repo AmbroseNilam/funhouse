@@ -38,7 +38,12 @@ export interface ControlOption {
     id: string;
     label: string;
     disabled?: boolean;
+    /** Shown only to whoever holds the controller, and refused from anyone else. */
+    holderOnly?: boolean;
 }
+
+/** The button that ends a question with no timer, for the controller's holder. */
+export const REVEAL_NOW: string = "reveal-now";
 
 /** Everything one phone needs to render itself. */
 export interface PhoneView {
@@ -59,6 +64,8 @@ export interface PhoneView {
     turn: PhoneTurn | null;
     /** The AI guests at the table, for this phone's menu. */
     guests: GuestTable;
+    /** True while a game is being played in this room. */
+    gameOn: boolean;
 }
 
 /** The AI guests at the table and what this phone may do about them. */

@@ -10,12 +10,12 @@
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
 import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
-import type { Control, GuestTable, ListeningMode, PhoneView } from "../shared/controls.ts";
+import { REVEAL_NOW, type Control, type GuestTable, type ListeningMode, type PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
 import { isFitForRoom } from "../providers/meta/moderation.ts";
-import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
+import { SPARK_MODEL } from "../providers/meta/spark.ts";
 import { filterText, nicknameCategory, type FilterResult } from "./content-filter.ts";
 import { kindByRule, mergeAnswers, utteranceKind, voiceCommand, type UtteranceKind } from "./decide.ts";
 import { commandByKeywords, DESTRUCTIVE_COMMANDS, type VoiceCommand } from "./voice-commands.ts";
@@ -30,7 +30,7 @@ import type { SearchedText } from "../providers/meta/search.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { recordedLine } from "./lineBank.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
-import { streamSpark } from "../providers/meta/spark.ts";
+import { FAST_SPARK_MODEL, streamSpark } from "../providers/meta/spark.ts";
 import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
 import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
@@ -325,6 +325,12 @@ const MAX_WRITTEN_GUESTS: number = 8;
 const GUEST_LINE_GAP_MILLISECONDS: number = 5000;
 
 /** Why a table with AI guests can't start a game that doesn't take them. */
+/** How long a setup follow-up may take. */
+const FOLLOW_UP_TIME_LIMIT_MILLISECONDS: number = 4500;
+
+/** Room for the model's reasoning plus one short question. */
+const FOLLOW_UP_TOKEN_LIMIT: number = 1500;
+
 const NO_GUESTS_HERE: string = "AI guests can't play this one. Remove them first.";
 
 /** How long a released press may wait for its final text before it counts as not heard. */
@@ -1016,6 +1022,11 @@ export class Room implements HostStage, AgentHost {
             return this.join(socket, hello.name);
         }
         if (hello.sameName === "takeSeat") {
+            // Whoever takes a seat by its name alone doesn't get what its last phone held.
+            endUnusedAgentLink(this, namesake.playerId);
+            this.agentLinks.delete(namesake.playerId);
+            this.guestPrompts.delete(namesake.playerId);
+            this.agentJoined.delete(namesake.playerId);
             namesake.resumeToken = randomBytes(16).toString("hex");
             return this.resume(socket, namesake.playerId, namesake.resumeToken);
         }
@@ -1497,6 +1508,15 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
+     * Whether a seat is still at the table.
+     * @param seat the seat.
+     * @returns true while it is.
+     */
+    public agentHolds(seat: AgentSeat | null): boolean {
+        return seat !== null && this.players.get(seat.playerId)?.agent === seat;
+    }
+
+    /**
      * A seat's agent is leaving, which it may do only between games: seats are frozen, and leaving could
      * take a game below its minimum and end it for everyone. During a game the clock goes on without it.
      * @param seat the seat.
@@ -1672,7 +1692,7 @@ export class Room implements HostStage, AgentHost {
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
-        if (this.paused === true) {
+        if (this.paused === true || (value === REVEAL_NOW && this.shell.isDriving(player.playerId) === false)) {
             return;
         }
         this.game?.input(player.playerId, value);
@@ -2095,6 +2115,7 @@ export class Room implements HostStage, AgentHost {
             },
             requestContent: (prompt: string, grounding?: ContentGrounding): void => { this.writeContent(prompt, grounding); },
             requestMerge: (id: string, question: string, answers: string[]): void => { void this.mergeForGame(id, question, answers); },
+            requestFollowUp: (id: string, prompt: string): void => { void this.followUpForGame(id, prompt); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
             record: (event: RoomEvent): void => {
                 this.record(event);
@@ -2116,6 +2137,29 @@ export class Room implements HostStage, AgentHost {
         const groups = await mergeAnswers(question, answers);
         if (this.game === game) {
             game?.event({ type: "answersMerged", at: Date.now(), id, groups });
+        }
+    }
+
+    /**
+     * Asks the fast model for a setup follow-up. Failing or running late only means no follow-up.
+     * @param id the game's id for this request.
+     * @param prompt what to write.
+     */
+    private async followUpForGame(id: string, prompt: string): Promise<void> {
+        const game: RunningGame | null = this.game;
+        let text: string = "";
+        const signal: AbortSignal = AbortSignal.timeout(FOLLOW_UP_TIME_LIMIT_MILLISECONDS);
+        try {
+            if (BUDGET.spend("spark") === true) {
+                for await (const delta of streamSpark([{ role: "system", content: CONTENT_SYSTEM }, { role: "user", content: prompt }], { model: FAST_SPARK_MODEL, reasoningEffort: "minimal", maxTokens: FOLLOW_UP_TOKEN_LIMIT, signal })) {
+                    text += delta;
+                }
+            }
+        } catch {
+            text = "";
+        }
+        if (this.game === game) {
+            game?.event({ type: "followUpReady", at: Date.now(), id, text });
         }
     }
 
@@ -3104,7 +3148,7 @@ export class Room implements HostStage, AgentHost {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
+        return { gameOn: this.game !== null, playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
     }
 
     /**
@@ -3179,7 +3223,14 @@ export class Room implements HostStage, AgentHost {
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
-        return (this.game?.controls(player.playerId) ?? []).map((control: Control): Control => {
+        const holding: boolean = this.shell.isDriving(player.playerId);
+        return (this.game?.controls(player.playerId) ?? []).flatMap((control: Control): Control[] => {
+            if (control.type !== "buttons" || holding === true || control.options.some((option) => option.holderOnly === true) === false) {
+                return [control];
+            }
+            const options = control.options.filter((option) => option.holderOnly !== true);
+            return options.length === 0 ? [] : [{ ...control, options }];
+        }).map((control: Control): Control => {
             if ("id" in control === false) {
                 return control;
             }
