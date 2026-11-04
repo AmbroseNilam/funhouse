@@ -276,6 +276,20 @@ describe("the chain kit", () => {
         assert.equal(/nothing of|survived|remarkably/.test(over), false, "no claim beyond the words");
     });
 
+    it("never credits a player with a stock line at the reveal", () => {
+        const run: Run = start();
+        const timedOut: Step<ChainState> = play(run, { type: "timerFired", at: 1, timerId: "write:0" });
+        assert.equal(timedOut.state.links[0]?.stock, true);
+        paint(run);
+        for (let index = 1; index < FOUR.length; index += 1) {
+            write(run, `A plain line ${"xyz"[index - 1]} here`);
+            paint(run);
+        }
+        const heading: string = JSON.stringify(blocks(run)[0]);
+        assert.match(heading, /A line from the box for/);
+        assert.equal(/ wrote"/.test(heading), false);
+    });
+
     it("measures how far a chain drifted", () => {
         assert.equal(driftOverlap("a red fox", "a red fox"), 1);
         assert.equal(driftOverlap("a red fox", "blue whale"), 0);

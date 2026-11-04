@@ -517,7 +517,8 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         }
         if (state.beat % 2 === 0) {
             const verb: string = index === 0 ? "wrote" : "described";
-            return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: `${link.writerName} ${verb}`, kicker }, { type: "text", text: quoted(link.text), emphasis: "large" }] };
+            const heading: string = link.stock === true ? `A line from the box for ${link.writerName}` : `${link.writerName} ${verb}`;
+            return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: heading, kicker }, { type: "text", text: quoted(link.text), emphasis: "large" }] };
         }
         if (link.src === null) {
             return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: "No painting here", kicker }, { type: "text", text: "The host ran out of paint for this one.", emphasis: "whisper" }] };

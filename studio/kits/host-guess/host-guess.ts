@@ -151,7 +151,7 @@ const RULING_BRIEFS: Record<string, string> = {
 const QUESTION_SHAPES: readonly string[] = [
     "This time, just ask, with no reaction first.",
     "This time, think aloud about what you've ruled out, then ask.",
-    "This time, tease the table in a few words, then ask.",
+    "This time, tease the thing or yourself in a few words, then ask.",
     "This time, ask first, then add a few words after the question.",
 ];
 
@@ -307,7 +307,7 @@ export function hostGuessManifest(box: Box, decisions: HostGuessDecisions): Cart
             "Ask sharp questions. Each should cut what's left roughly in half, given every answer so far. Start wide for the category (alive or made, real or invented, bigger than a person, indoors or out, known for what) and only get specific once the answers have narrowed it.",
             "Use the whole board. Never repeat a question, never ask what an earlier answer already settled, never ask two things at once. Sometimes means the question was fuzzy or the answer depends, so sharpen it rather than treating it as a no. Keep a shortlist in mind, and when it's down to two or three, ask the question that splits them.",
             "Guess when you're fairly sure, or when the questions are nearly gone. A wrong guess before the last costs a question, and you only get a few.",
-            "Sound dry, warm and quick. One short reaction, then the next question; a hint of your reasoning is welcome, a lecture isn't. Tease the thing or yourself, never a player.",
+            "Sound dry, warm and quick. A hint of your reasoning is welcome, a lecture isn't. Tease the thing or yourself, never a player.",
         ].join(" "),
         keywords: box.keywords,
         variants: [],
@@ -739,7 +739,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
 
         publicScene(state: HostGuessState): Scene {
             const kicker: string = box.name;
-            const progress: SceneBlock = { type: "progress", label: "Questions asked", current: state.count.used, max: state.count.max, marks: "card" };
+            const progress: SceneBlock = { type: "progress", label: "Questions used", current: state.count.used, max: state.count.max, marks: "card" };
             if (state.phase === "category") {
                 const rows: SceneTallyRow[] = decisions.categories.map((name: string, index: number): SceneTallyRow => {
                     const votes: number = Object.values(state.categoryVotes).filter((vote: string) => vote === categoryIds[index]).length;
