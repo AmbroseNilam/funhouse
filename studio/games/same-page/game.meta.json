@@ -1,7 +1,6 @@
 {
     "id": "samePage",
     "kit": "match",
-    "level": "held",
-    "reason": "no run with the real host yet",
+    "level": "visible",
     "order": 220
 }

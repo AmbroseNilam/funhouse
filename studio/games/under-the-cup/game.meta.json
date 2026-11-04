@@ -1,6 +1,7 @@
 {
     "id": "underTheCup",
     "kit": "tap",
-    "level": "visible",
+    "level": "held",
+    "reason": "not in the five; held, not deleted",
     "order": 40
 }

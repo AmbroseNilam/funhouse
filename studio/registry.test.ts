@@ -41,9 +41,8 @@ describe("kit registry", () => {
         }
     });
 
-    it("keeps the tap-only games visible", () => {
-        for (const id of ["whoFits", "underTheCup"]) {
-            assert.equal(HELD_BACK[id], undefined, id);
+    it("keeps held games built, so they can come back", () => {
+        for (const id of Object.keys(HELD_BACK)) {
             assert.equal(BLUEPRINTS.some((blueprint) => blueprint.box.id === id), true, id);
         }
     });
