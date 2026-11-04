@@ -1,6 +1,7 @@
 // A voice that makes no sound and no provider calls, for the text-only test mode. It streams a
 // short burst of silence for each line, so everything downstream runs as it would for speech.
 
+import { charge, PRICES } from "./meter.ts";
 import type { SpeechRequest, TextToSpeech } from "./openai/speech.ts";
 
 /** One 100 ms chunk of 24 kHz 16-bit mono silence. */
@@ -22,9 +23,13 @@ export class SilentSpeech implements TextToSpeech {
 
     /**
      * Streams silence for one line.
-     * @param _request ignored; every line sounds the same.
+     * @param request the line; every line sounds the same.
      */
-    public async *speak(_request: SpeechRequest): AsyncGenerator<Uint8Array> {
+    public async *speak(request: SpeechRequest): AsyncGenerator<Uint8Array> {
+        // For measuring: counts what this line would have cost in a real voice.
+        if (process.env.COST_COUNT_SILENT === "1") {
+            charge("voice", request.text.length * PRICES.voicePerCharacter);
+        }
         await Promise.resolve();
         yield SILENCE;
     }

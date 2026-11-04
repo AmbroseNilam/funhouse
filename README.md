@@ -100,7 +100,13 @@ Your keys pay for your games. Nothing is billed through this project. Providers 
 
 Create the Meta key at [dev.meta.ai](https://dev.meta.ai). Pictures cost about a cent each, with at most 40 per room. Other costs depend on how much your group talks, and we haven't measured a typical night, so watch your provider dashboards the first time.
 
-The server stops spending for the day at 5,000 model replies, 2,000 voice lines, 200 pictures, 4,000 recorded lines and 1,500 AI guest decisions. These counters reset when it restarts, and microphone transcription isn't counted, so **don't leave a public address open unattended**.
+The server stops spending for the day at 5,000 model replies, 2,000 voice lines, 200 pictures, 4,000 recorded lines and 1,500 AI guest decisions. These counters reset when it restarts, and microphone transcription isn't counted, so **don't leave a public address open unattended** unless you turn on dollar limits.
+
+### Dollar limits for a public site
+
+Off by default. With `COST_LIMITS=1` every paid call is counted in dollars, using provider usage where it's returned and the estimates in the price table at the top of `providers/meter.ts`. These are estimates, so also set limits with your providers. Spending is charged to the address that opened the room, saved to `COST_DIR`, and reset daily. As an allowance runs down, new paintings stop at 60%, voice turns to captions at 90%, and at 100% the room finishes its sentence and shows a stop screen. If the store breaks, spending stops but the server stays up. Rooms close after `COST_IDLE_MINUTES` with no person doing anything.
+
+The visitor's address comes from `CF-Connecting-IP` only when the connection arrives from this machine, as it does through a Cloudflare Tunnel sidecar. Behind any other proxy, every visitor looks like the proxy. Someone rotating VPN addresses gets a new allowance each time, which only the site ceiling stops.
 
 ## Games
 
@@ -173,6 +179,15 @@ Set these in `.env`. Each switch is off unless set to `1`.
 | `GAME_ROOM_TEXT_ONLY` | No voice, mic or paintings. Muse Spark still replies if you have a key. |
 | `GAME_ROOM_DRAW` | Paints even in text-only mode |
 | `JEV_DECISIONS_OFF` | Comma-separated Jev judgments to turn off |
+| `COST_LIMITS` | Turns on dollar limits; needs `COST_DIR`, a writable folder |
+| `COST_ADDRESS_DOLLARS` / `COST_SITE_DOLLARS` | Daily allowance per address (default 2) and ceiling for the site (default 15) |
+| `COST_PAINTINGS_OFF_AT` / `COST_CAPTIONS_AT` | Fractions where paintings stop and captions start (defaults 0.6, 0.9) |
+| `COST_RESET_UTC_HOUR` | Hour the day resets (default 8) |
+| `COST_IDLE_MINUTES` | Closes a room after this long with no person active (default 5) |
+| `COST_TRANSCRIBE_SECONDS_ADDRESS` / `_SITE`, `COST_JEV_CALLS_ADDRESS` / `_SITE` | Daily audio and Jev caps |
+| `COST_JUDGE_CODE` / `COST_JUDGE_DOLLARS` | A code people can enter for a higher allowance (default 10) |
+| `COST_OWNER_CODE` | Exempts its holder from limits, and reads `/owner/spend` through an `x-owner-code` header |
+| `COST_ALERT_URL` | Optional webhook told when the site passes a stage |
 
 ## Development
 
