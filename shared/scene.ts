@@ -19,6 +19,8 @@ export type SceneBlock =
     | { type: "gallery"; items: GalleryItem[] }
     | { type: "roster"; players: RosterEntry[] }
     | { type: "timer"; seconds: number; label?: string; running: boolean }
+    /** A calm bar that drains over the seconds and warms near the end. The key names this one clock. */
+    | { type: "drain"; seconds: number; key: string }
     | { type: "tally"; title: string; rows: TallyRow[] }
     | { type: "progress"; label: string; current: number; max: number; marks?: "door" | "card" }
     | { type: "board"; columns: number; cells: BoardCell[] }

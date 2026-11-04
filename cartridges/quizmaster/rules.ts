@@ -13,6 +13,7 @@ import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { isHostSafe, shuffled } from "../../studio/kit/text.ts";
 import { answerSetup, followUpPrompt, parseFollowUp, SETUP_START, setupBlocks, setupControls, setupFinished, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
 import { REVEAL_NOW } from "../../shared/controls.ts";
+import { DRAIN_WARM_SECONDS } from "../../shared/drain.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 
 /** Questions in one game. */
@@ -36,14 +37,23 @@ const EXTRA_QUESTIONS_REQUESTED: number = 2;
 /** The most questions a game can ask, and so the most worth keeping from the model. */
 const MOST_QUESTIONS: number = 10;
 
+/** Shortest clock worth a nudge from the host: on a quicker one he'd still be reading the question. */
+const NUDGE_FROM_SECONDS: number = 30;
+
 /** How long the model gets to write a follow-up before setup carries on without one. */
 const FOLLOW_UP_WAIT_SECONDS: number = 5;
+
+/** Most names listed on the TV as still answering, before it just counts them. */
+const STILL_ANSWERING_NAMES: number = 3;
+
+/** What ends a question whose clock ran out. */
+const TIME_UP: string = "Time is up.";
 
 /** The fixed setup questions. Each game of Quizmaster asks these after any follow-up. */
 const SETUP_QUESTIONS: readonly SetupQuestion[] = [
     { id: "level", prompt: "How hard?", options: [{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }] },
     { id: "count", prompt: "How many questions?", options: [{ id: "5", label: "5" }, { id: "10", label: "10" }] },
-    { id: "time", prompt: "How long for each one?", options: [{ id: "relaxed", label: "Relaxed" }, { id: "normal", label: "Normal" }, { id: "quick", label: "Quick" }, { id: "none", label: "No timer" }] },
+    { id: "time", prompt: "How long for each one?", options: [{ id: "none", label: "No timer" }, { id: "relaxed", label: "Relaxed" }, { id: "normal", label: "Normal" }, { id: "quick", label: "Quick" }] },
 ];
 
 /** Seconds for each question at each pace; No timer has none. */
@@ -317,8 +327,8 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         const chosen: Record<string, string> = state.setup?.chosen ?? {};
         const followUp: SetupQuestion | undefined = state.setup?.questions.find((question: SetupQuestion) => question.id === "follow-up");
         const focus: string = followUp?.options.find((option) => option.id === chosen["follow-up"])?.label ?? "";
-        const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "normal"];
-        return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace === undefined ? QUESTION_SECONDS : pace }, state.topic);
+        const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "none"];
+        return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace ?? null }, state.topic);
     };
 
     /**
@@ -327,7 +337,12 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      * @param index which question.
      * @returns the timers.
      */
-    const questionTimers = (state: QuizmasterState, index: number): Record<string, number> => (state.questionSeconds === null ? {} : { [`question-${index}`]: state.questionSeconds });
+    const questionTimers = (state: QuizmasterState, index: number): Record<string, number> => {
+        if (state.questionSeconds === null) {
+            return {};
+        }
+        return { [`question-${index}`]: state.questionSeconds, ...(state.questionSeconds >= NUDGE_FROM_SECONDS ? { [`hurry-${index}`]: state.questionSeconds - DRAIN_WARM_SECONDS } : {}) };
+    };
 
     /**
      * Tells the host to read a question exactly.
@@ -411,6 +426,24 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
     };
 
     /**
+     * Says how a question went, and makes clear when someone ran out of time rather than got it wrong.
+     * @param state the state, in a reveal.
+     * @returns the line.
+     */
+    const revealLine = (state: QuizmasterState): string => {
+        const missed: string[] = state.players.filter((player) => state.answered.includes(player.playerId) === false).map((player) => player.name);
+        const got: string = state.rightNow.length === 0 ? (missed.length === 0 || missed.length < state.players.length ? "Nobody got it." : "") : `${state.rightNow.join(" and ")} got it!`;
+        if (missed.length === 0) {
+            return got;
+        }
+        const timedOut: boolean = state.revealWhy === TIME_UP;
+        if (missed.length === state.players.length) {
+            return timedOut === true ? "Time ran out." : "No answers that time.";
+        }
+        return `${got} ${missed.join(" and ")} ${timedOut === true ? "ran out of time" : "didn't answer"}.`;
+    };
+
+    /**
      * Ends a question. Four answers get the drumroll and a reveal; an answer out loud moves straight on.
      * @param unsettled the state, with this question's points not yet added.
      * @param why what just happened, for the host.
@@ -473,7 +506,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", setup: null, count: QUESTION_COUNT, level: "medium", focus: "", questionSeconds: QUESTION_SECONDS, gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
+            const state: QuizmasterState = { phase: "topic", setup: null, count: QUESTION_COUNT, level: "medium", focus: "", questionSeconds: null, gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
@@ -557,11 +590,15 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                     return lightAnswer(state);
                 }
                 if (state.phase === "reveal" && event.timerId === "reveal-react") {
-                    const credit: string = state.rightNow.length === 0 ? "Nobody got it." : `${state.rightNow.join(" and ")} got it right.`;
+                    const credit: string = revealLine(state);
                     return { state, facts: [publicFact("reveal", `${state.revealWhy} ${credit} The answer was: ${state.questions[state.index]?.answer ?? ""}. React in one short line that includes the answer. Don't ask anything; the next question comes on its own.`)] };
                 }
                 if (state.phase === "reveal" && event.timerId === "reveal-next") {
                     return advance({ ...state, gained: {} }, "", true);
+                }
+                if (state.phase === "question" && event.timerId === `hurry-${state.index}`) {
+                    const waiting: boolean = state.players.some((player) => state.answered.includes(player.playerId) === false);
+                    return waiting === true && state.speaking.length === 0 ? { state, facts: [publicFact("hurry", `About ${DRAIN_WARM_SECONDS} seconds left. Say so in three or four words at most, without repeating the question.`)] } : { state, facts: [] };
                 }
                 if (state.phase !== "question" || event.timerId !== `question-${state.index}`) {
                     return { state, facts: [] };
@@ -569,7 +606,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 if (state.gotGrace === false && state.speaking.length + state.heard.length > 0) {
                     return { state: { ...state, gotGrace: true }, facts: [], timers: { [event.timerId]: ANSWER_GRACE_SECONDS } };
                 }
-                return finishQuestion(state, "Time is up.");
+                return finishQuestion(state, TIME_UP);
             }
             if (event.type === "speechStarted") {
                 return { state: { ...state, speaking: [...state.speaking, event.playerId] }, facts: [] };
@@ -650,7 +687,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 };
             }
             if (state.phase === "reveal") {
-                const gotIt: string = state.rightNow.length === 0 ? "Nobody got it." : `${state.rightNow.join(" and ")} got it!`;
+                const gotIt: string = revealLine(state);
                 return {
                     mood: "neutral",
                     transition: "cut",
@@ -671,7 +708,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                     blocks: [
                         { type: "title", text: state.questions[state.index]?.question ?? "", kicker: `${state.topic} · ${standings}` },
                         { type: "choices", options: lettered },
-                        ...(state.questionSeconds === null ? [] : [{ type: "timer" as const, seconds: state.questionSeconds, running: true }]),
+                        ...(state.questionSeconds === null ? [] : [{ type: "drain" as const, seconds: state.questionSeconds, key: `quiz-${state.index}-${state.questions[state.index]?.question ?? ""}` }]),
                         { type: "progress", label: "Question", current: state.index + 1, max: state.questions.length },
                     ],
                 };
@@ -707,15 +744,17 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             }
             if (state.phase === "reveal") {
                 const gained: number = state.gained[playerId] ?? 0;
-                return [{ type: "waiting", text: seated === false ? "Watch the TV." : gained > 0 ? `You got it! +${gained}` : "Not this time." }];
+                const unanswered: boolean = state.answered.includes(playerId) === false;
+                return [{ type: "waiting", text: seated === false ? "Watch the TV." : gained > 0 ? `You got it! +${gained}` : unanswered === true ? (state.revealWhy === TIME_UP ? "Time ran out." : "No answer that time.") : "Not this time." }];
             }
+            const drain: Control[] = state.questionSeconds === null ? [] : [{ type: "drain", seconds: state.questionSeconds, key: `quiz-${state.index}-${state.questions[state.index]?.question ?? ""}` }];
             const revealNow: Control[] = state.questionSeconds === null ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true }] }] : [];
             const onScreen: string[] = state.questions[state.index]?.choices ?? [];
             if (onScreen.length > 0 && seated === true && state.answered.includes(playerId) === false) {
-                return [{ type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }, ...revealNow];
+                return [...drain, { type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }, ...revealNow];
             }
             const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
-            return [{ type: "waiting", text: line }, ...revealNow];
+            return [{ type: "waiting", text: line }, ...drain, ...revealNow];
         },
 
         turn(state: QuizmasterState): Turn | null {
@@ -723,7 +762,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return { kind: "anyone", label: "" };
             }
             if (state.phase === "question") {
-                return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label: "Everyone answers once" };
+                const left: string[] = state.players.filter((player) => state.answered.includes(player.playerId) === false).map((player) => player.name);
+                const label: string = state.answered.length === 0 ? "Everyone answers once" : left.length > STILL_ANSWERING_NAMES ? `${left.length} still answering` : `Still answering: ${left.join(", ")}`;
+                return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label };
             }
             return null;
         },

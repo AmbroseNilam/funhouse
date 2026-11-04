@@ -729,7 +729,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 if (state.phase === "writing") {
                     blocks.push({ type: "text", text: "Type what you think the room will say.", emphasis: "large" });
                     blocks.push({ type: "progress", label: "Cards in", current: state.cards.length, max: state.players.length, marks: "card" });
-                    blocks.push({ type: "timer", seconds: decisions.writeSeconds, label: "to write", running: true });
+                    blocks.push({ type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` });
                     return { mood: "neutral", transition: "fade", blocks };
                 }
                 blocks.push({ type: "text", text: "Stacking the cards.", emphasis: "large" });
@@ -768,11 +768,12 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 const wears: string = state.hat === playerId ? " You have the hat." : "";
                 return [{ type: "waiting", text: `${won === 0 ? "No match this round." : `You scored ${won}.`}${wears}` }];
             }
+            const clock: Control = { type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` };
             if (cardOf(state, playerId) !== undefined) {
-                return [{ type: "waiting", text: "Your card is in." }];
+                return [{ type: "waiting", text: "Your card is in." }, clock];
             }
             const field: Control = { type: "textInput", id: controlId(state, playerId), prompt: promptOf(state), placeholder: "what will the room say", maxLength: decisions.answerLimit };
-            return (state.attempts[playerId] ?? 0) > 0 ? [{ ...field, note: "Try another one." }] : [field];
+            return (state.attempts[playerId] ?? 0) > 0 ? [clock, { ...field, note: "Try another one." }] : [clock, field];
         },
 
         hostFacts(state: MatchState, scope: Scope): ScopedFact[] {

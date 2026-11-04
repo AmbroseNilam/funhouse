@@ -69,7 +69,7 @@ export function phoneStrings(view: PhoneView): string[] {
         if (control.type === "buttons" || control.type === "choice") {
             return [control.prompt ?? "", ...control.options.map((option) => option.label)];
         }
-        return [control.prompt, control.note ?? ""];
+        return control.type === "drain" ? [] : [control.prompt, control.note ?? ""];
     });
 }
 
