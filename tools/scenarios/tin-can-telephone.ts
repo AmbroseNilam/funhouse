@@ -203,10 +203,11 @@ while (isOver() === false && turns < 14) {
     }
     await waitFor(() => headline(screen).kicker.startsWith("Clue:") || isOver(), "guessing to open");
     checkNoLeaks();
-    const guesser: Seat | undefined = guessers.find((seat: Seat) => seat.phone.view?.turn?.yours === true) ?? guessers[0];
-    if (guesser === undefined) {
+    const firstGuesser: Seat | undefined = guessers.find((seat: Seat) => seat.phone.view?.turn?.yours === true) ?? guessers[0];
+    if (firstGuesser === undefined) {
         throw new Error("Nobody can guess.");
     }
+    const lastGuesser = (): Seat => guessers.find((seat: Seat) => seat.phone.view?.turn?.yours === true) ?? firstGuesser;
     const owned: string[] = left.slice(0, number);
     if (missed === false && turns === 2) {
         missed = true;
@@ -214,10 +215,11 @@ while (isOver() === false && turns < 14) {
         owned.unshift(bystander ?? "");
     }
     for (const word of owned) {
-        await waitFor(() => (guesser.phone.view?.turn?.yours === true || guessers.length === 1) || isOver(), "the guesser's turn");
+        await waitFor(() => guessers.some((seat: Seat) => seat.phone.view?.turn?.yours === true) || guessers.length === 1 || isOver(), "the guesser's turn");
         if (isOver()) {
             break;
         }
+        const guesser: Seat = guessers.find((seat: Seat) => seat.phone.view?.turn?.yours === true) ?? guessers[0] ?? firstGuesser;
         const before: number = boardOf(screen).filter((cell: BoardCell) => cell.turned).length;
         const label: string | undefined = guesser.phone.options().find((option: { id: string; label: string }) => squash(option.label) === word)?.label;
         if (label === undefined) {
@@ -230,8 +232,8 @@ while (isOver() === false && turns < 14) {
             break;
         }
     }
-    if (isOver() === false && teamOnTurn() === team && headline(screen).kicker.startsWith("Clue:") === true && guesser.phone.options().some((option: { id: string }) => option.id === "stop" && true) === true) {
-        guesser.phone.press("We're done");
+    if (isOver() === false && teamOnTurn() === team && headline(screen).kicker.startsWith("Clue:") === true && lastGuesser().phone.options().some((option: { id: string }) => option.id === "stop" && true) === true) {
+        lastGuesser().phone.press("We're done");
     }
     await waitFor(() => teamOnTurn() !== team || isOver(), "the turn to pass");
 }

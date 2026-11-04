@@ -43,3 +43,27 @@ and others as they report.
   its games are one line in `studio/shelf.ts`. `.gitattributes` keeps both sides' lines when two branches add.
 - Tin Can Telephone's scenario timed out once in five runs ("waiting for the guesser's turn"), only while other
   scenarios were running at the same time; it passes alone. Not made deterministic; treat as load-sensitive.
+
+## Browser QA (Haiku testers, stub models, 2026-11-04)
+
+Each tester opened `/screen/?studio=1` in the browser pane, ran the game's scenario against that room, took
+screenshots of the TV, and opened one phone page at 390x844. Phones only got as far as the join screen, so
+phone-side game screens were not looked at. Pre-reveal secrecy was checked on the TV only where a screenshot
+happened to land before the reveal; the scripted scenarios check it exhaustively.
+
+| Game | Browser result |
+| --- | --- |
+| Who Fits | passed; no console errors; TV readable |
+| Past the Gate | passed; no hidden rule or cargo on the TV before reveal |
+| Off by a Mile | passed; no guesses or bets on the TV before reveal |
+| Mind the Gap | passed; row of 7 wraps and fits; new card's date before reveal not captured |
+| Wrong Room | passed; no place or stranger on the TV before reveal in the shots taken |
+| Stray Word | passed; no word or stray on the TV before reveal in the shots taken |
+| Tin Can Telephone | scenario timed out in the shared run; fixed the scenario (it followed one guesser) and it passes twice alone |
+| Painted Whispers | played to the end, readable; its scenario failed only because another game shared the picture stub; passes alone |
+| Clue Gallery | same shared-stub failure; passes alone; pre-reveal card spread not captured |
+| Two Takes | not browser-tested; real-classifier scenario fixed, rerun pending with Application |
+
+Found: the shelf screen's spine labels are clipped and broken across lines once the shelf is long ("Pas / the
+/ Gat"). That is the shelf UI, not a game. One caption on Painted Whispers link 3 looked faint against its glow;
+not confirmed.
