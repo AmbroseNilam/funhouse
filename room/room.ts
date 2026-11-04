@@ -2050,7 +2050,7 @@ export class Room implements HostStage {
             }
             return turn !== "";
         }
-        const asksForEveryone: boolean = command === "pause" || (decided === false && (command === "end" || command === "restart"));
+        const asksForEveryone: boolean = command === "pause" || (decided === false && (command === "end" || command === "restart" || command === "giveUp"));
         if (asksForEveryone === true && this.shell.claimForGame(player.playerId) === false) {
             this.host.notice(`(Game: ${player.name} asked to ${command} the game, but ${this.shell.driverName()} has the controller and decides that for everyone. Tell them in a few words, and that they can leave for themselves from their menu.)`, WAKE_DELAY_MILLISECONDS.speech);
             return true;

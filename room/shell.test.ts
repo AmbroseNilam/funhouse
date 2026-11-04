@@ -208,6 +208,35 @@ describe("the console", () => {
         }
     });
 
+    it("lets someone in the game take over a pause from a holder who's only watching", () => {
+        const seats = [
+            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: true },
+            { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false },
+        ];
+        const shell: Shell = new Shell({
+            games: () => [],
+            seats: () => seats,
+            startGame: () => undefined,
+            pickOpened: () => undefined,
+            endGame: () => undefined,
+            gameOver: () => false,
+            focusChanged: () => undefined,
+            refused: () => undefined,
+            driverChanged: () => undefined,
+            steppedOut: () => false,
+            paused: () => undefined,
+            gameAction: () => undefined,
+            edge: () => undefined,
+            changed: () => undefined,
+        });
+        shell.seatsChanged();
+        shell.gameStarted("doors");
+        assert.equal(shell.driverName(), "Ana");
+        assert.equal(shell.pad("b", "").canDrive, true);
+        shell.act("b", { kind: "back" });
+        assert.equal(shell.view().pausedBy, "Ben");
+    });
+
     it("ignores a choice that isn't on the menu", () => {
         const shell = shellWith(told);
         startGame(shell);
