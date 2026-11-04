@@ -110,6 +110,7 @@
     .players-screen .seats { max-width: calc(1290 * var(--u)); }
     .players-screen .players-hint { max-width: calc(1100 * var(--u)); }
     .players-screen .rows { position: absolute; right: calc(80 * var(--u)); top: calc(520 * var(--u)); width: calc(670 * var(--u)); }
+    .players-screen.adding .rows { top: calc(70 * var(--u)); }
 
     /* Werewolf's big moments: a card turned over, a moon on a paper sky. */
     .moment { position: relative; align-self: stretch; }

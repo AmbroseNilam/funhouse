@@ -584,7 +584,7 @@ export function App(): ReactElement {
     const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
     const noMicRef = useRef<boolean>(noMic);
     noMicRef.current = noMic;
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "guestLine">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "guestLine" | "agentLink">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -1022,7 +1022,7 @@ export function App(): ReactElement {
             return;
         }
         guestPromptSeen.current = guestPrompt.id;
-        setMenu(guestPrompt.kind === "line" ? "guestLine" : "guests");
+        setMenu(guestPrompt.kind === "line" ? "guestLine" : "agentLink");
     }, [guestPrompt]);
     const canTalk: boolean = view !== null && listeningAllowsTalk(view.listening);
     const canTalkRef = useRef<boolean>(canTalk);
@@ -1359,10 +1359,15 @@ export function App(): ReactElement {
                                 </ul>
                                 {(view?.guests.picks ?? []).map((pick) => <button key={pick.name} className="primary" onClick={() => { send({ type: "guest", action: "add", name: pick.name }); }}>{pick.label}</button>)}
                                 {view?.guests.canAdd === true ? <button onClick={() => { setMenu("guestLine"); }}>Create your own</button> : null}
-                                {view?.guests.agents?.canInvite === true ? <button onClick={() => { send({ type: "guest", action: "inviteAgent" }); }}>Add an agent</button> : null}
-                                {view?.guests.agents !== undefined && view.guests.agents !== null && view.guests.agents.link !== "" ? <AgentInvite link={view.guests.agents.link} games={view.guests.agents.games} /> : null}
+                                {view?.guests.agents?.canInvite === true ? <button onClick={() => { send({ type: "guest", action: "inviteAgent" }); setMenu("agentLink"); }}>Add an agent</button> : null}
                                 {view?.guests.canRemove === false && (view.guests.seated.length > 0) ? <p className="mic-note">Guests come and go between games.</p> : null}
                                 <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
+                            </>
+                        ) : null}
+                        {menu === "agentLink" ? (
+                            <>
+                                {view !== null && view.guests.agents !== null && view.guests.agents.link !== "" ? <AgentInvite link={view.guests.agents.link} games={view.guests.agents.games} /> : <p>Getting your link.</p>}
+                                <button className="quiet" onClick={() => { setMenu("closed"); }}>Done</button>
                             </>
                         ) : null}
                         {menu === "guestLine" ? (
@@ -1373,7 +1378,7 @@ export function App(): ReactElement {
                                 setMenu("closed");
                             }}>
                                 <label htmlFor="guest-line">Who should sit down? One line.</label>
-                                <input id="guest-line" name="line" maxLength={60} placeholder="a grumpy pirate who loves cheese" autoComplete="off" autoFocus required />
+                                <input id="guest-line" name="line" maxLength={60} placeholder="a grumpy cheese pirate" autoComplete="off" autoFocus required />
                                 <button type="submit" className="primary">Seat them</button>
                                 <button type="button" className="quiet" onClick={() => { send({ type: "guest", action: "add" }); setMenu("closed"); }}>Surprise me</button>
                             </form>

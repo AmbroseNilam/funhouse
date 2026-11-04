@@ -170,7 +170,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
 function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string }): ReactElement {
     const { shell, driver } = props;
     return (
-        <section className="screen players-screen">
+        <section className={`screen players-screen ${shell.screen === "players" ? "" : "adding"}`}>
             <h1>{shell.screen === "addPlayer" ? "Add a player" : shell.screen === "addGuest" ? "Who's sitting in?" : shell.screen === "guestLine" ? "Who should sit down?" : shell.screen === "agentOnPhone" ? "Bring your agent" : shell.seats.length === 1 ? "Just you so far" : `${shell.seats.length} at the table`}</h1>
             <ul className="seats">
                 {shell.seats.map((seat: Seat) => (
@@ -183,7 +183,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
             {shell.screen === "guestLine" ? <p className="players-hint">Describe them on {driver?.name ?? "your"}'s phone, in a line.</p> : null}
             {shell.screen === "agentOnPhone" ? <p className="players-hint">The link is on {driver?.name ?? "your"}'s phone. Paste it to your agent there.</p> : null}
             <p className="players-hint" hidden={shell.screen !== "players"}>Talk to {HOST_NAME} from your phone. Whoever slides next takes the controller. Anyone else can scan in.</p>
-            <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
+            {shell.screen === "players" ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
             <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
         </section>
     );
