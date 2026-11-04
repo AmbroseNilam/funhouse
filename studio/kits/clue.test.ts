@@ -55,6 +55,7 @@ test("clues that give the word away are refused, and unrelated ones are not", ()
     assert.equal(isFormOfWord("sleep", "pillow"), false);
     assert.equal(clueProblem("two words", "pillow"), "shape");
     assert.equal(clueProblem("a1", "pillow"), "shape");
+    assert.equal(clueProblem("s", "pillow"), "shape");
     assert.equal(clueProblem("pillows", "pillow"), "word");
     assert.equal(clueProblem("sleep", "pillow"), null);
 });

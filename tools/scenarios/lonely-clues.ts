@@ -184,7 +184,7 @@ function fairFor(word: string, options: string[]): string[] {
  * @returns the large text lines the TV shows.
  */
 function survivorsOnTv(): string[] {
-    return (screen.scene?.blocks ?? []).flatMap((block: SceneBlock) => (block.type === "text" && block.emphasis === "large" ? [block.text.toLowerCase()] : []));
+    return (screen.scene?.blocks ?? []).flatMap((block: SceneBlock) => (block.type === "text" && block.emphasis === "large" ? block.text.toLowerCase().split(", ") : []));
 }
 
 await seats[0]?.phone.startGame(screen, "Lonely Clues");

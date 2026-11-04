@@ -129,7 +129,7 @@ const CLUE_CHARACTER_LIMIT: number = 24;
 /** The fewest words a list may have for a game, so rounds never run it dry. */
 const WORD_MINIMUM_COUNT: number = 20;
 
-/** Most refused clues and cancelled groups the screen names in a result. */
+/** Most cancelled groups and refused clues together that the screen names in a result. */
 const SHOWN_LINES: number = 4;
 
 /** Seconds between a beat and the moment the guess opens, after the last clue is up. */
@@ -154,13 +154,13 @@ export function isUsableClueWord(word: string): boolean {
 }
 
 /**
- * Checks a clue's shape: one word, letters with at most a hyphen or apostrophe inside.
+ * Checks a clue's shape: one word of at least two letters, with a hyphen or apostrophe allowed inside.
  * @param text what was typed.
  * @returns true when it is one word.
  */
 export function isOneWord(text: string): boolean {
     const trimmed: string = text.trim();
-    return trimmed.length <= CLUE_CHARACTER_LIMIT && /^\p{L}[\p{L}'’-]*$/u.test(trimmed) === true;
+    return trimmed.length <= CLUE_CHARACTER_LIMIT && /^\p{L}[\p{L}'’-]+$/u.test(trimmed) === true;
 }
 
 /**
@@ -685,7 +685,7 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                 return { kind: "everyone", playerIds: givers(state).map((player: CartridgePlayer) => player.playerId), doneIds: givers(state).map((player: CartridgePlayer) => player.playerId).filter((id: string) => settled(state, id) === true), label: "Type your clue" };
             }
             if (state.phase === "reveal" || state.phase === "guess") {
-                return { kind: "one", playerId: state.guesserId, label: "Guessing:" };
+                return { kind: "one", playerId: state.guesserId, label: "Guesser" };
             }
             return null;
         },
@@ -768,7 +768,9 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                 const lost: number = givers(state).length - state.survivors.length;
                 const shown: Clue[] = state.phase === "guess" ? state.survivors : state.survivors.slice(0, state.shown);
                 const blocks: SceneBlock[] = [{ type: "title", text: state.phase === "guess" ? "One guess" : "The clues that survived", kicker: `${kicker}. ${guesser} is guessing` }];
-                blocks.push(...shown.map((clue: Clue): SceneBlock => ({ type: "text", text: clue.text, emphasis: "large" })));
+                if (shown.length > 0) {
+                    blocks.push({ type: "text", text: shown.map((clue: Clue) => clue.text).join(", "), emphasis: "large" });
+                }
                 if (state.phase === "reveal" && state.survivors.length === 0 && state.shown === 0) {
                     blocks.push({ type: "text", text: "Nothing survived.", emphasis: "large" });
                 }
@@ -776,7 +778,7 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                     blocks.push({ type: "text", text: lost === 0 ? "Every clue survived." : `${lost} ${ofCount(lost, "clue", "clues")} did not make it.`, emphasis: "whisper" });
                 }
                 if (state.phase === "guess") {
-                    blocks.push({ type: "text", text: "Say it out loud or type it.", emphasis: "normal" }, { type: "timer", seconds: decisions.guessSeconds, label: "to guess", running: true });
+                    blocks.push({ type: "timer", seconds: decisions.guessSeconds, label: "to guess", running: true });
                 }
                 return { mood: state.phase === "guess" ? "tense" : "dawn", transition: "fade", blocks };
             }
@@ -786,13 +788,21 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                 if (state.guess !== "") {
                     blocks.push({ type: "text", text: `${guesser} said ${state.guess}.`, emphasis: "large" });
                 }
-                const cancelledLines: SceneBlock[] = state.cancelled.slice(0, SHOWN_LINES).map((group: Clue[]): SceneBlock => ({
-                    type: "text",
-                    text: `${group.map((clue: Clue) => nameOf(state, clue.playerId)).join(" and ")} both wrote ${group[0]?.text ?? ""}.`,
-                }));
-                const refusedLines: SceneBlock[] = state.refused.slice(0, SHOWN_LINES).map((clue: Clue): SceneBlock => ({ type: "text", text: `${nameOf(state, clue.playerId)} tried ${clue.text}. Too close.`, emphasis: "whisper" }));
-                blocks.push(...cancelledLines, ...refusedLines);
-                blocks.push({ type: "tally", title: "Team score", rows: [{ label: state.roundPoints > 0 ? `This round, plus ${state.roundPoints}` : "This round", count: state.score, highlight: state.roundPoints > 0 }] });
+                const told: SceneBlock[] = [
+                    ...state.cancelled.map((group: Clue[]): SceneBlock => ({
+                        type: "text",
+                        text: `${group.map((clue: Clue) => nameOf(state, clue.playerId)).join(" and ")} both wrote ${group[0]?.text ?? ""}.`,
+                    })),
+                    ...state.refused.map((clue: Clue): SceneBlock => ({ type: "text", text: `${nameOf(state, clue.playerId)} tried ${clue.text}. Too close.`, emphasis: "whisper" })),
+                ];
+                blocks.push(...told.slice(0, SHOWN_LINES));
+                if (told.length > SHOWN_LINES) {
+                    blocks.push({ type: "text", text: `And ${told.length - SHOWN_LINES} more.`, emphasis: "whisper" });
+                }
+                if (state.roundPoints > 0) {
+                    blocks.push({ type: "text", text: `${state.roundPoints} ${ofCount(state.roundPoints, "point", "points")} for the team.`, emphasis: "large" });
+                }
+                blocks.push({ type: "tally", title: "Team score", rows: [{ label: `After round ${state.round}`, count: state.score, highlight: state.roundPoints > 0 }] });
                 return { mood: state.verdict === "right" ? "victory" : "defeat", transition: "fade", blocks };
             }
             const best: number = state.record.length * (decisions.correctPoints + decisions.cleanBonus);
@@ -822,7 +832,7 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                 }
                 return [{ type: "textInput", id: guessControl(state), prompt: "Your one guess. Type it, or hold and say it.", placeholder: "your guess", maxLength: CLUE_CHARACTER_LIMIT }];
             }
-            const word: Control = { type: "roleCard", title: "The word", body: state.word, secret: true };
+            const word: Control = { type: "roleCard", title: "The word", body: state.word, secret: false };
             if (state.phase !== "writing") {
                 return [word, { type: "waiting", text: state.phase === "guess" ? "Quiet. Let them guess." : "Watch the screen." }];
             }
