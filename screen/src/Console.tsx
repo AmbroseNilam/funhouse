@@ -4,6 +4,7 @@
 
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
+import { Poster } from "./Poster.tsx";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 
 /** Slightly different box shapes, so the shelf reads as objects and not a grid. */
@@ -118,7 +119,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                 <div className="shelf-rail" style={{ transform: `translateX(calc(${-shelfShift(boxCount, shell.focus)} * var(--u)))` }}>
                 {shell.games.map((game: ShelfGame, index: number) => (
                     <div key={game.id} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${boxShape(index).height}%`, rotate: `${boxShape(index).tilt}deg`, width: `calc(${boxShape(index).width * BOX_WIDTH_UNITS} * var(--u))`, viewTransitionName: `box-${game.id}` }}>
-                        <img src={game.art} alt="" />
+                        <Poster id={game.id} art={game.art} />
                         <span className="box-name">{game.name}</span>
                         {index === shell.focus && empty === false ? <DriverFlag seat={driver} /> : null}
                     </div>
@@ -149,7 +150,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
     return (
         <section className="screen game-screen">
             <img className="room-art" src="art/hero.webp" alt="" />
-            <div className="cover" style={{ viewTransitionName: `box-${game.id}` }}><img src={game.art} alt="" /></div>
+            <div className="cover" style={{ viewTransitionName: `box-${game.id}` }}><Poster id={game.id} art={game.art} /></div>
             <div className="about">
                 <h1>{game.name}</h1>
                 <p className="pitch">{game.pitch}</p>
@@ -248,7 +249,7 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
     if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
         return (
             <section className="screen pick-screen">
-                <img className="room-art" src={game.art} alt="" />
+                <Poster className="room-art" id={game.id} art={game.art} />
                 <header className="shelf-heading">
                     <h1>{game.startPick.prompt}</h1>
                     <p>Slide and tap on your phone. {HOST_NAME} takes what's highlighted if nobody chooses.</p>
@@ -262,7 +263,7 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
     if (shell.screen === "startCard" && game !== undefined) {
         return (
             <section className="screen pick-screen">
-                <img className="room-art" src={game.art} alt="" />
+                <Poster className="room-art" id={game.id} art={game.art} />
                 <header className="shelf-heading"><h1>{game.name}</h1></header>
                 <ol className="steps start-card">{game.startCard?.map((line: string) => <li key={line}>{line}</li>)}</ol>
                 <p className="start-note">{driver === undefined ? "Starting soon." : `Starting soon. ${driver.name} can tap to start now.`}</p>
