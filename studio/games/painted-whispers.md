@@ -26,7 +26,7 @@ says so in one short line.
    The phones say "The host is painting. Watch the screen." The wait is capped at 45 seconds.
 4. **Link 2.** TV: the painting, large, captioned "{Name} describes this", with a countdown. Only
    that person's phone has a text box. They write what they see.
-5. **Round the table.** Links 3, 4 and on repeat step 3 and 4 until everyone has written once.
+5. **Round the table.** Link 3 onward repeats steps 3 and 4 until everyone has written once.
 6. **Reveal.** The TV shows one thing at a time, six seconds each: "{Name} wrote" and the line, then
    the painting made from it, then "{Name} described" and the line, then the next painting. The host
    is told each beat quietly and says nothing.
