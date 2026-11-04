@@ -267,9 +267,6 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (waiting !== "") {
         return { big: waiting, small: "" };
     }
-    if (canTalk === true && micOff === false && talkButton === false && learned.has("hold") === false) {
-        return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
-    }
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
@@ -559,6 +556,10 @@ export function App(): ReactElement {
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
+    // Someone at a computer, or an agent using its screen, can play without the mic ever being asked for.
+    const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
+    const noMicRef = useRef<boolean>(noMic);
+    noMicRef.current = noMic;
     const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
@@ -859,6 +860,9 @@ export function App(): ReactElement {
     };
 
     const ensureMicrophone = async (): Promise<void> => {
+        if (noMicRef.current === true) {
+            return;
+        }
         if (startingMicrophoneRef.current !== null) {
             await startingMicrophoneRef.current;
             return;
@@ -1077,7 +1081,7 @@ export function App(): ReactElement {
                 if (canTalkRef.current === false) {
                     nudgeLine();
                 }
-                if (canTalkRef.current === false) {
+                if (canTalkRef.current === false || noMicRef.current === true) {
                     return;
                 }
                 if (micRef.current !== "ok") {
@@ -1118,6 +1122,7 @@ export function App(): ReactElement {
                     <label htmlFor="name-field">Who's sitting down?</label>
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
+                    <button type="submit" className="quiet" onClick={() => { noMicRef.current = true; setNoMic(true); }}>Sit down without a mic</button>
                 </form>
                 <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
             </main>
@@ -1265,7 +1270,7 @@ export function App(): ReactElement {
             ) : null}
             {tapping === false && state.holding === false && canTalk === true && pad?.startCard.length === 0 ? (
                 <div className="talk-row">
-                    {view?.tapToTalk === true && settings.talkButton === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
+                    {view?.tapToTalk === true && settings.talkButton === true && noMic === false ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
                     <button className="type-instead" onClick={() => { setMenu("type"); }}>Type instead</button>
                 </div>
             ) : null}
@@ -1276,7 +1281,8 @@ export function App(): ReactElement {
                         {menu === "open" ? (
                             <>
                                 {invited !== "" ? <p className="invited">{invited}</p> : null}
-                                {state.mic !== "ok" ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
+                                {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
+                                {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
