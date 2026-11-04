@@ -9,7 +9,7 @@
 //
 // Run it with no keys at all, against the stand-in for the Meta API:
 //   STUB_IMAGE_MS=1500 node tools/stub-meta.ts
-//   META_BASE_URL=http://127.0.0.1:8798/v1 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 GAME_ROOM_DRAW=1 npm run room
+//   META_BASE_URL=http://127.0.0.1:8798/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 GAME_ROOM_DRAW=1 npm run room
 //   ROOM_STUDIO=1 node tools/scenarios/clue-gallery.ts            (in a third terminal)
 // To prove the fallback, start the stub with STUB_IMAGE_FAIL=1 and run with EXPECT_PICTURES=0: no
 // picture ever comes, so every card is shown on the TV as its words and the game still finishes.

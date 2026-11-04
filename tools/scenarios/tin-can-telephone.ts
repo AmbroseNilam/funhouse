@@ -9,7 +9,7 @@
 // Run it with model keys, or against the stub model when there are none (the stub only proves the
 // room, the rules and the screens; it says nothing about how Muse Spark hosts):
 //   node tools/stub-model.ts                         (stub only)
-//   META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 node room/server.ts
+//   META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 node room/server.ts
 //   ROOM_STUDIO=1 node tools/scenarios/tin-can-telephone.ts      (in another terminal)
 // ROOM_STUDIO=1 makes the fake screen open its room with ?studio=1, the only kind of room whose shelf
 // has this game. A pass prints PASS as its last line. The room's log should show "[studio] starting

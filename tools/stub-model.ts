@@ -1,7 +1,7 @@
 // Serves tools/stub-host.ts as a Chat Completions endpoint, so the room can run whole games with no
 // model key. Start it, then start the room pointed at it:
 //   node tools/stub-model.ts
-//   META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 node room/server.ts
+//   META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 node room/server.ts
 // It logs one line per request and never what was asked or answered.
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
