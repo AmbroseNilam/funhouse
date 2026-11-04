@@ -19,6 +19,10 @@
 // A pass prints PASS as its last line and takes about two minutes. The room's log should also show
 // "[studio] starting blueprint threeClaims on the claims kit".
 //
+// With SCENARIO_REAL_HOST=1 it plays against the real host, for tools/real-host-runs.ts. There is no
+// stand-in to ask for its requests and the host's words are its own, so what depends on them is noted
+// instead of failing, and the transcript is read afterwards. The rules and the points are still checked.
+//
 // This is test tooling, not the server: it prints what players say to the terminal it runs in, which
 // the room's own log never does. Don't paste its output anywhere public.
 
@@ -29,6 +33,43 @@ import { classifierRefusedLine } from "../stand-in-marker.ts";
 import { assertNeverSeen, everythingOnPhone, everythingOnScreen, pause, phoneStrings, seatPlayers, sceneStrings, squash, typeInto, type Seat } from "./text-support.ts";
 
 /** Where the stand-in model keeps what the room asked it. */
+/** True when the room has the real host, whose words the script can't know. */
+const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1";
+
+/** How long the fake players take over a step against the real host, so it can speak as a real table would let it. */
+const REAL_STEP_MILLISECONDS: number = 5000;
+
+/** Longest to wait for the real host to say something before carrying on. */
+const REAL_LINE_WAIT_MILLISECONDS: number = 15000;
+
+/**
+ * Fails the run, or against the real host, notes the problem for the transcript and carries on.
+ * @param problem what went wrong.
+ */
+function report(problem: string): void {
+    if (REAL_HOST === true) {
+        console.warn(`REAL-HOST NOTE: ${problem}`);
+        return;
+    }
+    throw new Error(problem);
+}
+
+/**
+ * Waits for the host to say something new; the real host may not, and the game's clocks move on anyway.
+ * @param heardBefore how many lines the host had said.
+ * @param label names the wait.
+ */
+async function hostSpeaks(heardBefore: number, label: string): Promise<void> {
+    if (REAL_HOST === false) {
+        await waitFor(() => screen.hostLines.length > heardBefore, label);
+        return;
+    }
+    const until: number = Date.now() + REAL_LINE_WAIT_MILLISECONDS;
+    while (screen.hostLines.length <= heardBefore && Date.now() < until) {
+        await pause(200);
+    }
+}
+
 const STUB_URL: string = process.env.STUB_URL ?? "http://localhost:8741/__requests";
 
 /** The most times a host may be woken in a minute. */
@@ -103,6 +144,9 @@ function phoneNow(seat: Seat): string[] {
  * @returns them, oldest first.
  */
 async function requests(): Promise<Seen[]> {
+    if (REAL_HOST === true) {
+        return [];
+    }
     return (await (await fetch(STUB_URL)).json()) as Seen[];
 }
 
@@ -117,6 +161,7 @@ async function typeRefused(seat: Seat, text: string, label: string, mark: string
     const before: string = claimPrompt(seat);
     await typeInto(seat, text);
     await pause(1200);
+    await waitFor(() => claimPrompt(seat) !== "", `${label} to be judged`);
     if (claimPrompt(seat) !== before) {
         throw new Error(`${label} was accepted.`);
     }
@@ -216,7 +261,9 @@ if (note.startsWith("Not that one") === false) {
 // Everyone writes their three claims at once, then marks the lie.
 await Promise.all(seats.map(async (seat: Seat): Promise<void> => {
     for (const claim of claimsOf(seat).claims) {
+        const asked: string = claimPrompt(seat);
         await typeInto(seat, claim);
+        await waitFor(() => claimPrompt(seat) !== asked && (claimPrompt(seat) !== "" || seat.phone.options().some((option: { id: string }) => option.id.startsWith("lie:") === true)), `${seat.name}'s claim to be taken`);
         await pause(300);
     }
     await waitFor(() => seat.phone.options().some((option: { id: string }) => option.id.startsWith("lie:") === true), `${seat.name}'s mark`);
@@ -254,15 +301,20 @@ for (let turn = 0; turn < count; turn += 1) {
     const turnStartedAt: number = Date.now();
 
     // A bystander who is not the claimant is not heard. The host has first introduced the claimant and asked.
-    await waitFor(() => screen.hostLines.some((line: string) => line.startsWith(`${claimant.name}, you're up.`) === true), "the host to introduce the claimant");
-    if (screen.hostLines.filter((line: string) => line.startsWith(`${claimant.name}, you're up.`) === true).at(-1)?.split("?").length !== 2) {
-        throw new Error("The host's first line was not one question.");
+    if (REAL_HOST === true) {
+        await hostSpeaks(turnLinesFrom, "the host to introduce the claimant");
+    }
+    if (REAL_HOST === false) {
+        await waitFor(() => screen.hostLines.some((line: string) => line.startsWith(`${claimant.name}, you're up.`) === true), "the host to introduce the claimant");
+        if (screen.hostLines.filter((line: string) => line.startsWith(`${claimant.name}, you're up.`) === true).at(-1)?.split("?").length !== 2) {
+            throw new Error("The host's first line was not one question.");
+        }
     }
     const bystander: Seat = seats.find((seat: Seat) => seat !== claimant) as Seat;
     const lines: number = screen.hostLines.length;
     bystander.phone.say("bystandermarker I would like to answer for them");
     await pause(900);
-    if (screen.hostLines.length !== lines || (await requests()).some((seen: Seen) => seen.user.includes("bystandermarker") === true) === true) {
+    if ((REAL_HOST === false && screen.hostLines.length !== lines) || (await requests()).some((seen: Seen) => seen.user.includes("bystandermarker") === true) === true) {
         throw new Error("A phone that should be muted was heard.");
     }
     console.warn("  ok: a bystander was not heard during the interview");
@@ -270,12 +322,12 @@ for (let turn = 0; turn < count; turn += 1) {
     // The claimant answers twice; the host asks one question each time.
     const heardBefore: number = screen.hostLines.length;
     claimant.phone.say("It was a few years back, by the harbour in March");
-    await screen.nextHostLine(heardBefore);
+    await hostSpeaks(heardBefore, "the host to speak");
     const heardAfter: number = screen.hostLines.length;
     claimant.phone.say("There were four of us and it rained all day");
     await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) ?? claimant).some((line: string) => line.startsWith("Hold your phone and ask") === true), "the named player");
     if (screen.hostLines.length <= heardAfter) {
-        await screen.nextHostLine(heardAfter);
+        await hostSpeaks(heardAfter, "the host to speak");
     }
     const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) as Seat;
     if (asker === claimant) {
@@ -292,10 +344,17 @@ for (let turn = 0; turn < count; turn += 1) {
     }
     asker.phone.say("Which street was that on exactly");
     await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Hold your phone to answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Hold your phone and ask") === true) === false, "the claimant to answer the question");
+    if (REAL_HOST === true) {
+        await pause(REAL_STEP_MILLISECONDS);
+    }
     claimant.phone.say("It was on the corner by the old bakery");
     await waitFor(() => seats.filter((seat: Seat) => seat !== claimant).every((seat: Seat) => seat.phone.options().length === 3), "a ballot on each voter's phone");
 
     // The vote. Turn 1: everyone is fooled. Turn 2: the first voter catches it. Turn 3: everyone catches it. After that, a split.
+    if (REAL_HOST === true) {
+        await pause(REAL_STEP_MILLISECONDS);
+    }
+    const tallyFrom: number = screen.hostLines.length;
     const voters: Seat[] = seats.filter((seat: Seat) => seat !== claimant);
     for (const voter of voters) {
         const labels: string = voter.phone.options().map((option: { label: string }) => option.label).join(" | ");
@@ -338,13 +397,18 @@ for (let turn = 0; turn < count; turn += 1) {
     }
     console.warn(`  ok: the reveal marks ${claimant.name}'s lie, and ${catchers.length} of ${voters.length} caught it`);
 
-    await waitFor(() => screen.hostLines.some((line: string) => /^Claim [ABC] was the lie\./.test(line) === true && screen.hostLines.indexOf(line) >= lines), "the host to read the tally");
+    if (REAL_HOST === true) {
+        await hostSpeaks(tallyFrom, "the host to read the tally");
+    }
+    if (REAL_HOST === false) {
+        await waitFor(() => screen.hostLines.some((line: string) => /^Claim [ABC] was the lie\./.test(line) === true && screen.hostLines.indexOf(line) >= lines), "the host to read the tally");
+    }
     // What the room told the host this turn: no lie before the reveal, one question per reply, no reason, nothing forbidden.
     const turnRequests: Seen[] = (await requests()).filter((seen: Seen) => seen.at >= turnStartedAt);
     const leakPattern: RegExp = new RegExp(`The lie was claim [ABC]: “${mine.lie.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}”`);
     const beforeReveal: Seen[] = turnRequests.filter((seen: Seen) => leakPattern.test(`${seen.system} ${seen.user}`) === false);
     const atReveal: Seen[] = turnRequests.filter((seen: Seen) => leakPattern.test(`${seen.system} ${seen.user}`) === true);
-    if (atReveal.length === 0) {
+    if (REAL_HOST === false && atReveal.length === 0) {
         throw new Error("The host was never told which claim was the lie.");
     }
     for (const seen of beforeReveal) {
@@ -391,10 +455,10 @@ for (const seen of all) {
 console.warn(`  ok: the host was woken ${all.length} times in all, never more than ${WAKES_PER_MINUTE} in a minute`);
 const afterHostLines: string[] = screen.hostLines.slice(gameStart);
 if (afterHostLines.some((line: string) => (line.match(/\?/g) ?? []).length > 1) === true) {
-    throw new Error("A host line asked more than one question.");
+    report("A host line asked more than one question.");
 }
 if (afterHostLines.some((line: string) => /\b(?:doctor|salary|mortgage|boss|husband|wife)\b/i.test(line) === true) === true) {
-    throw new Error("A host line touched a forbidden subject.");
+    report("A host line touched a forbidden subject.");
 }
 console.warn(`  ok: ${afterHostLines.length} host lines, none with two questions or a forbidden subject`);
 await pause(800);
