@@ -3,7 +3,7 @@
 // another voice so the game never goes quiet. This model takes no delivery direction, so a line's
 // style isn't used here; moods still show on the lantern.
 
-import type { SpeechRequest, TextToSpeech } from "../openai/speech.ts";
+import type { SpeechRequest, SpeechVoice, TextToSpeech } from "../openai/speech.ts";
 
 /** Environment variable holding the ElevenLabs key. */
 export const ELEVENLABS_KEY_VARIABLE: string = "ELEVENLABS_API_KEY";
@@ -13,6 +13,12 @@ const VOICE_MODEL: string = "eleven_flash_v2_5";
 
 /** The stock voice used in that comparison. */
 const VOICE_ID: string = "JBFqnCBsd6RMkjVDRZzb";
+
+/** Lily, the warm British female stock voice a room can choose instead, close to the usual voice in accent. */
+const WARM_VOICE_ID: string = "pFZP5JQG7iQjIQuC4Bku";
+
+/** The OpenAI voice that asks for the warm one, and that stands in for it if a line falls back. */
+export const WARM_SPEECH_VOICE: SpeechVoice = "coral";
 
 /** Longest wait for a line to finish. */
 const LINE_TIME_LIMIT_MILLISECONDS: number = 30000;
@@ -72,7 +78,7 @@ export class ElevenLabsSpeech implements TextToSpeech {
     private async open(request: SpeechRequest): Promise<ReadableStream<Uint8Array> | null> {
         const limit: AbortSignal = AbortSignal.timeout(LINE_TIME_LIMIT_MILLISECONDS);
         try {
-            const response: Response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream?output_format=pcm_24000`, {
+            const response: Response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${request.voice === WARM_SPEECH_VOICE ? WARM_VOICE_ID : VOICE_ID}/stream?output_format=pcm_24000`, {
                 method: "POST",
                 headers: { "xi-api-key": (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim(), "content-type": "application/json" },
                 body: JSON.stringify({ text: request.text, model_id: VOICE_MODEL }),

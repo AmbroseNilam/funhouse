@@ -75,7 +75,12 @@ export interface PhoneView {
     guests: GuestTable;
     /** True while a game is being played in this room. */
     gameOn: boolean;
+    /** Which voice the host uses in this room, and whether this phone may change it. */
+    hostVoice: { choice: HostVoiceChoice; canChange: boolean };
 }
+
+/** The voices a room can give its host: the usual one, or a warm female one. */
+export type HostVoiceChoice = "current" | "warm";
 
 /** The AI guests at the table and what this phone may do about them. */
 export interface GuestTable {

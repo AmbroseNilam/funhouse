@@ -10,7 +10,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
 import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
-import { REVEAL_NOW, type Control, type GuestTable, type ListeningMode, type PhoneView } from "../shared/controls.ts";
+import { REVEAL_NOW, type Control, type GuestTable, type HostVoiceChoice, type ListeningMode, type PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage, type SeatActivity } from "../shared/protocol.ts";
@@ -20,9 +20,9 @@ import { filterText, nicknameCategory, type FilterResult } from "./content-filte
 import { kindByRule, mergeAnswers, utteranceKind, voiceCommand, type UtteranceKind } from "./decide.ts";
 import { commandByKeywords, DESTRUCTIVE_COMMANDS, type VoiceCommand } from "./voice-commands.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
-import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
+import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech, WARM_SPEECH_VOICE } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
-import { OpenAiSpeech } from "../providers/openai/speech.ts";
+import { OpenAiSpeech, type SpeechVoice } from "../providers/openai/speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import type { InstalledGame } from "../cartridges/index.ts";
 import { groundedContent } from "./grounded-content.ts";
@@ -207,6 +207,9 @@ function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
 }
 
 /** Every filler, rendered once per room. */
+/** What the host says when a voice is picked, so the room hears it. */
+const VOICE_SAMPLES: Record<HostVoiceChoice, string> = { current: "Back to my usual voice.", warm: "How's this for a voice?" };
+
 const ACKNOWLEDGEMENTS: string[] = [...new Set([...NEUTRAL_REACTIONS, ...QUESTION_REACTIONS])];
 
 /**
@@ -436,6 +439,7 @@ export class Room implements HostStage, AgentHost {
     private readonly timeline: RoomEvent[] = [];
     private readonly host: Host;
     private readonly voice: HostVoice;
+    private hostVoiceChoice: HostVoiceChoice = "current";
     private readonly speech: OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech = chooseVoice();
     private woken: boolean = false;
     private game: RunningGame | null = null;
@@ -758,6 +762,12 @@ export class Room implements HostStage, AgentHost {
                 }
                 return;
             }
+            if (message.type === "hostVoice") {
+                if (this.shell.isDriving(player.playerId) === true) {
+                    this.changeHostVoice(message.choice);
+                }
+                return;
+            }
             if (message.type === "reactions") {
                 player.wantsReactions = message.wanted;
                 return;
@@ -942,7 +952,7 @@ export class Room implements HostStage, AgentHost {
             showCaption();
             return;
         }
-        this.voice.say(text, this.host.persona.voice, style, showCaption, (aheadMilliseconds: number): void => {
+        this.voice.say(text, this.speakingVoice(), style, showCaption, (aheadMilliseconds: number): void => {
             captionTimer = setTimeout(showCaption, aheadMilliseconds + CAPTION_WAIT_MILLISECONDS);
             captionTimer.unref();
         });
@@ -2086,15 +2096,16 @@ export class Room implements HostStage, AgentHost {
         this.voice.sayRecorded(line.pcm);
     }
 
-    /** Records every game's remarks in the host's voice. */
+    /** Records every game's remarks in the host's voice. A change of voice mid-way abandons this run. */
     private async renderRemarks(): Promise<void> {
         const persona: HostPersona = this.host.persona;
+        const voice: SpeechVoice = this.speakingVoice();
         for (const game of this.games) {
             const lines: { text: string; pcm: Uint8Array }[] = [];
             for (const text of game.remarks) {
                 const style: string = `${persona.style} Muttered aside, half to yourself.`;
-                const pcm: Uint8Array | null = await recordedLine(`${persona.voice}|${style}|${text}`, () => this.voice.render(text, persona.voice, style));
-                if (pcm === null) {
+                const pcm: Uint8Array | null = await recordedLine(`${voice}|${style}|${text}`, () => this.voice.render(text, voice, style));
+                if (pcm === null || voice !== this.speakingVoice()) {
                     return;
                 }
                 lines.push({ text, pcm });
@@ -2102,6 +2113,43 @@ export class Room implements HostStage, AgentHost {
             this.remarks.set(game.manifest.id, lines);
         }
         log(this.scope(), "recorded remarks");
+    }
+
+    /**
+     * The voice this room's host speaks in right now.
+     * @returns the voice.
+     */
+    private speakingVoice(): SpeechVoice {
+        return this.hostVoiceChoice === "warm" ? WARM_SPEECH_VOICE : this.host.persona.voice;
+    }
+
+    /**
+     * Changes the host's voice for the room. Recordings in the old voice go at once, so a filler can't
+     * come out in it; until the new ones arrive the host just skips them. A line already queued finishes.
+     * @param choice the voice.
+     */
+    private changeHostVoice(choice: HostVoiceChoice): void {
+        if (choice === this.hostVoiceChoice) {
+            return;
+        }
+        this.hostVoiceChoice = choice;
+        this.acknowledgements.length = 0;
+        this.recentAcknowledgements.length = 0;
+        this.remarks.clear();
+        this.refreshPhones();
+        log(this.scope(), `host voice set to ${choice}`);
+        const voice: SpeechVoice = this.speakingVoice();
+        const style: string = this.host.persona.style;
+        const sample: string = VOICE_SAMPLES[choice];
+        const renderLines = async (): Promise<void> => {
+            const pcm: Uint8Array | null = await recordedLine(`${voice}|${style}|${sample}`, () => this.voice.render(sample, voice, style));
+            if (pcm !== null && voice === this.speakingVoice() && this.voice.isBusy() === false) {
+                this.voice.sayRecorded(pcm);
+            }
+            await this.renderAcknowledgements();
+            await this.renderRemarks();
+        };
+        renderLines().catch((error: unknown) => { log(this.scope(), `recorded lines unavailable: ${error instanceof Error ? error.message : "unknown"}`); });
     }
 
     /**
@@ -3118,17 +3166,20 @@ export class Room implements HostStage, AgentHost {
         this.acknowledgeTimer = null;
     }
 
-    /** Renders the acknowledgement bank once, in the host's voice. */
+    /** Renders the acknowledgement bank, in the host's voice. A change of voice mid-way abandons this run. */
     private async renderAcknowledgements(): Promise<void> {
         const persona: HostPersona = this.host.persona;
+        const voice: SpeechVoice = this.speakingVoice();
+        const rendered: Uint8Array[] = [];
         for (const text of ACKNOWLEDGEMENTS) {
             const style: string = `${persona.style} A quick, quiet acknowledgement, as if thinking.`;
-            const pcm: Uint8Array | null = await recordedLine(`${persona.voice}|${style}|${text}`, () => this.voice.render(text, persona.voice, style));
-            if (pcm === null) {
+            const pcm: Uint8Array | null = await recordedLine(`${voice}|${style}|${text}`, () => this.voice.render(text, voice, style));
+            if (pcm === null || voice !== this.speakingVoice()) {
                 return;
             }
-            this.acknowledgements.push(pcm);
+            rendered.push(pcm);
         }
+        this.acknowledgements.splice(0, this.acknowledgements.length, ...rendered);
         log(this.scope(), `rendered ${this.acknowledgements.length} acknowledgements`);
     }
 
@@ -3240,7 +3291,7 @@ export class Room implements HostStage, AgentHost {
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
-        return { gameOn: this.game !== null, playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
+        return { gameOn: this.game !== null, hostVoice: { choice: this.hostVoiceChoice, canChange: player.guest === null && this.shell.isDriving(player.playerId) === true }, playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
     }
 
     /**

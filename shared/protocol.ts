@@ -27,6 +27,7 @@ export type PhoneMessage =
     | { type: "touched" }
     | { type: "released"; why?: TapEnd }
     | { type: "reactions"; wanted: boolean }
+    | { type: "hostVoice"; choice: "current" | "warm" }
     | { type: "micSettings"; echoCancellation: boolean; noiseSuppression: boolean; autoGainControl: boolean }
     | { type: "presence"; away: boolean };
 
@@ -97,6 +98,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "reactions") {
         return typeof message.wanted === "boolean";
+    }
+    if (message.type === "hostVoice") {
+        return message.choice === "current" || message.choice === "warm";
     }
     if (message.type === "micSettings") {
         return typeof message.echoCancellation === "boolean" && typeof message.noiseSuppression === "boolean" && typeof message.autoGainControl === "boolean";
