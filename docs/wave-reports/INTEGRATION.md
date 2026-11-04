@@ -4,7 +4,7 @@ Branch `studio-integration` (off master 2de0d6f): waves 1, 2, 3 (host, clue) and
 sit on the `?studio=1` shelf only; a normal room shows the default shelf. Start any of them by opening a
 room at `/screen/?studio=1` and picking the game from the shelf by its name.
 
-Last full check: `npm run check` passes (585 tests, warnings are line lengths). Scenarios ran with
+Last full check: `npm run check` passes (586 tests, warnings are line lengths). Scenarios ran with
 `ROOM_STUDIO=1` against a text-only room. "Stub" means the stand-in model in `tools/stub-model.ts` or
 `tools/stub-meta.ts`; nothing here has been played with the real host, a real phone or a real TV.
 
