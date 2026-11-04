@@ -119,6 +119,21 @@
     .text.large { font-size: calc(52 * var(--u)); line-height: 1.15; }
     .text.whisper { color: var(--paper); }
     .blocks .text { max-width: calc(1300 * var(--u)); }
+
+    /* A shared grid of word cards: paper when hidden, a team's colour once turned over */
+    .board { display: grid; gap: calc(6 * var(--u)); width: calc(1150 * var(--u)); }
+    .blocks .board ~ .timer { position: absolute; right: 0; top: 50%; translate: 0 -50%; text-align: right; }
+    .board li { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: calc(56 * var(--u)); padding: calc(2 * var(--u)) calc(8 * var(--u)); background: var(--paper); color: var(--paper-ink); text-align: center; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; font-size: calc(32 * var(--u)); line-height: 1.05; overflow: hidden; }
+    .board li span { max-width: 100%; overflow-wrap: anywhere; font-weight: 600; }
+    .board small { font-size: calc(24 * var(--u)); font-weight: 400; line-height: 1; }
+    .board .turned.card-a { background: var(--wine); color: var(--paper); }
+    .board .turned.card-b { background: #3f6a6e; color: var(--paper); }
+    .board .turned.card-neutral { background: var(--card); color: var(--muted); }
+    .board .turned.card-trap { background: #000; color: var(--paper); outline: calc(4 * var(--u)) solid var(--wine); }
+    .board .unturned.card-a { box-shadow: inset 0 calc(-10 * var(--u)) 0 var(--wine), calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
+    .board .unturned.card-b { box-shadow: inset 0 calc(-10 * var(--u)) 0 #3f6a6e, calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
+    .board .unturned.card-neutral { opacity: 0.7; }
+    .board .unturned.card-trap { box-shadow: inset 0 calc(-10 * var(--u)) 0 #000, calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .roster { display: flex; flex-wrap: wrap; gap: calc(14 * var(--u)); }
     .roster li { padding: calc(8 * var(--u)) calc(20 * var(--u)); background: var(--card); box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; transition: background 120ms ease; }
     .roster li.speaking { background: var(--lamp); color: var(--lamp-ink); }

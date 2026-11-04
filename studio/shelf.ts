@@ -16,9 +16,12 @@ import { PAST_THE_GATE_BLUEPRINT } from "./games/past-the-gate/blueprint.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
+import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
+import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./games/tin-can-telephone/index.ts";
+import { WRONG_ROOM_BLUEPRINT } from "./games/wrong-room/index.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, WHO_FITS_BLUEPRINT, TWO_TAKES_BLUEPRINT, PAST_THE_GATE_BLUEPRINT, OFF_BY_A_MILE_BLUEPRINT, MIND_THE_GAP_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, WHO_FITS_BLUEPRINT, TWO_TAKES_BLUEPRINT, PAST_THE_GATE_BLUEPRINT, OFF_BY_A_MILE_BLUEPRINT, MIND_THE_GAP_BLUEPRINT, TIN_CAN_TELEPHONE_BLUEPRINT, WRONG_ROOM_BLUEPRINT, STRAY_WORD_BLUEPRINT];
 
 /**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it

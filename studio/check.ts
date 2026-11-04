@@ -12,12 +12,19 @@ import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
 import { createFitsGame, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
 import { createWitGame, type WitState } from "./kits/wit.ts";
-import { estimatePersonas, fitsPersonas, fitsTapCheck, gatePersonas, guessingPersonas, linePersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck } from "./personas.ts";
 import { witPersonas } from "./personas-text.ts";
+import { createClueBoardGame, type ClueBoardState } from "./kits/clueboard.ts";
+import { createOddWordGame, type OddWordState } from "./kits/oddword.ts";
+import { createStrangerGame, type StrangerState } from "./kits/stranger.ts";
+
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
 export const CHECK_SEEDS: readonly number[] = [1, 2, 3, 4, 5];
+
+/** Multiplies a seed so the first draws of nearby seeds don't all land on the same seat or team. */
+const SEED_SPREAD: number = 104729;
 
 /**
  * Rehearses a blueprint the default way.
@@ -49,6 +56,18 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "line") {
         const makeLine = (seed: number): KitGame<LineState> => createLineGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makeLine, linePersonas(blueprint.decisions), CHECK_SEEDS, options);
+    }
+    if (blueprint.kit === "clueboard") {
+        const makeBoard = (seed: number): KitGame<ClueBoardState> => createClueBoardGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
+        return rehearseMany(makeBoard, clueBoardPersonas(), CHECK_SEEDS, { contentFor: clueBoardContent, ...options });
+    }
+    if (blueprint.kit === "stranger") {
+        const makeStranger = (seed: number): KitGame<StrangerState> => createStrangerGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
+        return rehearseMany(makeStranger, strangerPersonas(), CHECK_SEEDS, { ...options, roleCheck: strangerRoleCheck(blueprint) });
+    }
+    if (blueprint.kit === "oddword") {
+        const makeOddWord = (seed: number): KitGame<OddWordState> => createOddWordGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
+        return rehearseMany(makeOddWord, oddWordPersonas(), CHECK_SEEDS, { ...options, roleCheck: oddWordRoleCheck(blueprint) });
     }
     const fits: TapBlueprint & { decisions: FitsDecisions } = { ...blueprint, decisions: blueprint.decisions };
     const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);

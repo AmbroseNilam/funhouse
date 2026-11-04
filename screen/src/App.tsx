@@ -165,6 +165,18 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
             </div>
         );
     }
+    if (block.type === "board") {
+        return (
+            <ul key={index} className="board" style={{ gridTemplateColumns: `repeat(${block.columns}, 1fr)` }}>
+                {block.cells.map((cell) => (
+                    <li key={cell.text} className={`card-${cell.owner} ${cell.turned === true ? "turned" : "unturned"}`}>
+                        <span>{cell.text}</span>
+                        {cell.owned !== undefined ? <small>{cell.owned}</small> : null}
+                    </li>
+                ))}
+            </ul>
+        );
+    }
     return <span key={index} hidden />;
 }
 

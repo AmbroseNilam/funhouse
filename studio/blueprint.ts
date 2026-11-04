@@ -8,6 +8,10 @@ import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createEstimateGame, estimateBlueprintProblems, type EstimateDecisions } from "./kits/estimate.ts";
 import { createGateGame, gateBlueprintProblems, type GateDecisions } from "./kits/gate.ts";
 import { createLineGame, lineBlueprintProblems, type LineDecisions } from "./kits/line.ts";
+import { clueBoardBlueprintProblems, createClueBoardGame, type ClueBoardDecisions } from "./kits/clueboard.ts";
+import { createOddWordGame, oddWordBlueprintProblems, type OddWordDecisions } from "./kits/oddword.ts";
+import { createStrangerGame, strangerBlueprintProblems, type StrangerDecisions } from "./kits/stranger.ts";
+
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
@@ -65,8 +69,29 @@ export interface LineBlueprint {
     decisions: LineDecisions;
 }
 
+/** A clue-board game: two teams, a shared grid of words, a hidden key and a clue-giver on each side. */
+export interface ClueBoardBlueprint {
+    kit: "clueboard";
+    box: Box;
+    decisions: ClueBoardDecisions;
+}
+
+/** A stranger game: everyone but one player knows the place, and they question each other in turn. */
+export interface StrangerBlueprint {
+    kit: "stranger";
+    box: Box;
+    decisions: StrangerDecisions;
+}
+
+/** An odd-word game: everyone knows the secret word but one player, and says one word about it each round. */
+export interface OddWordBlueprint {
+    kit: "oddword";
+    box: Box;
+    decisions: OddWordDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint | ClueBoardBlueprint | StrangerBlueprint | OddWordBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -99,6 +124,15 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "line") {
         return lineBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "clueboard") {
+        return clueBoardBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
+    if (blueprint.kit === "stranger") {
+        return strangerBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
+    if (blueprint.kit === "oddword") {
+        return oddWordBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -127,6 +161,15 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "line") {
         return erase(createLineGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "clueboard") {
+        return erase(createClueBoardGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "stranger") {
+        return erase(createStrangerGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "oddword") {
+        return erase(createOddWordGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createFitsGame(blueprint.box, blueprint.decisions));
 }

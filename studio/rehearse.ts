@@ -91,6 +91,8 @@ export interface Tally {
 export interface RehearsalOptions {
     /** What the host's model writes when content is asked for; empty means it failed. */
     content?: string;
+    /** Like content, but chosen by the request, for a game that asks for more than one kind of content. */
+    contentFor?: (request: string) => string;
     players?: readonly CartridgePlayer[];
 }
 
@@ -249,6 +251,8 @@ interface Run<State> {
     state: State | null;
     players: CartridgePlayer[];
     pendingContent: boolean;
+    /** The last content request, so the reply can fit it. */
+    request: string;
     /** When each running timer is due, by id, in seconds on the virtual clock. */
     timers: Map<string, number>;
     now: number;
@@ -268,7 +272,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     const trace: TraceEntry<State>[] = [];
     const phases: Set<string> = new Set();
     const problems: string[] = [];
-    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, timers: new Map(), now: 0, stopped: false };
+    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, request: "", timers: new Map(), now: 0, stopped: false };
 
     /**
      * Calls the rules safely: a throw, including one from changing frozen state, becomes a problem.
@@ -312,6 +316,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             run.stopped = true;
         }
         run.pendingContent = run.pendingContent === true || step.contentRequest !== undefined;
+        run.request = step.contentRequest ?? run.request;
         for (const [timerId, seconds] of Object.entries(step.timers ?? {})) {
             run.timers.set(timerId, run.now + seconds);
         }
@@ -340,7 +345,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         const current: State = run.state;
         if (run.pendingContent === true) {
             run.pendingContent = false;
-            const event: RoomEvent = { type: "contentReady", at: run.now, text: options.content ?? "" };
+            const event: RoomEvent = { type: "contentReady", at: run.now, text: options.contentFor?.(run.request) ?? options.content ?? "" };
             take(event, () => cartridge.onEvent(current, event));
             continue;
         }
