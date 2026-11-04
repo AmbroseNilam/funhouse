@@ -47,7 +47,6 @@ export const BLUEPRINTS: readonly Blueprint[] = [
 export const HELD_BACK: Readonly<Record<string, string>> = {
     paintedWhispers: "no run with the real picture model; its cost and latency are unmeasured",
     clueGallery: "no run with the real picture model; its cost and latency are unmeasured",
-    twoTakes: "no run against the real classifier yet",
 };
 
 /**

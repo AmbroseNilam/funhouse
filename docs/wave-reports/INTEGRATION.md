@@ -11,7 +11,7 @@ Last full check: `npm run check` passes (333 tests, warnings are line lengths). 
 | Game | Mechanic | Players | Scenario status |
 | --- | --- | --- | --- |
 | Who Fits | everyone secretly taps who a prompt fits; counts shown | 3 to 8 | passed |
-| Two Takes | two players answer a prompt in secret, the room votes (typed text, filtered) | 3 to 8 | needs the real classifier: not run (stub cannot refuse text) |
+| Two Takes | two players answer a prompt in secret, the room votes (typed text, filtered) | 3 to 8 | passed with the real key at 53436e7; on the shelf (vote line reworded after that run) |
 | Past the Gate | a keeper with a secret rule; players plead, code judges | 2 to 8 | passed (rules only), after fixing its score comparison |
 | Off by a Mile | guess a number, bet on whose guess is closest | 3 to 8 | passed (rules only) |
 | Mind the Gap | place a dated card in a growing row | 2 to 8 | passed (rules only) |
@@ -62,7 +62,7 @@ happened to land before the reveal; the scripted scenarios check it exhaustively
 | Tin Can Telephone | scenario timed out in the shared run; fixed the scenario (it followed one guesser) and it passes twice alone |
 | Painted Whispers | played to the end, readable; its scenario failed only because another game shared the picture stub; passes alone |
 | Clue Gallery | same shared-stub failure; passes alone; pre-reveal card spread not captured |
-| Two Takes | not browser-tested; real-classifier scenario fixed, rerun pending with Application |
+| Two Takes | not browser-tested; passes with the real key |
 
 Found: the shelf screen's spine labels are clipped and broken across lines once the shelf is long ("Pas / the
 / Gat"). That is the shelf UI, not a game. One caption on Painted Whispers link 3 looked faint against its glow;
@@ -70,7 +70,7 @@ not confirmed.
 
 ## Held back
 
-`HELD_BACK` in `studio/shelf.ts` keeps Painted Whispers, Clue Gallery and Two Takes off the `?studio=1` shelf
+`HELD_BACK` in `studio/shelf.ts` keeps Painted Whispers and Clue Gallery off (Two Takes was cleared after its real-key pass) the `?studio=1` shelf
 until a run against the real picture model (cost and latency) and the real classifier clears them; delete the
 game's line to put it on. Start the room with `STUDIO_SHOW_HELD=1` to see them anyway (the scenarios need it).
 Any new game that passes goes here until a human or real-host run clears it, except tap-only games.

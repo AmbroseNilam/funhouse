@@ -420,8 +420,8 @@ export function createWitGame(givenBox: Box, givenDecisions: WitDecisions, rando
         const voters: string[] = state.players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== matchup[0] && id !== matchup[1]);
         const [a, b] = sides;
         const text: string = [
-            `Time to vote. Answer A: ${quoted(a?.text ?? "")}. Answer B: ${quoted(b?.text ?? "")}.`,
-            "Perform them: A, a beat, then B, in the same voice. Don't say who wrote either. Then tell the room to vote on their phones.",
+            `Time to vote. Say "Option A", then read this answer: ${quoted(a?.text ?? "")}. Say "Option B", then read this answer: ${quoted(b?.text ?? "")}.`,
+            "Read each answer in the same voice with a short beat between them, and don't run the word Option A into the answer's first word. Don't say who wrote either. Then tell the room to vote on their phones.",
         ].join(" ");
         const next: WitState = { ...state, phase: "voting", sides, voters, votes: {} };
         return { state: next, facts: because(publicFact("vote-open", text), WIT_DECISIONS.vote), nextPhaseId: "voting", timers: { [`vote${state.round}`]: decisions.voteSeconds } };
