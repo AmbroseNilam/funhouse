@@ -1,6 +1,6 @@
 // Finds the games and kits by scanning folders, so adding either never edits a shared file. A kit is a
 // folder under kits/ holding kit.meta.json ({ kit }) and an index.ts that exports KIT. A game is a
-// folder under games/ holding game.meta.json ({ id, kit, level, reason?, order? }) and a blueprint.ts
+// folder under games/ holding game.meta.json ({ id, kit, level, reason?, order?, guests? }) and a blueprint.ts
 // that exports its blueprint. Everything is checked at load. A folder that fails (no metadata, an unknown
 // kit, a module that won't load, a blueprint its kit says can't run) sits out and is listed in `skipped`
 // naming the culprit, so one bad folder can't stop a server that also runs the plain shelf. A test holds

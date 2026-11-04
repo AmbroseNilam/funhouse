@@ -48,6 +48,7 @@ function seatFor(played: Played, overrides: Partial<GuestSeat> = {}): GuestSeat 
         answer: (_controlId: string, value: string | number): void => { played.answered.push(value); },
         paused: (): boolean => false,
         play: (): GuestPlay => "model",
+        rules: (): string => "",
         mayAskModel: (): boolean => true,
         ...overrides,
     };
@@ -263,4 +264,18 @@ test("stray word: the Stray guest's prompt never holds the word, and the host's 
         assert.equal(prompt.includes("the word is:"), false);
     }
     assert.equal(strays, 1);
+});
+
+test("a choice between people reaches the model in a mixed-up order, and the reply still lands on the right one", async () => {
+    const played: Played = { pressed: [], answered: [] };
+    let shown: string = "";
+    const model: GuestModel = (messages) => {
+        shown = messages.at(-1)?.content ?? "";
+        return Promise.resolve("1");
+    };
+    const vote: Control = { type: "choice", prompt: "Who?", multiple: false, options: [{ id: "a", label: "Ann" }, { id: "b", label: "Bob" }, { id: "c", label: "Cleo" }] };
+    new GuestDriver(seatFor(played), model, () => 0).see(viewOf([vote]));
+    await settle();
+    assert.ok(shown.includes("1. Bob"));
+    assert.deepEqual(played.pressed, ["b"]);
 });

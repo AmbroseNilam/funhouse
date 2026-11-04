@@ -169,7 +169,9 @@ typed `defineGame` or its `<Kit>Blueprint` type from `studio/kits/<kit>/index.ts
 `{ "id", "kit", "level", "reason", "order" }`: `id` must equal the blueprint's `box.id`, `kit` names the kit it runs on,
 `level` is `visible` (on the shelf), `testing` or `held` (both hidden unless the shelf is switched to show them, and
 marked "Testing." when shown; they need a `reason`), and `order` is an optional shelf position, lowest first, with
-unordered games last by id. Put notes, tests and helper modules in the same folder. A new kit is likewise a folder
+unordered games last by id. An optional `guests` says AI guests may sit in: `model` asks the model, `random` taps at random
+where a guest has nothing to go on; left out, a table with guests can't start the game, so a new game stays guest-free until
+someone has checked it. Put notes, tests and helper modules in the same folder. A new kit is likewise a folder
 `studio/kits/<kit>/` with `kit.meta.json` (`{ "kit": "<name blueprints use>" }`) and an `index.ts` exporting `KIT` (a
 `KitDefinition`: `problems`, `create`, `check`, `pauseActions`), its blueprint type, `defineGame` and its paper
 players in `personas.ts`. Nothing else needs editing: startup scans both folders. A folder that lacks its metadata,

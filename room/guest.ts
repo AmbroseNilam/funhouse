@@ -40,8 +40,8 @@ export const MAX_GUESTS: number = 3;
 /** Longest a guest's model call may take before it plays a fallback. */
 const DECISION_TIME_LIMIT_MILLISECONDS: number = 4000;
 
-/** Room for the model's hidden reasoning plus one short answer. */
-const DECISION_TOKEN_LIMIT: number = 400;
+/** Room for the model's hidden reasoning plus one short answer. At 400 a vote came back empty and a word cut off, because the reasoning used it all. */
+const DECISION_TOKEN_LIMIT: number = 1500;
 
 /** Lines a guest remembers from its own phone. */
 const NOTE_LIMIT: number = 14;
@@ -77,6 +77,8 @@ export interface GuestSeat {
     paused(): boolean;
     /** How the running game plays with guests. */
     play(): GuestPlay;
+    /** The running game's rules, as its box shows them to everyone at the table. */
+    rules(): string;
     /** Counts one decision against the game's and the day's caps; false means play without the model. */
     mayAskModel(): boolean;
 }
@@ -89,7 +91,7 @@ interface GuestOption {
 
 /** The one thing a guest is being asked to do right now. */
 export type Ask =
-    | { kind: "options"; prompt: string; options: GuestOption[] }
+    | { kind: "options"; prompt: string; options: GuestOption[]; aChoice: boolean }
     | { kind: "text"; id: string; prompt: string; maxLength: number; note: string }
     | { kind: "number"; id: string; prompt: string; min: number; max: number; step: number; note: string };
 
@@ -125,6 +127,7 @@ export function askIn(view: PhoneView): Ask | null {
     }
     const options: GuestOption[] = [];
     const prompts: string[] = [];
+    let aChoice: boolean = false;
     for (const [controlIndex, control] of view.controls.entries()) {
         if (control.type === "textInput") {
             return { kind: "text", id: control.id, prompt: control.prompt, maxLength: control.maxLength, note: control.note ?? "" };
@@ -135,12 +138,13 @@ export function askIn(view: PhoneView): Ask | null {
         if (control.type !== "buttons" && control.type !== "choice") {
             continue;
         }
+        aChoice = aChoice === true || control.type === "choice";
         if (control.prompt !== undefined) {
             prompts.push(control.prompt);
         }
         options.push(...control.options.filter((option: ControlOption) => option.disabled !== true).map((option: ControlOption): GuestOption => ({ option, controlIndex })));
     }
-    return options.length === 0 ? null : { kind: "options", prompt: prompts.join(" "), options };
+    return options.length === 0 ? null : { kind: "options", prompt: prompts.join(" "), options, aChoice };
 }
 
 /**
@@ -164,9 +168,10 @@ function linesOn(controls: readonly Control[]): string[] {
  * @param view the seat's view.
  * @param notes what this seat's phone has said so far.
  * @param ask what's being asked.
+ * @param rules the game's rules, as its box shows them to everyone.
  * @returns the messages.
  */
-export function guestPrompt(persona: GuestPersona, view: PhoneView, notes: readonly string[], ask: Ask): SparkMessage[] {
+export function guestPrompt(persona: GuestPersona, view: PhoneView, notes: readonly string[], ask: Ask, rules: string = ""): SparkMessage[] {
     const system: string = [
         `You are ${persona.name}, an AI guest playing a family party game from a phone at a table of people. You are an AI and never claim otherwise.`,
         `Your manner: ${persona.style}`,
@@ -183,7 +188,7 @@ export function guestPrompt(persona: GuestPersona, view: PhoneView, notes: reado
     const asked: string = lines.filter((line: string) => line !== "").join("\n");
     return [
         { role: "system", content: system },
-        { role: "user", content: `GAME TEXT\n${seen.join("\n")}\n\nYOUR MOVE\n${asked}` },
+        { role: "user", content: `${rules === "" ? "" : `THE GAME\n${rules}\n\n`}GAME TEXT\n${seen.join("\n")}\n\nYOUR MOVE\n${asked}` },
     ];
 }
 
@@ -195,6 +200,26 @@ export function guestPrompt(persona: GuestPersona, view: PhoneView, notes: reado
  */
 function pickFrom<Item>(items: readonly Item[], random: () => number): Item {
     return items[Math.floor(random() * items.length)] as Item;
+}
+
+/**
+ * Mixes up a choice between people before the model sees it. The model leans towards the first in
+ * a list, and the same seat comes first each time, so a vote would keep landing on one person.
+ * Other buttons, such as the rising numbers of a bid, read best in their own order.
+ * @param ask what's being asked.
+ * @param random gives a number from 0 to under 1.
+ * @returns the ask to put to the model.
+ */
+function mixedUp(ask: Ask, random: () => number): Ask {
+    if (ask.kind !== "options" || ask.aChoice === false) {
+        return ask;
+    }
+    const options: GuestOption[] = [...ask.options];
+    for (let index = options.length - 1; index > 0; index -= 1) {
+        const other: number = Math.floor(random() * (index + 1));
+        [options[index], options[other]] = [options[other] as GuestOption, options[index] as GuestOption];
+    }
+    return { ...ask, options };
 }
 
 /**
@@ -336,12 +361,12 @@ export class GuestDriver {
     }
 
     /**
-     * Adds what's new on the phone to this guest's notes, oldest dropping first. What the phone shows
-     * now always reaches the prompt anyway, so a card can't be forgotten.
+     * Adds what's new on the phone to this guest's notes, oldest dropping first. A card isn't noted:
+     * the prompt always has the one on the phone now, and last round's dice would only mislead.
      * @param view the view.
      */
     private remember(view: PhoneView): void {
-        const lines: string[] = linesOn(view.controls).map((line: string) => line.slice(0, NOTE_CHARACTER_LIMIT));
+        const lines: string[] = linesOn(view.controls.filter((control: Control) => control.type !== "roleCard")).map((line: string) => line.slice(0, NOTE_CHARACTER_LIMIT));
         const fresh: string[] = lines.filter((line: string) => this.shownLines.has(line) === false);
         this.shownLines = new Set(lines);
         this.notes = [...this.notes, ...fresh].slice(-NOTE_LIMIT);
@@ -409,7 +434,8 @@ export class GuestDriver {
         if (this.seat.play() === "random" || tries > 1 || this.seat.mayAskModel() === false) {
             return fallbackMove(ask, this.random);
         }
-        const messages: SparkMessage[] = guestPrompt(this.seat.persona, this.latest as PhoneView, this.notes, ask);
+        const put: Ask = mixedUp(ask, this.random);
+        const messages: SparkMessage[] = guestPrompt(this.seat.persona, this.latest as PhoneView, this.notes, put, this.seat.rules());
         const stopping: AbortController = new AbortController();
         this.stopModel = stopping;
         const startedAt: number = Date.now();
@@ -417,7 +443,7 @@ export class GuestDriver {
         if (generation !== this.generation) {
             return { kind: "none" };
         }
-        const move: Move | null = moveFrom(reply, ask, this.seat.persona.numberNoise, this.random);
+        const move: Move | null = moveFrom(reply, put, this.seat.persona.numberNoise, this.random);
         log("guest", `${this.seat.playerId} ${move === null ? "fell back" : "decided"} in ${Date.now() - startedAt} ms`);
         this.trace(messages, reply, move === null);
         return move ?? fallbackMove(ask, this.random);

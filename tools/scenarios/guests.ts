@@ -32,6 +32,9 @@ const GUESTS: number = Number(process.env.GUEST_COUNT ?? Math.max(2, (MINIMUM[GA
 /** Longest a whole game may take. */
 const GAME_LIMIT_MILLISECONDS: number = 900000;
 
+/** How long to stay after the end, so the host's closing lines are heard. */
+const WRAP_UP_MILLISECONDS: number = 10000;
+
 /** What the scripted person types. */
 const WORDS: readonly string[] = ["lantern", "copper", "harbour", "juniper", "velvet", "mustard", "gravel", "tinsel", "bobbin", "quiver"];
 
@@ -186,10 +189,11 @@ while (screen.shell?.gameOver !== true) {
     }
     await pause(400);
 }
+say(`Game over in ${Math.round((Date.now() - startedAt) / 1000)} s`);
+await pause(WRAP_UP_MILLISECONDS);
 for (const block of screen.scene?.blocks ?? []) {
     say(`TV  ${blockText(block)}`);
 }
-say(`Game over in ${Math.round((Date.now() - startedAt) / 1000)} s`);
 
 const trace: TraceLine[] = readTrace(traceStart);
 for (const line of trace) {
@@ -205,7 +209,8 @@ if (trace.some((line) => line.guest === "Teacup") === true) {
 
 // The leak check: a guest's prompt must never hold the person's cups. A word card is checked below,
 // because everyone but the Stray shares it.
-const everything: string = trace.map((line: TraceLine) => JSON.stringify(line.prompt)).join("\n");
+// A guest's own card is left out of the search, because its own hand in some round can match the person's in another.
+const everything: string = trace.map((line: TraceLine) => (line.prompt.at(-1)?.content ?? "").split("\n").filter((row: string) => row.startsWith("Your dice") === false).join("\n")).join("\n");
 for (const secret of secretCards) {
     const isDice: boolean = /^\d(\s+\d)+$/.test(secret.trim());
     if (isDice === true && everything.includes(secret) === true) {
@@ -213,15 +218,18 @@ for (const secret of secretCards) {
     }
 }
 if (GAME === "Stray Word") {
-    const finalText: string = (screen.scene?.blocks ?? []).map(blockText).join(" ");
-    const word: string = /(?:word was|the word:?)\s+([\p{L}-]+)/iu.exec(finalText)?.[1] ?? [...secretCards].map((card: string) => /^Your word: (.+)$/.exec(card)?.[1] ?? "").find((found: string) => found !== "") ?? "";
-    const strayGuest: string | undefined = guests.map((guest) => guest.name).find((name: string) => finalText.includes(`${name}`) && /stray/i.test(finalText) && trace.some((line: TraceLine) => line.guest === name && JSON.stringify(line.prompt).includes("Everyone else knows the word")));
-    say(`  (the word: ${word === "" ? "unknown" : word}; a guest Stray: ${strayGuest ?? "none"})`);
-    if (word !== "" && strayGuest !== undefined) {
-        const held: boolean = trace.filter((line: TraceLine) => line.guest === strayGuest).some((line: TraceLine) => line.prompt.at(-1)?.content.split("YOUR MOVE")[0]?.toLowerCase().includes(`your word: ${word.toLowerCase()}`) === true);
-        if (held === true) {
-            throw new Error("The Stray guest's prompt held the secret word.");
-        }
+    const shown: string[] = (screen.scene?.blocks ?? []).map(blockText);
+    const named: number = shown.findIndex((text: string) => /was the stray/i.test(text));
+    const word: string = (shown[named - 1] ?? "").toLowerCase();
+    const stray: string = /^(.+?) was the stray/i.exec(shown[named] ?? "")?.[1] ?? "";
+    say(`  (the word: ${word === "" ? "not found on the TV" : word}; the Stray: ${stray})`);
+    if (word === "" || stray === "") {
+        throw new Error("The end of the game didn't show the word and the Stray.");
+    }
+    // A Stray can guess the word and say it, and then the table's list of words holds it. Anywhere else in its prompt would be a leak.
+    const notSaid = (line: TraceLine): string => (line.prompt.at(-1)?.content ?? "").split("\n").filter((row: string) => row.startsWith("Said so far:") === false).join("\n").toLowerCase();
+    if (trace.filter((line: TraceLine) => line.guest === stray).some((line: TraceLine) => notSaid(line).includes(word) === true)) {
+        throw new Error("The Stray guest's prompt held the secret word.");
     }
 }
 

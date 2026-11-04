@@ -1105,7 +1105,11 @@ export class Room implements HostStage {
             press: (optionId: string, controlIndex: number): void => { seated((player: Player) => { this.onControl(player, optionId, controlIndex); }); },
             answer: (controlId: string, value: string | number): void => { seated((player: Player) => { this.onAnswer(player, controlId, value); }); },
             paused: (): boolean => this.paused,
-            play: (): GuestPlay => this.games.find((game: InstalledGame) => game.manifest.id === this.game?.manifest.id)?.guests ?? "random",
+            play: (): GuestPlay => this.runningBox()?.guests ?? "random",
+            rules: (): string => {
+                const box: InstalledGame | undefined = this.runningBox();
+                return box === undefined ? "" : [box.pitch, ...box.howToPlay].join(" ");
+            },
             mayAskModel: (): boolean => {
                 if (this.guestDecisions >= MAX_GUEST_DECISIONS_PER_GAME || BUDGET.spend("guest") === false) {
                     return false;
@@ -1114,6 +1118,14 @@ export class Room implements HostStage {
                 return true;
             },
         });
+    }
+
+    /**
+     * The shelf entry of the running game.
+     * @returns the entry, if a game is running.
+     */
+    private runningBox(): InstalledGame | undefined {
+        return this.games.find((game: InstalledGame) => game.manifest.id === this.game?.manifest.id);
     }
 
     /**
