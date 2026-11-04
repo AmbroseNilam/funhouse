@@ -1,0 +1,20 @@
+# Plays with no keys and no cost: a rule-based stand-in replaces Muse Spark, and there is no voice,
+# microphone or painting. It proves the room, rules and screens, not how well the real host hosts.
+#   docker compose -f compose.yaml -f compose.demo.yaml up
+services:
+    funhouse:
+        environment:
+            GAME_ROOM_TEXT_ONLY: "1"
+            META_BASE_URL: http://stand-in-host:8799
+            META_MODEL_API_KEY: stand-in-not-a-real-key
+        depends_on:
+            - stand-in-host
+    stand-in-host:
+        image: localhost/funhouse:local
+        init: true
+        command: ["node", "tools/stub-model.ts"]
+        read_only: true
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true

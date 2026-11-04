@@ -8,6 +8,9 @@
 /** Words the stub "writes" for a clue-board game's grid; none is close to a clue the scenarios use. */
 const STUB_GRID: string = "anchor, biscuit, blanket, bridge, bucket, button, cactus, candle, canoe, carpet, castle, chimney, cinnamon, clover, compass, cushion, diamond, dolphin, drawer, engine, feather, ferry, fountain, garden, ginger";
 
+/** Follows a stand-in yes or no, so two answers in a row read differently. */
+const STUB_REMARKS: string[] = ["Keep going.", "Next door.", "Interesting choice.", "Try another."];
+
 /** Which rulings the brief offers, read from its "Rulings you may make now" list. */
 function offeredRulings(system: string): string[] {
     return [...system.matchAll(/^- \[\[([a-zA-Z]+)\]\]/gm)].map((match: RegExpMatchArray) => match[1] ?? "");
@@ -68,6 +71,18 @@ export function hostReply(system: string, user: string): string {
     if (place !== undefined && rulings.includes("right") === true) {
         const said: string = lines.at(-1) ?? "";
         return said.toLowerCase().includes(place.toLowerCase()) === true ? "[[right]]" : "[[wrong]]";
+    }
+    const said: string = (lines.at(-1) ?? "").replace(/^[^:]*:\s*/, "").trim();
+    if (rulings.includes("topic") === true && said !== "" && text.includes("(Game:") === false) {
+        return `[[topic: ${said.slice(0, 60)}]]`;
+    }
+    if (rulings.includes("no") === true && rulings.includes("yes") === true && said !== "" && text.includes("(Game:") === false) {
+        if (rulings.includes("giveup") === true && /give up/i.test(said) === true) {
+            return "[[giveup]]";
+        }
+        const yes: boolean = said.length % 2 === 0;
+        const remark: string = STUB_REMARKS[said.length % STUB_REMARKS.length] ?? "";
+        return `[[${yes === true ? "yes" : "no"}]] ${yes === true ? "Yes" : "No"}. ${remark}`;
     }
     if (rulings.includes("locked") === true && text.includes("(Game:") === false && text.trim() !== "") {
         return "[[locked]]";
