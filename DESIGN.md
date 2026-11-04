@@ -63,7 +63,10 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 
 ## The TV
 
-- **Discrete focus, no pointer, same direction as the thumb.** Focus memory per shelf.
+- **Discrete focus, same direction as the thumb.** Focus memory per shelf.
+- **A mouse is a seat, not a remote.** Someone with no phone clicks from their own seat, an ordinary phone
+  connection held to the same holder rules; on an empty table a click sits them down, otherwise they ask for a seat.
+  The cursor and mouse buttons show only while a mouse is moving, never on touch or a console.
 - **Thumb lean:** before a step, the focused item leans toward the thumb (up to 1.5 degrees and 8px).
   At an edge it rubberbands 12px. This is what makes it feel connected.
 - **Focus:** scale 1.07 plus a lifted hard shadow and a lamp edge. Never colour alone.
@@ -108,7 +111,7 @@ same frame. Predict navigation only, never game results.
 
 1. Every state exists: empty, loading, one player, full, error, disconnected, long names.
 2. It reads from across a room at 1080p and at 1366x768 laptop size.
-3. It works with only the phone, not a mouse.
+3. It works with only the phone, and a mouse is never required when a phone is there.
 4. Nothing on it could appear unchanged in any other product.
 5. A screenshot has been reviewed against this file by someone who didn't build it.
 6. Interaction has been felt on a real iPhone. Say plainly if it hasn't.

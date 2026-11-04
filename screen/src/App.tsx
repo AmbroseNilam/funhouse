@@ -1,5 +1,6 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
-// said. It draws what it is told and plays what it is sent. The phones do all the driving.
+// said. It draws what it is told and plays what it is sent. Phones drive; someone at the TV with a
+// mouse can drive too, through a seat of their own (see tvSeat.ts).
 
 import { versionLine } from "../../shared/build-info.ts";
 import type { Turn } from "../../shared/turn.ts";
@@ -11,13 +12,14 @@ import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessa
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
-import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel } from "./Console.tsx";
+import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel, type Pointing } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
 import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
+import { useTvSeat, type TvSeat } from "./tvSeat.ts";
 
 /** How long a reveal waits before its scores start counting: the answer, then who got it, then the points. */
 const COUNT_UP_DELAY_MILLISECONDS: number = 900;
@@ -61,6 +63,9 @@ const ON_CONSOLE: boolean = new URLSearchParams(location.search).get("console") 
 if (new URLSearchParams(location.search).get("fps") === "1") {
     startFrameMeter();
 }
+
+/** How long the mouse cursor stays on show after it last moved. */
+const POINTER_IDLE_MILLISECONDS: number = 3000;
 
 /** How long a touched phone's seat stays lifted on the TV. */
 const TOUCH_SHOWN_MILLISECONDS: number = 700;
@@ -259,6 +264,26 @@ export function App(): ReactElement {
     const [touchedId, setTouchedId] = useState<string | null>(null);
     const touchTimerRef = useRef<number>(0);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
+
+    const tvSeat: TvSeat = useTvSeat(state.roomCode, ON_CONSOLE === false && ON_PHONE === false);
+
+    // The cursor and the mouse's own buttons show only while a real mouse is moving. A touch never brings them up, so a wall tablet stays clean.
+    useEffect(() => {
+        let timer: number = 0;
+        const moved = (event: PointerEvent): void => {
+            if (event.pointerType !== "mouse" || rootRef.current === null) {
+                return;
+            }
+            rootRef.current.dataset.pointer = "live";
+            window.clearTimeout(timer);
+            timer = window.setTimeout(() => { delete rootRef.current?.dataset.pointer; }, POINTER_IDLE_MILLISECONDS);
+        };
+        window.addEventListener("pointermove", moved);
+        return (): void => {
+            window.removeEventListener("pointermove", moved);
+            window.clearTimeout(timer);
+        };
+    }, []);
 
     useEffect(() => {
         if (phoneGate === true) {
@@ -552,6 +577,12 @@ export function App(): ReactElement {
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
     const backdrop: string | undefined = state.scene?.backdrop ?? (game === undefined ? undefined : `art/posters/${game.id}.webp`);
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
+    const people: Seat[] = seats.filter((seat: Seat) => seat.guest === false);
+    // A seated visitor follows the same rule as any phone. Nobody seated may only sit down by clicking when the table has no people at it.
+    const mayPoint: boolean = ON_CONSOLE === false && state.started === true && (tvSeat.view !== null ? tvSeat.view.pad.canDrive === true : people.length === 0);
+    const pointing: Pointing = mayPoint === true ? tvSeat.nav : null;
+    const backLabel: string | null = tvSeat.view?.pad.backLabel ?? null;
+    const showBack: boolean = pointing !== null && backLabel !== null && (shell?.screen === "play" || shell?.screen === "pick" || shell?.screen === "startCard");
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
             <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
@@ -562,11 +593,11 @@ export function App(): ReactElement {
                         {state.turn !== null && state.turn.label !== "" ? <p className="turn-label">{state.turn.label}</p> : null}
                         <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
                     </div>
-                    {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}
+                    {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} pointing={pointing} /> : null}
                     <aside className="corner-tag"><strong>{state.roomCode}</strong><small>{joinHost}</small></aside>
                 </section>
             ) : null}
-            {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} pointing={pointing} /> : null}
             <div className="table-edge" />
             {state.started === true ? <PlaceCards seats={seats} turn={playing === true ? state.turn : null} touchedId={touchedId} /> : null}
             <div className="host-spot">
@@ -582,7 +613,15 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} pointing={pointing} /> : null}
+            {ON_CONSOLE === false && state.started === true ? (
+                <div className="tv-strip">
+                    {tvSeat.view !== null
+                        ? <><span>You're {tvSeat.name} at this screen{tvSeat.view.pad.canDrive === false && tvSeat.view.pad.driverName !== "" ? `. ${tvSeat.view.pad.driverName} has the controller.` : "."}</span><button className="tv-button" onClick={tvSeat.leave}>Leave</button></>
+                        : people.length > 0 ? <button className="tv-button" onClick={tvSeat.sit}>{tvSeat.full === true ? "The table's full" : "No phone? Take a seat"}</button> : null}
+                    {showBack === true ? <button className="tv-button" onClick={() => { tvSeat.nav({ kind: "back" }); }}>{backLabel}</button> : null}
+                </div>
+            ) : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>
