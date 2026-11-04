@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { doubtsAmong, hatAfter, joinStacks, looksAlike, scoreStacks, stackCards, type Card, type Stack } from "./stacks.ts";
+import { doubtedTexts, doubtsAmong, hatAfter, joinStacks, looksAlike, scoreStacks, stackCards, standIn, type Card, type Stack } from "./stacks.ts";
 
 /**
  * Cards from answers, one player each.
@@ -51,6 +51,19 @@ describe("the local check", () => {
 
     it("never chains: two cards only join if the check says so directly", () => {
         assert.deepEqual(seats("moon", "moonlight", "light"), ["1", "2", "3"]);
+    });
+});
+
+describe("naming a stack", () => {
+    it("stands a stack in by its shortest card without trailing punctuation, whatever the seat order", () => {
+        assert.equal(standIn(["Pizza!", "pizzas", "pizza"]), "Pizza");
+        assert.equal(standIn(["bats", "bat"]), "bat");
+        assert.equal(standIn([]), "");
+    });
+
+    it("finds the exact pair that raised a doubt, whichever card comes first", () => {
+        assert.deepEqual(doubtedTexts(["bats", "bat"], ["baseball bat"]), ["bats", "baseball bat"]);
+        assert.equal(doubtedTexts(["bat"], ["bait"]), null);
     });
 });
 

@@ -104,6 +104,32 @@ export function doubtsAmong(stacks: readonly Stack[], textsOf: (stack: Stack) =>
 }
 
 /**
+ * The two cards that made a pair of stacks a doubt: the first pair of texts that look alike.
+ * @param first one stack's texts.
+ * @param second the other stack's texts.
+ * @returns the pair, or null when none looks alike.
+ */
+export function doubtedTexts(first: readonly string[], second: readonly string[]): [string, string] | null {
+    for (const one of first) {
+        const other: string | undefined = second.find((candidate: string) => looksAlike(one, candidate) === true);
+        if (other !== undefined) {
+            return [one, other];
+        }
+    }
+    return null;
+}
+
+/**
+ * The text that stands for a stack: its shortest card, the earliest on a tie, without trailing punctuation.
+ * @param texts a stack's texts.
+ * @returns the text, or an empty string.
+ */
+export function standIn(texts: readonly string[]): string {
+    const shortest: string = [...texts].sort((first: string, second: string) => normalize(first).length - normalize(second).length)[0] ?? "";
+    return shortest.replace(/[.!?,;:\s]+$/u, "");
+}
+
+/**
  * Joins the stacks a model said are the same. Joining is the only thing it can do.
  * @param stacks the stacks.
  * @param same pairs of positions that are the same thing.

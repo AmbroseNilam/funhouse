@@ -17,7 +17,7 @@ import type { Scope, ScopedFact } from "../../../shared/visibility.ts";
 import { boxProblems, isWholeIn, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
 import { because, frozenCopy } from "../../kit/primitives.ts";
 import { isHostSafe, linesOf, oneLine, quoted, shuffled } from "../../kit/text.ts";
-import { doubtsAmong, hatAfter, joinStacks, scoreStacks, stackCards, type Card, type Doubt, type Stack } from "./stacks.ts";
+import { doubtedTexts, doubtsAmong, hatAfter, joinStacks, scoreStacks, stackCards, standIn, type Card, type Doubt, type Stack } from "./stacks.ts";
 
 /** Whether a prompt is about anything at all or about the people at this table. */
 export type PromptKind = "general" | "room";
@@ -263,12 +263,12 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     };
 
     /**
-     * What a stack is called on the screen and to the host: the first card's words.
+     * What a stack is called on the screen and to the host: its shortest card's words.
      * @param state the state.
      * @param stack the stack.
      * @returns the text.
      */
-    const stackText = (state: MatchState, stack: Stack): string => textsOf(state)(stack)[0] ?? "";
+    const stackText = (state: MatchState, stack: Stack): string => standIn(textsOf(state)(stack));
 
     /**
      * The stacks biggest first, lone cards last, ties in seat order.
@@ -393,7 +393,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
      */
     const askSpark = (state: MatchState, doubts: Doubt[]): Step<MatchState> => {
         const texts = textsOf(state);
-        const lines: string[] = doubts.map(([first, second]: Doubt, place: number) => `${state.round}.${place + 1} ${quoted(texts(state.stacks[first] ?? [])[0] ?? "")} and ${quoted(texts(state.stacks[second] ?? [])[0] ?? "")}`);
+        const lines: string[] = doubts.map(([first, second]: Doubt, place: number) => {
+            const [one, other] = doubtedTexts(texts(state.stacks[first] ?? []), texts(state.stacks[second] ?? [])) ?? ["", ""];
+            return `${state.round}.${place + 1} ${quoted(one)} and ${quoted(other)}`;
+        });
         const request: string = [
             `The prompt was ${quoted(promptOf(state))}. For each pair below, are the two answers the same thing:`,
             "a spelling variant, a plural, an abbreviation or a synonym? Related is not the same. If you are not sure, say no.",
@@ -572,7 +575,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 result: null,
             };
             const request: string = [
-                `Write ${total} short prompts for a party game in which everyone types a short answer and tries to match the rest of the table.`,
+                `Write ${total} prompts for a party game in which everyone types a short answer and tries to match the rest of the table.`,
                 "One prompt for each stem below, in order, one per line, no numbering, no quotation marks, nothing else.",
                 "Each prompt is one sentence of at most ten words that has many plausible short answers, where the most popular answer is easy to guess. No real people, no named brands, no politics, no religion, nothing sexual.",
                 ...decisions.stems.map((stem: PromptStem, place: number) => `Stem ${place + 1}${stem.kind === "room" ? " (about the people at this table, as a group)" : ""}: ${stem.stem}`),
