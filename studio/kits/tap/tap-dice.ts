@@ -200,7 +200,7 @@ export function diceBlueprintProblems(box: Box, decisions: DiceDecisions): strin
  * @returns the manifest.
  */
 export function diceManifest(box: Box): CartridgeManifest {
-    const listening: Record<string, "holdToTalk"> = { "*": "holdToTalk" };
+    const listening: Record<string, "muted"> = { "*": "muted" };
     const phases: PhaseSpec[] = [
         {
             id: "looking",

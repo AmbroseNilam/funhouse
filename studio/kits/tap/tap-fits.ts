@@ -92,7 +92,7 @@ export function fitsBlueprintProblems(box: Box, decisions: FitsDecisions): strin
  * @returns the manifest.
  */
 export function fitsManifest(box: Box): CartridgeManifest {
-    const listening: Record<string, "holdToTalk"> = { "*": "holdToTalk" };
+    const listening: Record<string, "muted"> = { "*": "muted" };
     return {
         id: box.id,
         name: box.name,

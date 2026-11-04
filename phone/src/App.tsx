@@ -5,7 +5,7 @@
 
 import type { PhoneTurn } from "../../shared/turn.ts";
 import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
-import type { Control, PhoneView } from "../../shared/controls.ts";
+import { listeningAllowsTalk, type Control, type PhoneView } from "../../shared/controls.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
@@ -915,7 +915,7 @@ export function App(): ReactElement {
 
     const view: PhoneView | null = state.view;
     padRef.current = view?.pad ?? null;
-    const canTalk: boolean = view?.listening === "holdToTalk" || view?.listening === "openFloor";
+    const canTalk: boolean = view !== null && listeningAllowsTalk(view.listening);
     const canTalkRef = useRef<boolean>(canTalk);
     canTalkRef.current = canTalk;
     useEffect(() => {

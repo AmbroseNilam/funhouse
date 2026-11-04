@@ -148,7 +148,7 @@ export function pushBlueprintProblems(box: Box, decisions: PushDecisions): strin
  * @returns the manifest.
  */
 export function pushManifest(box: Box, decisions: PushDecisions): CartridgeManifest {
-    const listening: Record<string, "holdToTalk"> = { "*": "holdToTalk" };
+    const listening: Record<string, "muted"> = { "*": "muted" };
     return {
         id: box.id,
         name: box.name,
