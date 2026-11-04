@@ -16,7 +16,7 @@ export const COLD_READ_BLUEPRINT: HostGuessBlueprint = {
         howToPlay: [
             "Pick a category on your phones, then agree on one thing in it. Keep it from the host.",
             "The host asks yes-or-no questions. Tap Yes, No or Sometimes. The most taps wins, and a tie is Sometimes.",
-            "When the host makes its last guess, say what it was out loud and tap whether it was right.",
+            "When the host makes its last guess, hold your phone and say what it was, then tap whether it was right.",
         ],
         remarks: ["You think of it. I ask the questions.", "Go on. Try to stump me.", "I have fifteen questions and no shame."],
         art: "art/hero.webp",
@@ -25,7 +25,7 @@ export const COLD_READ_BLUEPRINT: HostGuessBlueprint = {
         keywords: ["yes", "no", "sometimes", "right", "wrong", "ready"],
     },
     decisions: {
-        categories: ["a person", "a place", "an animal", "a thing in your house", "a food or drink", "a made-up character"],
+        categories: ["a person", "a place", "an animal", "an everyday object", "a food or drink", "a story character"],
         questions: 15,
         guesses: 3,
         warnAt: [5, 2, 1],

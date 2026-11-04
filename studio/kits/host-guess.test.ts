@@ -316,7 +316,7 @@ describe("cold read: guesses", () => {
         assert.equal(last.state.judging?.final, true);
         assert.equal(last.state.count.used, current.count.used, "the final guess costs nothing");
         const text: string = stringsIn(game.cartridge.publicScene(last.state)).join(" ");
-        assert.match(text, /Say what it was out loud/);
+        assert.match(text, /say what it was/);
         assert.match(JSON.stringify(game.cartridge.privateControls(last.state, "paper1")), /The host was right/);
         const lost: Step<HostGuessState> = pressAll(game, last.state, ["paper1", "paper2", "paper3", "paper4"], `${HOST_GUESS_IDS.verdict}wrong`);
         assert.equal(lost.state.phase, "end");

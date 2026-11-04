@@ -209,6 +209,16 @@ export function cleanHostText(text: string, length: { least: number; most: numbe
 }
 
 /**
+ * A guess as it reads inside a sentence: a leading article goes lower case, so "A lighthouse"
+ * reads "Is it a lighthouse?" and never "Is it A lighthouse?".
+ * @param guess the guess as the host wrote it.
+ * @returns the guess for the middle of a sentence.
+ */
+export function inSentence(guess: string): string {
+    return guess.replace(/^(A|An|The)\s/, (article: string) => article.toLowerCase());
+}
+
+/**
  * Builds the manifest, with every host line from the kit.
  * @param box the box.
  * @param decisions the decisions.
@@ -729,9 +739,8 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
                     mood: "neutral",
                     transition: "fade",
                     blocks: [
-                        { type: "title", text: "Pick a category", kicker },
+                        { type: "title", text: "What kind of thing?", kicker },
                         { type: "tally", title: "Votes", rows: rows.map((row: SceneTallyRow): SceneTallyRow => ({ ...row, highlight: top > 0 && row.count === top })) },
-                        { type: "timer", seconds: decisions.categorySeconds, label: "to pick", running: true },
                     ],
                 };
             }
@@ -740,7 +749,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
                     mood: "night",
                     transition: "fade",
                     blocks: [
-                        { type: "title", text: `Agree on a thing: ${state.category}`, kicker },
+                        { type: "title", text: `Agree on ${state.category}`, kicker },
                         { type: "text", text: `${HOST_NAME} is looking away. Settle on one specific thing, keep your voices down, then tap ready.`, emphasis: "large" },
                         { type: "timer", seconds: decisions.secretSeconds, label: "to agree", running: true },
                     ],
@@ -748,15 +757,15 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
             }
             if (state.phase === "guess" || state.phase === "reveal") {
                 const final: boolean = state.phase === "reveal";
-                const blocks: SceneBlock[] = [{ type: "title", text: final === true ? state.judging?.guess ?? "" : `Is it ${state.judging?.guess ?? ""}?`, kicker: final === true ? `${HOST_NAME}'s final guess` : `${HOST_NAME} guesses` }];
-                blocks.push({ type: "text", text: final === true ? "Say what it was out loud. Then tap whether the host was right." : "Tap on your phone.", emphasis: "large" });
+                const blocks: SceneBlock[] = [{ type: "title", text: final === true ? state.judging?.guess ?? "" : `Is it ${inSentence(state.judging?.guess ?? "")}?`, kicker: final === true ? `${HOST_NAME}'s final guess` : `${HOST_NAME} guesses` }];
+                blocks.push({ type: "text", text: final === true ? "Hold your phone and say what it was. Then tap whether the host was right." : "Tap on your phone.", emphasis: "large" });
                 blocks.push({ type: "timer", seconds: decisions.verdictSeconds, label: "to judge", running: true });
                 return { mood: "tense", transition: "fade", blocks };
             }
             if (state.phase === "end") {
                 const title: string = state.won === true ? `${HOST_NAME} got it` : state.passed === true ? `${HOST_NAME} lost the thread` : `${HOST_NAME} is stumped`;
                 const blocks: SceneBlock[] = [{ type: "title", text: title, kicker }];
-                blocks.push({ type: "text", text: state.lastGuess === "" ? `Category: ${state.category}` : `${state.won === true ? "It was" : "Final guess:"} ${state.lastGuess}`, emphasis: "large" });
+                blocks.push({ type: "text", text: state.lastGuess === "" ? `Category: ${state.category}` : `${state.won === true ? "It was" : "Final guess:"} ${inSentence(state.lastGuess)}`, emphasis: "large" });
                 blocks.push(progress);
                 return { mood: state.won === true ? "victory" : "dawn", transition: "fade", blocks };
             }
@@ -784,13 +793,13 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
                 return options.length > 0 ? [{ type: "buttons", prompt: "What kind of thing?", options }] : [{ type: "waiting", text: "Picked. Waiting for the others." }];
             }
             if (state.phase === "secret") {
-                return options.length > 0 ? [{ type: "buttons", prompt: `Agree on one ${state.category.replace(/^an? /, "")} together. Tell nobody else, and not the host.`, options }] : [{ type: "waiting", text: "Ready. Waiting for the others." }];
+                return options.length > 0 ? [{ type: "buttons", prompt: `Agree on one ${state.category.replace(/^an? /, "")} together. Keep it from the host.`, options }] : [{ type: "waiting", text: "Ready. Waiting for the others." }];
             }
             if (state.phase === "asking" && state.pending !== null) {
                 return options.length > 0 ? [{ type: "buttons", prompt: state.pending.question, options }] : [{ type: "waiting", text: "Answered. Waiting for the others." }];
             }
             if (state.phase === "guess" || state.phase === "reveal") {
-                const prompt: string = state.phase === "reveal" ? `${HOST_NAME}'s final guess: ${state.judging?.guess ?? ""}. Say what it was out loud, then tap.` : `Is it ${state.judging?.guess ?? ""}?`;
+                const prompt: string = state.phase === "reveal" ? `${HOST_NAME}'s final guess: ${inSentence(state.judging?.guess ?? "")}. Hold your phone and say what it was, then tap.` : `Is it ${inSentence(state.judging?.guess ?? "")}?`;
                 return options.length > 0 ? [{ type: "buttons", prompt, options }] : [{ type: "waiting", text: "Judged. Waiting for the others." }];
             }
             if (state.phase === "end") {
