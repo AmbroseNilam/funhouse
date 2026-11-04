@@ -189,17 +189,26 @@ describe("stacking", () => {
         assert.equal(step.mergeRequest, undefined);
     });
 
-    it("applies what the seam joins, and asks no closed question when the seam is alive", () => {
+    it("stacks what the seam joins only when the closed question agrees, and the made-up pair can't catch a real card", () => {
         const { game, state } = open();
         const step: Step<MatchState> = typeAll(game, state, ["couch", "sofa", "lamp", "rug"]);
         const sent: string[] = step.mergeRequest?.answers ?? [];
         assert.deepEqual(sent.slice(0, 4), ["couch", "sofa", "lamp", "rug"]);
         const alive = { type: "answersMerged" as const, at: 9, id: "merge1", groups: [{ answer: "couch", indexes: [0, 1] }, { answer: "lamp", indexes: [2] }, { answer: "rug", indexes: [3] }, { answer: sent[4] ?? "", indexes: [4, 5] }] };
-        const turned: Step<MatchState> = on(game, step.state, alive);
+        const asked: Step<MatchState> = on(game, step.state, alive);
+        assert.equal(asked.state.phase, "settling");
+        assert.match(asked.contentRequest ?? "", /1\.1 “couch” and “sofa”/);
+        assert.match(asked.contentRequest ?? "", /Someone could give each answer to this prompt/);
+        assert.equal(on(game, asked.state, { type: "contentReady", at: 10, text: "1.1 no" }).state.stacks.length, 4, "the model's no keeps them apart");
+        assert.equal(on(game, asked.state, { type: "timerFired", at: 15, timerId: "ask1" }).state.stacks.length, 4, "no reply keeps them apart");
+        const turned: Step<MatchState> = on(game, asked.state, { type: "contentReady", at: 10, text: "1.1 yes" });
         assert.equal(turned.state.phase, "reveal");
         assert.deepEqual(turned.state.stacks[0], ["paper1", "paper2"]);
-        assert.equal(turned.contentRequest, undefined);
         assert.deepEqual(turned.state.gained, { paper1: 2, paper2: 2, paper3: 0, paper4: 0 });
+        const quiet: Step<MatchState> = on(game, step.state, { type: "answersMerged", at: 9, id: "merge1", groups: [{ answer: "couch", indexes: [0] }, { answer: "sofa", indexes: [1] }, { answer: "lamp", indexes: [2, 4] }, { answer: "rug", indexes: [3] }, { answer: "quillbeams", indexes: [5] }] });
+        assert.equal(quiet.contentRequest, undefined, "a real card beside the made-up word is not a pair to ask about");
+        assert.equal(quiet.state.stacks.length, 4);
+        assert.deepEqual(sent.slice(4), ["quillbeam", "quillbeams"]);
     });
 
     it("asks one closed question when the seam is silent and some pair looks alike, and defaults to separate", () => {

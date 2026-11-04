@@ -121,8 +121,8 @@ const ASK_PAIR_LIMIT: number = 4;
 /** Seconds the host's model has to write the prompts before the bank is used. */
 const CHOOSE_SECONDS: number = 20;
 
-/** Two answers any working merge seam must call the same, sent along as a sign of life. */
-const SIGN_OF_LIFE: readonly [string, string] = ["quillbeam lamp", "quillbeam lamps"];
+/** Two answers any working merge seam must call the same, sent along as a sign of life. One made-up word, so no real card can look like them. */
+const SIGN_OF_LIFE: readonly [string, string] = ["quillbeam", "quillbeams"];
 
 /**
  * Checks a match game's decisions.
@@ -183,10 +183,9 @@ export function matchBlueprintProblems(box: Box, decisions: MatchDecisions): str
 /**
  * Builds the manifest from the box, with every host line from the kit.
  * @param box the box.
- * @param decisions the decisions, for the times the host announces.
  * @returns the manifest.
  */
-export function matchManifest(box: Box, decisions: MatchDecisions): CartridgeManifest {
+export function matchManifest(box: Box): CartridgeManifest {
     return {
         id: box.id,
         name: box.name,
@@ -197,6 +196,7 @@ export function matchManifest(box: Box, decisions: MatchDecisions): CartridgeMan
             "The rules stack matching answers together, and players score for matching the room.",
             "You never see an answer until the cards are turned, and you never decide whether two answers match, who scored or who has the hat; the rules do, and you are only told.",
             "The joke is always on the answer, never on a person. Never say who wrote which answer, and never say a score. Dry and warm. Short.",
+            "Everyone here has already joined, so never tell anyone to scan a code or join. Never use the same line twice.",
         ].join(" "),
         keywords: box.keywords,
         variants: [],
@@ -205,8 +205,8 @@ export function matchManifest(box: Box, decisions: MatchDecisions): CartridgeMan
             {
                 id: "writing",
                 hostBrief: [
-                    "You'll be given the prompt. Read it aloud once, in one short sentence, and say they have",
-                    `${decisions.writeSeconds} seconds and should match the room. Then stop; they are typing in silence. Never guess at answers.`,
+                    "You'll be given the prompt. Read it aloud once, in one short sentence, and do what you're told about the clock.",
+                    "Then stop; they are typing in silence. Never guess at answers.",
                 ].join(" "),
                 listening: { "*": "muted" },
                 hostMayInterject: false,
@@ -227,8 +227,8 @@ export function matchManifest(box: Box, decisions: MatchDecisions): CartridgeMan
             {
                 id: "end",
                 hostBrief: [
-                    "You'll be told the final scores, who won, and whether the hat cost anyone points. Two or three sentences:",
-                    "name the winner or winners, say the hat's cost plainly and kindly if it applied, and offer another game. Warm, not salesy.",
+                    "You'll be told the final scores, who won, and whether the hat cost anyone points. In about 25 words, with the scores left to the screen:",
+                    "name the winner or winners, say the hat's cost plainly and kindly if it applied, and offer another game. Warm, not salesy. Always speak here, never reply (quiet).",
                 ].join(" "),
                 listening: { "*": "holdToTalk" },
                 hostMayInterject: true,
@@ -248,7 +248,7 @@ export function matchManifest(box: Box, decisions: MatchDecisions): CartridgeMan
 export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, random: () => number = Math.random): KitGame<MatchState> {
     const box: Box = frozenCopy(givenBox);
     const decisions: MatchDecisions = frozenCopy(givenDecisions);
-    const manifest: CartridgeManifest = matchManifest(box, decisions);
+    const manifest: CartridgeManifest = matchManifest(box);
     const total: number = decisions.stems.length;
     const publicFact = (kind: string, text: string): ScopedFact => ({ scope: { kind: "public" }, kind, text });
     const nameOf = (state: MatchState, playerId: string | null): string => state.players.find((player: CartridgePlayer) => player.playerId === playerId)?.name ?? "Someone";
@@ -307,7 +307,9 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const state: MatchState = { ...before, phase: "writing", round, cards: [], attempts: {}, stacks: [], asked: false, doubts: [], gained: {} };
         const text: string = [
             `Prompt ${round} of ${total}: ${quoted(promptOf(state))}.`,
-            `Read it aloud once, in one short sentence. They have ${decisions.writeSeconds} seconds to type a card and should match the room. You don't know any answers.`,
+            round === 1
+                ? `Read it aloud once, in one short sentence, and say they have ${decisions.writeSeconds} seconds to match the room. You don't know any answers.`
+                : "Read it aloud once and say nothing else: no clock, no reminder to match, because the screen shows that. You don't know any answers.",
         ].join(" ");
         return { state, facts: because(publicFact("prompt", text), MATCH_DECISIONS.prompts), nextPhaseId: "writing", timers: { [`write${round}`]: decisions.writeSeconds } };
     };
@@ -386,8 +388,9 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     }
 
     /**
-     * Asks the host's model one closed question about the pairs that look alike and were not merged.
-     * @param state the state in settling, with the seam's merges applied.
+     * Asks the host's model one closed question about the pairs the seam joined or that look alike.
+     * Nothing but its yes joins two stacks, so a silent model only means fewer merges.
+     * @param state the state in settling.
      * @param doubts the pairs.
      * @returns the step.
      */
@@ -398,8 +401,9 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             return `${state.round}.${place + 1} ${quoted(one)} and ${quoted(other)}`;
         });
         const request: string = [
-            `The prompt was ${quoted(promptOf(state))}. For each pair below, are the two answers the same thing:`,
-            "a spelling variant, a plural, an abbreviation or a synonym? Related is not the same. If you are not sure, say no.",
+            `The prompt was ${quoted(promptOf(state))}. For each pair below, say yes only if both of these are true.`,
+            "Someone could give each answer to this prompt, even as a joke. And the two are the same thing: a spelling variant, a plural, an abbreviation or a synonym.",
+            "Related is not the same, and neither is looking or sounding alike. If you are not sure, say no.",
             `Reply with one line per pair and nothing else, in the form "${state.round}.1 yes" or "${state.round}.2 no".`,
             ...lines,
         ].join("\n");
@@ -446,7 +450,8 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     };
 
     /**
-     * Applies the merging seam's answer, then asks the closed question only if the seam was silent.
+     * Takes the merging seam's answer. What it joined, and what looks alike if it was silent, goes to the
+     * closed question, so two different models must agree before two different answers stack.
      * @param state the state in settling.
      * @param groups what the seam grouped.
      * @returns the step.
@@ -459,10 +464,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             const [first, ...rest] = members;
             return first === undefined ? [] : rest.map((other: number): Doubt => [first, other]);
         });
-        const joined: Stack[] = joinStacks(state.stacks, same);
-        const doubts: Doubt[] = alive === true ? [] : doubtsAmong(joined, textsOf(state)).slice(0, ASK_PAIR_LIMIT);
-        const merged: MatchState = { ...state, stacks: joined };
-        return doubts.length === 0 ? turnOver(merged, joined) : askSpark(merged, doubts);
+        const lookAlike: Doubt[] = alive === true ? [] : doubtsAmong(state.stacks, textsOf(state));
+        const isSeamPair = (pair: Doubt): boolean => same.some(([first, second]: Doubt) => (first === pair[0] && second === pair[1]) || (first === pair[1] && second === pair[0]));
+        const doubts: Doubt[] = [...same, ...lookAlike.filter((pair: Doubt) => isSeamPair(pair) === false)].slice(0, ASK_PAIR_LIMIT);
+        return doubts.length === 0 ? turnOver(state, state.stacks) : askSpark(state, doubts);
     };
 
     /**

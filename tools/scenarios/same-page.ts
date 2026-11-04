@@ -59,7 +59,7 @@ const ROUNDS: Round[] = [
     { cards: ["bat", "bait", "bag", "bar"], stacks: [1, 1, 1, 1], won: [0, 0, 0, 0] },
     { cards: ["bat", "baseball bat", "bats", "lamp"], stacks: [3, 1], won: [2, 2, 2, 0] },
     { cards: ["ice cream", "cream cheese", "ice cream", "couch"], stacks: [2, 1, 1], won: [2, 0, 2, 0] },
-    { cards: ["tomato", "lantern", "anchor", "ribbon"], stacks: [1, 1, 1, 1], won: [0, 0, 0, 0] },
+    { cards: ["sofa", "couch", "anchor", "ribbon"], stacks: [1, 1, 1, 1], won: [0, 0, 0, 0] },
     { cards: ["tea", "Tea", "TEA", "tea."], stacks: [4], won: [3, 3, 3, 3] },
     { cards: ["map", "map", "MAP", null], stacks: [3], won: [2, 2, 2, 0] },
     { cards: ["kettle", "kettle", "thimble", "kettle"], stacks: [3, 1], won: [2, 2, 0, 2] },
