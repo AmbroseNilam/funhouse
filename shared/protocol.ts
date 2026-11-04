@@ -38,6 +38,9 @@ export type RoomToPhoneMessage =
     | { type: "rejected"; reason: RejectedReason }
     | { type: "heartbeat" };
 
+/** What a machine at the table is doing, for its cursor on the TV. Never what it answered. */
+export type SeatActivity = "joined" | "reading" | "thinking" | "sent" | "idle" | "saying";
+
 /** Screen to room. */
 export type ScreenMessage =
     | { type: "hello" }
@@ -50,6 +53,8 @@ export type ScreenMessage =
 export type RoomToScreenMessage =
     | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string; turn: Turn | null }
     | { type: "seatTouched"; playerId: string }
+    | { type: "seatActivity"; playerId: string; activity: SeatActivity; line: string }
+    | { type: "seatMovesCleared" }
     | { type: "heardYou"; playerId: string }
     | { type: "audioStart"; mediaType: string }
     | { type: "audioEnd" }

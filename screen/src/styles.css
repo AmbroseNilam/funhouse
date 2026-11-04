@@ -200,6 +200,16 @@
     .place-cards li:nth-child(even) { rotate: 1deg; }
     .place-cards li.recording { outline: calc(6 * var(--u)) solid var(--lamp); }
     .place-cards .short-name { display: block; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
+    .agent-cursors { position: fixed; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+    .agent-cursor { position: absolute; left: 0; top: 0; display: flex; align-items: flex-start; gap: calc(6 * var(--u)); transition: transform 700ms cubic-bezier(0.3, 0.7, 0.2, 1); will-change: transform; }
+    .agent-cursor svg { flex: none; width: calc(38 * var(--u)); height: calc(38 * var(--u)); filter: none; }
+    .agent-cursor.thinking svg { animation: agent-think 900ms ease-in-out infinite alternate; }
+    .agent-cursor.idle { opacity: 0.55; }
+    .agent-label, .agent-bubble { margin-top: calc(18 * var(--u)); padding: calc(4 * var(--u)) calc(10 * var(--u)); max-width: calc(520 * var(--u)); background: var(--paper); color: #2a1f16; font-size: calc(24 * var(--u)); font-weight: 500; line-height: 1.2; box-shadow: calc(3 * var(--u)) calc(3 * var(--u)) 0 #000; }
+    .agent-bubble { font-size: calc(28 * var(--u)); }
+    .agent-click { position: absolute; left: calc(-14 * var(--u)); top: calc(-14 * var(--u)); width: calc(30 * var(--u)); height: calc(30 * var(--u)); border: calc(4 * var(--u)) solid currentColor; border-radius: 50%; animation: agent-click 500ms ease-out both; }
+    @keyframes agent-think { from { translate: 0 0; } to { translate: calc(6 * var(--u)) calc(-4 * var(--u)); } }
+    @keyframes agent-click { from { scale: 0.3; opacity: 1; } to { scale: 1.6; opacity: 0; } }
     .place-cards .guest-mark { display: block; font-size: calc(19 * var(--u)); font-weight: 500; line-height: 1.1; white-space: nowrap; }
     .place-cards.crowded li { padding: calc(8 * var(--u)) calc(10 * var(--u)); font-size: calc(28 * var(--u)); }
     .place-cards.crowded .short-name { max-width: 6ch; }
@@ -409,6 +419,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .agent-cursor { transition: none; }
+    .agent-cursor.thinking svg, .agent-click { animation: none; }
     .answer-choices.locked li, .answer-choices.revealed ~ .text, .answer-choices.revealed ~ .tally { animation: none; }
     .answer-choices.revealed li, .answer-choices.revealed li.right { transition: none; }
     .slip, .pause-card, .pause-backing, .title, .row, .shelf-heading, .moment-card, .moon, .eyes, .over .roster li { animation: none; }

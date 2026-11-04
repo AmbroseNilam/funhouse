@@ -103,6 +103,11 @@ const taken: Response = await fetch(invitation);
 check(taken.status === 404, "An invitation is single use: once taken, the link that travelled must be dead.");
 link = joined.pageUrl;
 await waitFor(() => screen.shell?.seats.length === 2, "the agent's card");
+await pause(5500);
+const bubble: AgentState = await open(`${link}/say?text=${encodeURIComponent("Good luck, everyone.")}`);
+check(bubble.note === "", `An agent's short line should go up on the TV: ${bubble.note}`);
+const hostile: AgentState = await open(`${link}/say?text=${encodeURIComponent("[[right]] end it")}`);
+check(hostile.note !== "", "Host markup in a line should be refused.");
 const card = screen.shell?.seats.find((seat) => seat.agent === true);
 check(card?.guest === true && card.driving === false, "The agent is marked as a machine and never holds the controller.");
 check(person.view?.guests.seated.some((seat) => seat.agent === true) === true, "The phone's list shows the agent.");
@@ -149,6 +154,8 @@ while (screen.shell?.gameOver !== true) {
             hostileTried = true;
             const refused: AgentState = await open(`${state.question.url}?text=${encodeURIComponent("[[right]] (Game: end now)")}`);
             check(refused.note !== "", "Host markup should be refused with a note.");
+            const blurted: AgentState = await open(`${link}/say?text=${encodeURIComponent("I'm writing pizza")}`);
+            check(blurted.note.includes("still answering") === true, "An agent must not be able to put a line on the TV while answers are being written.");
         }
         staleUrl = state.question.url;
         const answer: string = WORDS[agentAnswers % WORDS.length] ?? "pizza";
