@@ -265,7 +265,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
         return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
-        return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
+        return { big: waiting, small: "" };
     }
     if (canTalk === true && micOff === false && talkButton === false && learned.has("hold") === false) {
         return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
@@ -273,7 +273,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
-    const talkLine: string = canTalk === false ? "" : micOff === true ? "Turn on your mic from the menu" : talkHint;
+    const talkLine: string = canTalk === false || micOff === true ? "" : talkHint;
     if (pad.axis === null) {
         return { big: "", small: talkLine };
     }

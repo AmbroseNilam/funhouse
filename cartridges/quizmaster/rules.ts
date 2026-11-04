@@ -499,7 +499,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         privateControls(state: QuizmasterState, playerId: string): Control[] {
             if (state.phase === "topic") {
-                return [{ type: "waiting", text: "Say a topic out loud." }];
+                return [{ type: "waiting", text: "Say or type a topic." }];
             }
             if (state.phase === "preparing") {
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];

@@ -334,7 +334,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
 
         publicScene(state: TwentyDoorsState): Scene {
             if (state.phase === "topic" || state.phase === "choosing") {
-                const line: string = state.phase === "topic" ? "Say a topic out loud." : "Choosing a secret…";
+                const line: string = state.phase === "topic" ? "Say or type a topic." : "Choosing a secret…";
                 return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Twenty Doors", kicker: "Your own topic" }, { type: "text", text: line, emphasis: "large" }] };
             }
             if (state.phase === "end") {
@@ -355,7 +355,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
 
         privateControls(state: TwentyDoorsState): Control[] {
             if (state.phase === "topic" || state.phase === "choosing") {
-                return [{ type: "waiting", text: state.phase === "topic" ? "Say a topic out loud." : `${HOST_NAME} is choosing.` }];
+                return [{ type: "waiting", text: state.phase === "topic" ? "Say or type a topic." : `${HOST_NAME} is choosing.` }];
             }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: `It was ${state.secret}. ${endLine(state)}` }];
