@@ -393,25 +393,22 @@
     .mood-defeat { --ink: #1d0f13; }
 }
 
-/* A row of pictures with who made each, for a finished chain. */
+/* A row of pictures with who made each, for a finished chain. It stops short of the end menu on the right. */
 .gallery {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.5vmin;
-    width: 100%;
+    gap: calc(20 * var(--u));
+    width: calc(1200 * var(--u));
+    max-width: 100%;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.gallery.many {
-    gap: 1vmin;
-}
-
 .gallery li {
     display: flex;
     flex-direction: column;
-    gap: 0.5vmin;
+    gap: calc(6 * var(--u));
     min-width: 0;
 }
 
@@ -420,7 +417,7 @@
     width: 100%;
     aspect-ratio: 1;
     object-fit: cover;
-    border-radius: 1vmin;
+    border-radius: calc(10 * var(--u));
 }
 
 .gallery-empty {
@@ -428,15 +425,24 @@
 }
 
 .gallery strong {
-    font-size: 2.6vmin;
+    font-size: calc(34 * var(--u));
 }
 
 .gallery span {
-    font-size: 2.2vmin;
-    line-height: 1.2;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: calc(28 * var(--u));
+    line-height: 1.15;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
 }
 
 .gallery.many img,
 .gallery.many .gallery-empty {
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 2;
+}
+
+.gallery.many span {
+    font-size: calc(24 * var(--u));
+    -webkit-line-clamp: 1;
 }
