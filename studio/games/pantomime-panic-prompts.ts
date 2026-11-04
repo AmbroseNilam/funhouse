@@ -1,4 +1,4 @@
-// The prompts for Say Nothing, written for this game: invented movie-style titles, everyday
+// The prompts for Pantomime Panic, written for this game: invented movie-style titles, everyday
 // actions and small characters, each with the shorter ways a room would naturally say it. Nothing
 // here is a real film, show, brand or person. Each line is a kind, a level, the answer and then
 // any other ways of saying it that count, so "giant sandwich" is enough for the title that has
@@ -157,4 +157,4 @@ const LINES: PromptLine[] = [
 ];
 
 /** Every prompt in the game. */
-export const SAY_NOTHING_PROMPTS: Prompt[] = LINES.map(([kind, level, answer, ...also]: PromptLine): Prompt => ({ kind, level, answer, also }));
+export const PANTOMIME_PANIC_PROMPTS: Prompt[] = LINES.map(([kind, level, answer, ...also]: PromptLine): Prompt => ({ kind, level, answer, also }));

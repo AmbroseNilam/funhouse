@@ -1,4 +1,4 @@
-// Say Nothing as a blueprint: the charades kit for three to ten people. One player at a time gets
+// Pantomime Panic as a blueprint: the charades kit for three to ten people. One player at a time gets
 // a private prompt on their phone, a movie-style title, an action or a character, and acts it out
 // in silence while the others shout guesses at their phones. Code hears each guess and rules it
 // against the answer and its listed synonyms, scores the guesser and the performer, and rotates.
@@ -6,14 +6,14 @@
 
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { CharadesBlueprint } from "../blueprint.ts";
-import { SAY_NOTHING_PROMPTS } from "./say-nothing-prompts.ts";
+import { PANTOMIME_PANIC_PROMPTS } from "./pantomime-panic-prompts.ts";
 
-/** Say Nothing, written as decisions on the charades kit. */
-export const SAY_NOTHING_BLUEPRINT: CharadesBlueprint = {
+/** Pantomime Panic, written as decisions on the charades kit. */
+export const PANTOMIME_PANIC_BLUEPRINT: CharadesBlueprint = {
     kit: "charades",
     box: {
-        id: "sayNothing",
-        name: "Say Nothing",
+        id: "pantomimePanic",
+        name: "Pantomime Panic",
         pitch: `One of you acts it out without a word. The rest shout. ${HOST_NAME} keeps time.`,
         howToPlay: [
             "When it's your turn, pick how hard, then read your phone and act it out. No talking.",
@@ -27,7 +27,7 @@ export const SAY_NOTHING_BLUEPRINT: CharadesBlueprint = {
         keywords: ["is it", "I think it's", "close", "swap", "start", "easy", "medium", "hard"],
     },
     decisions: {
-        prompts: SAY_NOTHING_PROMPTS,
+        prompts: PANTOMIME_PANIC_PROMPTS,
         levels: {
             easy: { label: "Easy", points: 1, seconds: 60 },
             medium: { label: "Medium", points: 2, seconds: 75 },

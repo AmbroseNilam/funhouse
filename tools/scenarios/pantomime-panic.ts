@@ -1,4 +1,4 @@
-// Plays Say Nothing from a script with four fake phones. One player is dealt a prompt and acts it
+// Plays Pantomime Panic from a script with four fake phones. One player is dealt a prompt and acts it
 // out; the others shout guesses, including a wrong one, a near miss and the right one, and the
 // performer "says" the answer too, which the room must ignore because that phone is muted. The
 // scenario fails if the prompt ever reaches a phone other than the performer's, the TV or the host
@@ -10,17 +10,17 @@
 //
 // Run it on any machine with Node 24:
 //   GAME_ROOM_TEXT_ONLY=1 npm run room
-//   ROOM_STUDIO=1 node tools/scenarios/say-nothing.ts      (in a second terminal)
+//   ROOM_STUDIO=1 node tools/scenarios/pantomime-panic.ts      (in a second terminal)
 // ROOM_STUDIO=1 makes the fake screen open its room with ?studio=1, the only kind of room whose
-// shelf has Say Nothing. A pass prints PASS as its last line and takes about a minute. The room's
-// log should also show "[studio] starting blueprint sayNothing on the charades kit".
+// shelf has Pantomime Panic. A pass prints PASS as its last line and takes about a minute. The room's
+// log should also show "[studio] starting blueprint pantomimePanic on the charades kit".
 //
 // This is test tooling, not the server: it prints the prompts and every line said to the terminal it
 // runs in, which the room's own log never does. Don't paste its output anywhere public.
 
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
-import { SAY_NOTHING_PROMPTS } from "../../studio/games/say-nothing-prompts.ts";
+import { PANTOMIME_PANIC_PROMPTS } from "../../studio/games/pantomime-panic-prompts.ts";
 import { ruleGuess, wordsOf } from "../../studio/kit/matching.ts";
 import type { Prompt } from "../../studio/kits/charades.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
@@ -123,7 +123,7 @@ function cardOf(seat: Seat): { title: string; body: string; secret: boolean } | 
  * @returns the prompt.
  */
 function promptFor(answer: string): Prompt {
-    const found: Prompt | undefined = SAY_NOTHING_PROMPTS.find((prompt: Prompt) => prompt.answer === answer);
+    const found: Prompt | undefined = PANTOMIME_PANIC_PROMPTS.find((prompt: Prompt) => prompt.answer === answer);
     if (found === undefined) {
         throw new Error(`"${answer}" is not in the list.`);
     }
@@ -188,7 +188,7 @@ async function chooseAndRead(seat: Seat, label: string): Promise<string> {
 }
 
 const gameStart: number = screen.hostLines.length;
-await seats[0]?.phone.startGame(screen, "Say Nothing");
+await seats[0]?.phone.startGame(screen, "Pantomime Panic");
 
 // Turn one: a wrong guess, a near miss, the performer's own words, then the right guess.
 const first: Seat = await nextPerformer();

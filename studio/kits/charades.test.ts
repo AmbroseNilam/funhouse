@@ -1,4 +1,4 @@
-// Proves the charades kit, as Say Nothing: the prompt reaches only the performer's phone and never
+// Proves the charades kit, as Pantomime Panic: the prompt reaches only the performer's phone and never
 // the TV, other phones or the host; guesses are ruled in code, including synonyms, near misses and
 // a performer's own words; both the guesser and the performer score, quicker is worth more, and the
 // performer rotates; stale timers, leavers and the pause menu end things cleanly. Also the list:
@@ -13,7 +13,7 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import type { ScopedFact } from "../../shared/visibility.ts";
 import { localCategory } from "../../room/content-filter.ts";
 import { blueprintProblems, type CharadesBlueprint } from "../blueprint.ts";
-import { SAY_NOTHING_BLUEPRINT } from "../games/say-nothing.ts";
+import { PANTOMIME_PANIC_BLUEPRINT } from "../games/pantomime-panic.ts";
 import type { KitGame } from "../kit/kit.ts";
 import { ruleGuess } from "../kit/matching.ts";
 import { BECAUSE_KIND } from "../kit/primitives.ts";
@@ -25,14 +25,14 @@ import { CHARADES_GIVE_UP_ACTION, createCharadesGame, GO_ACTION, LEVEL_PREFIX, L
 const FOUR: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
 
 /** The decisions of the shipped game. */
-const DECISIONS: CharadesDecisions = SAY_NOTHING_BLUEPRINT.decisions;
+const DECISIONS: CharadesDecisions = PANTOMIME_PANIC_BLUEPRINT.decisions;
 
 /**
- * Say Nothing with the first player going first and the first unused prompt of each level coming up.
- * @param blueprint the blueprint; Say Nothing unless given.
+ * Pantomime Panic with the first player going first and the first unused prompt of each level coming up.
+ * @param blueprint the blueprint; Pantomime Panic unless given.
  * @returns the game.
  */
-function sayNothing(blueprint: CharadesBlueprint = SAY_NOTHING_BLUEPRINT): KitGame<CharadesState> {
+function pantomimePanic(blueprint: CharadesBlueprint = PANTOMIME_PANIC_BLUEPRINT): KitGame<CharadesState> {
     return createCharadesGame(blueprint.box, blueprint.decisions, () => 0);
 }
 
@@ -42,7 +42,7 @@ function sayNothing(blueprint: CharadesBlueprint = SAY_NOTHING_BLUEPRINT): KitGa
  * @returns the game and the first state.
  */
 function begin(players: CartridgePlayer[] = FOUR): { game: KitGame<CharadesState>; state: CharadesState } {
-    const game: KitGame<CharadesState> = sayNothing();
+    const game: KitGame<CharadesState> = pantomimePanic();
     return { game, state: game.cartridge.init(players, {}).state };
 }
 
@@ -115,7 +115,7 @@ describe("the list", () => {
                 assert.ok(DECISIONS.prompts.filter((prompt: Prompt) => prompt.kind === kind && prompt.level === level).length >= 8, `${kind} ${level}`);
             }
         }
-        assert.deepEqual(blueprintProblems(SAY_NOTHING_BLUEPRINT), []);
+        assert.deepEqual(blueprintProblems(PANTOMIME_PANIC_BLUEPRINT), []);
     });
 
     it("can be answered: every answer and every listed synonym rules as a match", () => {
@@ -140,9 +140,9 @@ describe("the list", () => {
     });
 
     it("refuses a list that is too short or has an answer with no key word", () => {
-        const short: CharadesBlueprint = { ...SAY_NOTHING_BLUEPRINT, decisions: { ...DECISIONS, prompts: DECISIONS.prompts.slice(0, 20) } };
+        const short: CharadesBlueprint = { ...PANTOMIME_PANIC_BLUEPRINT, decisions: { ...DECISIONS, prompts: DECISIONS.prompts.slice(0, 20) } };
         assert.ok(blueprintProblems(short).length > 0);
-        const empty: CharadesBlueprint = { ...SAY_NOTHING_BLUEPRINT, decisions: { ...DECISIONS, prompts: [...DECISIONS.prompts, { kind: "action", level: "easy", answer: "The A", also: [] }] } };
+        const empty: CharadesBlueprint = { ...PANTOMIME_PANIC_BLUEPRINT, decisions: { ...DECISIONS, prompts: [...DECISIONS.prompts, { kind: "action", level: "easy", answer: "The A", also: [] }] } };
         assert.ok(blueprintProblems(empty).some((problem: string) => problem.includes("no key word")));
     });
 });
@@ -185,12 +185,12 @@ describe("the prompt stays private", () => {
     });
 
     it("gives the host no rulings at all, since code rules every guess", () => {
-        const phases: PhaseSpec[] = sayNothing().cartridge.manifest.phases;
+        const phases: PhaseSpec[] = pantomimePanic().cartridge.manifest.phases;
         assert.equal(phases.some((phase: PhaseSpec) => phase.hostRulings !== undefined), false);
     });
 
     it("mutes the performer's microphone while guessers hold to talk", () => {
-        const acts: PhaseSpec | undefined = sayNothing().cartridge.manifest.phases.find((phase: PhaseSpec) => phase.id === "acting");
+        const acts: PhaseSpec | undefined = pantomimePanic().cartridge.manifest.phases.find((phase: PhaseSpec) => phase.id === "acting");
         assert.ok(acts !== undefined);
         assert.equal(acts.listening["performer"], "muted");
         assert.equal(acts.listening["*"], "holdToTalk");
@@ -379,7 +379,7 @@ describe("a whole game", () => {
     });
 
     it("starts with a different performer when the draw says so, and covers every seat", () => {
-        const game: KitGame<CharadesState> = createCharadesGame(SAY_NOTHING_BLUEPRINT.box, DECISIONS, () => 0.6);
+        const game: KitGame<CharadesState> = createCharadesGame(PANTOMIME_PANIC_BLUEPRINT.box, DECISIONS, () => 0.6);
         const state: CharadesState = game.cartridge.init(FOUR, {}).state;
         assert.equal(state.performerId, "paper3");
         assert.deepEqual([state.performerId, ...state.upcoming].sort(), ["paper1", "paper2", "paper3", "paper4"]);
@@ -455,14 +455,14 @@ describe("people leaving", () => {
 
 describe("the whole thing, rehearsed", () => {
     it("ends every rehearsal, reaches every phase and finds nothing wrong", () => {
-        const tally = checkBlueprint(SAY_NOTHING_BLUEPRINT);
+        const tally = checkBlueprint(PANTOMIME_PANIC_BLUEPRINT);
         assert.deepEqual(tally.problems, []);
         assert.equal(tally.ended, tally.rehearsals);
         assert.deepEqual(tally.phasesNeverReached, []);
     });
 
     it("catches the answer being put on the TV", () => {
-        const game: KitGame<CharadesState> = sayNothing();
+        const game: KitGame<CharadesState> = pantomimePanic();
         const leaky: KitGame<CharadesState> = {
             cartridge: {
                 ...game.cartridge,

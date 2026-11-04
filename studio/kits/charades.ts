@@ -2,7 +2,7 @@
 // silence while a clock runs on the TV; everyone else shouts guesses at their phones. Code hears each
 // guess as text and rules it against the answer and its listed synonyms, so the host never holds the
 // answer and cannot be talked into a ruling. Points go to the guesser and the performer, the
-// performer rotates, and the host only commentates what the rules tell it. Say Nothing is this kit.
+// performer rotates, and the host only commentates what the rules tell it. Pantomime Panic is this kit.
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control, ControlOption } from "../../shared/controls.ts";
@@ -612,7 +612,7 @@ export function createCharadesGame(givenBox: Box, givenDecisions: CharadesDecisi
             if (label !== undefined) {
                 return { kind: "one", playerId: state.performerId, label };
             }
-            return state.phase === "reveal" ? { kind: "anyone", label: "Look at the screen" } : null;
+            return state.phase === "reveal" ? { kind: "anyone", label: "Here is the answer" } : null;
         },
 
         roleOf(state: CharadesState, playerId: string): string {
