@@ -147,6 +147,13 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     if (block.type === "image") {
         return <figure key={index} className="image"><img src={block.src} alt={block.caption ?? ""} />{block.caption !== undefined ? <figcaption>{block.caption}</figcaption> : null}</figure>;
     }
+    if (block.type === "gallery") {
+        return (
+            <ul key={index} className={`gallery ${block.items.length > 4 ? "many" : ""}`}>
+                {block.items.map((item, place: number) => <li key={place}>{item.src === null ? <div className="gallery-empty" /> : <img src={item.src} alt="" />}<strong>{item.heading}</strong><span>{item.text}</span></li>)}
+            </ul>
+        );
+    }
     if (block.type === "roster") {
         return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={`${player.speaking === true ? "speaking" : ""} ${player.badge === "out" ? "out" : ""}`}>{player.name}{player.badge !== undefined ? <small>{player.badge}</small> : null}</li>)}</ul>;
     }

@@ -16,6 +16,7 @@ export type SceneBlock =
     | { type: "title"; text: string; kicker?: string }
     | { type: "text"; text: string; emphasis?: "normal" | "large" | "whisper" }
     | { type: "image"; src: string; caption?: string }
+    | { type: "gallery"; items: GalleryItem[] }
     | { type: "roster"; players: RosterEntry[] }
     | { type: "timer"; seconds: number; label?: string; running: boolean }
     | { type: "tally"; title: string; rows: TallyRow[] }
@@ -24,6 +25,14 @@ export type SceneBlock =
     | { type: "choices"; options: string[] }
     | { type: "moment"; kind: "night" | "dawn" | "out" | "shot" | "calm"; heading: string; detail?: string }
     | { type: "caption"; speaker: string; text: string; final: boolean };
+
+/** One picture in a row of them, with who made it and the words that go with it. */
+export interface GalleryItem {
+    /** The picture, or null when it never came. */
+    src: string | null;
+    heading: string;
+    text: string;
+}
 
 /**
  * One word card on a shared grid. Who the card belongs to is shown only once it is turned over,

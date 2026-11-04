@@ -41,6 +41,9 @@ function report(problem: string): void {
     throw new Error(problem);
 }
 
+/** How long the first game's end screen stays up, so a person can look at it. */
+const END_SCREEN_MILLISECONDS: number = Number(process.env.END_SCREEN_MILLISECONDS ?? 800);
+
 /** The names of the four players; none is a word a card uses. */
 const FOUR_NAMES: string[] = ["Teacup", "Spoon", "Candle", "Saucer"];
 
@@ -220,11 +223,8 @@ if (REAL_HOST === true) {
     // Leaving straight away would cut the host's last line off, as it would for a real table.
     const linesAtEnd: number = screen.hostLines.length;
     await waitFor(() => screen.hostLines.length > linesAtEnd, "the host's last line");
-    await pause(800);
-    await seats[0]?.phone.chooseRow(screen, "Back to the shelf");
-    console.warn("PASS");
-    process.exit(0);
 }
+await pause(END_SCREEN_MILLISECONDS);
 await seats[0]?.phone.chooseRow(screen, "Back to the shelf");
 await waitFor(() => screen.shell?.screen === "home", "the shelf");
 for (const seat of seats) {
@@ -254,7 +254,7 @@ if (sceneStrings(screenTwo.scene ?? { mood: "neutral", transition: "cut", blocks
 const rowsThree: SceneBlock | undefined = screenTwo.scene?.blocks.find((block: SceneBlock) => block.type === "tally");
 const lowest: number = rowsThree?.type === "tally" ? Math.min(...rowsThree.rows.map((row) => row.count)) : -1;
 if (lowest !== 14) {
-    throw new Error(`With no hat the lowest score for the 3-player game should be 14, got ${lowest}.`);
+    report(`With no hat the lowest score for the 3-player game should be 14, got ${lowest}.`);
 }
 console.warn("Game two passed: three players, matches score, no hat.");
 console.warn("PASS");
