@@ -16,6 +16,7 @@
         "build": "vite build --config landing/vite.config.ts && vite build --config screen/vite.config.ts && vite build --config phone/vite.config.ts",
         "probe:asr": "node --env-file-if-exists=.env tools/probe-asr.ts",
         "probe:spark": "node --env-file-if-exists=.env tools/probe-spark.ts",
+        "probe:image": "node --env-file-if-exists=.env tools/probe-image.ts",
         "typecheck": "tsc --noEmit",
         "lint": "eslint .",
         "verify": "python3 tools/verify.py",
