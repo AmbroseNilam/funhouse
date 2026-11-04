@@ -348,8 +348,9 @@ describe("the blank truth: the pick", () => {
         assert.equal(step.state.scores.paper1, 200);
         assert.match(told(step.facts), /The true answer was/);
         assert.match(told(step.facts), /Tease the fake, never the person it fooled/);
-        const tally = game.cartridge.publicScene(step.state).blocks.find((block) => block.type === "tally");
-        assert.ok(tally?.type === "tally" && tally.rows.some((row) => row.highlight === true && row.label.endsWith("(the truth)")));
+        const lines: string[] = game.cartridge.publicScene(step.state).blocks.flatMap((block) => (block.type === "text" ? [block.text] : []));
+        assert.ok(lines.some((line) => /^The truth: .+ · 1 pick$/.test(line)));
+        assert.equal(lines.filter((line) => line.includes(" · ")).length, 4, "the truth and three fakes, with the lucky writer's dropped");
     });
 
     it("closes at the clock with whoever picked, and ignores timers from other rounds", () => {

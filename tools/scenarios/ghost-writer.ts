@@ -123,13 +123,16 @@ while (over() === false && round < 3) {
         }
         seat.phone.press(wanted.id);
     }
-    await waitFor(() => (screen.scene?.blocks ?? []).some((block: SceneBlock) => block.type === "tally") || over() === true, "the reveal");
+    await waitFor(() => (screen.scene?.blocks ?? []).some((block: SceneBlock) => block.type === "text" && / · \d+ votes?$/.test(block.text) === true) || over() === true, "the reveal");
     const shown: SceneBlock[] = screen.scene?.blocks ?? [];
-    const kicker: string = shown.find((block: SceneBlock) => block.type === "title")?.type === "title" ? (shown.find((block: SceneBlock) => block.type === "title") as { kicker?: string }).kicker ?? "" : "";
-    const tally: SceneBlock | undefined = shown.find((block: SceneBlock) => block.type === "tally");
-    const marked = tally?.type === "tally" ? tally.rows.find((row) => row.highlight === true) : undefined;
-    if (marked === undefined || marked.label.endsWith("(the host)") === false || squash(marked.label).includes(squash(ghostText)) === false) {
-        throw new Error("The reveal doesn't mark the machine's answer as the host's.");
+    const titleBlock: SceneBlock | undefined = shown.find((block: SceneBlock) => block.type === "title");
+    const kicker: string = titleBlock?.type === "title" ? titleBlock.kicker ?? "" : "";
+    const marked = shown.flatMap((block: SceneBlock) => {
+        const match: RegExpExecArray | null = block.type === "text" ? /^(.+?): (.+) · (\d+) votes?$/.exec(block.text) : null;
+        return block.type === "text" && match !== null && block.emphasis === "large" ? [{ owner: match[1] ?? "", text: match[2] ?? "", count: Number(match[3]) }] : [];
+    })[0];
+    if (marked === undefined || marked.owner !== "the host" || squash(marked.text) !== squash(ghostText)) {
+        throw new Error("The reveal doesn't set the machine's answer apart as the host's.");
     }
     if (spotTheMachine === true && (kicker !== "The room caught it" || marked.count !== 4)) {
         throw new Error(`Expected the room to catch it with four votes, saw "${kicker}" and ${marked.count}.`);

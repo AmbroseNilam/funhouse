@@ -51,12 +51,14 @@ function optionLines(): string[] {
 }
 
 /**
- * The tally rows the TV shows.
- * @returns the rows.
+ * The result lines the TV shows after a pick, such as "The truth: murder · 1 pick".
+ * @returns each line's owner, answer, picks and whether it is set large.
  */
-function tallyRows(): { label: string; count: number; highlight: boolean }[] {
-    const block: SceneBlock | undefined = screen.scene?.blocks.find((candidate: SceneBlock) => candidate.type === "tally");
-    return block?.type === "tally" ? block.rows.map((row) => ({ label: row.label, count: row.count, highlight: row.highlight === true })) : [];
+function resultLines(): { owner: string; text: string; count: number; large: boolean }[] {
+    return (screen.scene?.blocks ?? []).flatMap((block: SceneBlock) => {
+        const match: RegExpExecArray | null = block.type === "text" ? /^(.+?): (.+) · (\d+) picks?$/.exec(block.text) : null;
+        return block.type === "text" && match !== null ? [{ owner: match[1] ?? "", text: match[2] ?? "", count: Number(match[3]), large: block.emphasis === "large" }] : [];
+    });
 }
 
 const trueAnswers: string[] = ["giraffe", "murder"];
@@ -143,16 +145,15 @@ while (over() === false && round < 3) {
         }
         seat.phone.press(choice.id);
     }
-    await waitFor(() => tallyRows().some((row: { label: string }) => row.label.endsWith("(the truth)")) || over() === true, "the reveal");
-    const rows = tallyRows();
-    const truth = rows.find((row: { highlight: boolean }) => row.highlight);
-    if (truth === undefined) {
-        throw new Error("The reveal doesn't highlight the true answer.");
+    await waitFor(() => resultLines().some((line) => line.owner === "The truth") || over() === true, "the reveal");
+    const truth = resultLines().find((line) => line.owner === "The truth");
+    if (truth === undefined || truth.large === false) {
+        throw new Error("The reveal doesn't set the true answer apart.");
     }
-    if (standIn === true && squash(truth.label).includes(squash(known)) === false) {
-        throw new Error("The reveal highlights the wrong answer.");
+    if (standIn === true && squash(truth.text) !== squash(known)) {
+        throw new Error("The reveal marks the wrong answer as the truth.");
     }
-    console.warn(`  ok: the reveal marks ${truth.label} as the truth, with ${truth.count} pick(s)`);
+    console.warn(`  ok: the reveal marks ${truth.text} as the truth, with ${truth.count} pick(s)`);
 }
 
 await waitFor(over, "the final scores");

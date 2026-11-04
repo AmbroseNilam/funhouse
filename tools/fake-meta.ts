@@ -69,7 +69,8 @@ const SYNONYMS: readonly (readonly string[])[] = [["giraffe", "camelopard"], ["n
 function groupsFor(items: readonly string[]): string {
     const lines: string[] = [];
     for (const set of SYNONYMS) {
-        const found: number[] = items.map((item: string, index: number) => (set.some((word: string) => item.toLowerCase().includes(word)) ? index + 1 : 0)).filter((index: number) => index > 0);
+        const hits = (item: string): boolean => set.some((word: string) => item.toLowerCase().includes(word));
+        const found: number[] = items.map((item: string, index: number) => (hits(item) ? index + 1 : 0)).filter((index: number) => index > 0);
         if (found.length >= 2) {
             lines.push(found.join(", "));
         }

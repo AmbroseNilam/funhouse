@@ -316,8 +316,9 @@ describe("ghost writer: the vote", () => {
         assert.match(told(step.facts), /Never mock anyone/);
         const scene = game.cartridge.publicScene(step.state);
         assert.ok(scene.blocks.some((block) => block.type === "title" && block.kicker === "The room caught it"));
-        const tally = scene.blocks.find((block) => block.type === "tally");
-        assert.ok(tally?.type === "tally" && tally.rows.some((row) => row.highlight === true && row.label.endsWith("(the host)") && row.count === 2));
+        const lines: string[] = scene.blocks.flatMap((block) => (block.type === "text" ? [block.text] : []));
+        assert.ok(lines.includes("the host: tin trombone · 2 votes"));
+        assert.ok(scene.blocks.some((block) => block.type === "text" && block.emphasis === "large" && block.text.startsWith("the host:")));
     });
 
     it("counts a round as got away with when no answer has fewer votes than the machine's tie", () => {
@@ -349,7 +350,8 @@ describe("ghost writer: rounds, leaving and the end", () => {
             let step: Step<BotState> = voting;
             const g: number = ghostIndex(voting.state);
             for (const [place, id] of ["paper1", "paper2", "paper3", "paper4"].entries()) {
-                const pick: number = round === 1 ? voting.state.options.findIndex((option, index) => option.ghost === false && option.authors.includes(id) === false && index !== g) : g;
+                const human: number = voting.state.options.findIndex((option) => option.ghost === false && option.authors.includes(id) === false);
+                const pick: number = round === 1 ? human : g;
                 step = game.cartridge.apply(step.state, id, `${BOT_VOTE_PREFIX}${pick}`);
                 assert.ok(place < 4);
             }

@@ -161,7 +161,8 @@ export function witPersonas(): Persona<WitState>[] {
         {
             name: "the shrinking table",
             move(glimpse: Glimpse<WitState>): Move {
-                const spare: CartridgePlayer | undefined = glimpse.players.find((player: CartridgePlayer) => matchupOf(glimpse).includes(player.playerId) === false) ?? glimpse.players[0];
+                const bystander = (player: CartridgePlayer): boolean => matchupOf(glimpse).includes(player.playerId) === false;
+                const spare: CartridgePlayer | undefined = glimpse.players.find(bystander) ?? glimpse.players[0];
                 if (glimpse.phase === "writing" && spare !== undefined && glimpse.state.round >= 1) {
                     return { kind: "leave", playerId: spare.playerId };
                 }
