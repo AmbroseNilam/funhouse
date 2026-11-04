@@ -10,6 +10,9 @@ import type { PhoneMessage } from "../../shared/protocol.ts";
 /** Games whose hand holds nothing the rest of the table mustn't see. */
 const OPEN_HAND_GAMES: string[] = ["quizmaster", "twentyDoors", "samePage"];
 
+/** Games where everyone answers blind, so the room mustn't read this seat's answer as it's typed. */
+const HIDDEN_ANSWER_GAMES: string[] = ["samePage"];
+
 /** How many buttons make a question multiple choice. */
 const MULTIPLE_CHOICE_OPTIONS: number = 4;
 
@@ -21,7 +24,7 @@ const LINE_CHARACTER_LIMIT: number = 200;
  * @param props the prompt, field limits, and what to do with the words.
  * @returns the element.
  */
-function TypeBox(props: { prompt: string; note?: string; placeholder: string; maxLength: number; numeric: boolean; send: (value: string) => void }): ReactElement {
+function TypeBox(props: { prompt: string; note?: string; placeholder: string; maxLength: number; numeric: boolean; hidden?: boolean; send: (value: string) => void }): ReactElement {
     const [typed, setTyped] = useState<string>("");
     const submit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
@@ -36,7 +39,7 @@ function TypeBox(props: { prompt: string; note?: string; placeholder: string; ma
             {props.note !== undefined ? <p role="alert">{props.note}</p> : null}
             <label>
                 <span>{props.prompt}</span>
-                <input value={typed} type={props.numeric === true ? "number" : "text"} maxLength={props.maxLength} placeholder={props.placeholder} autoComplete="off" onChange={(event) => { setTyped(event.target.value); }} />
+                <input value={typed} type={props.numeric === true ? "number" : props.hidden === true ? "password" : "text"} maxLength={props.maxLength} placeholder={props.placeholder} autoComplete="off" onChange={(event) => { setTyped(event.target.value); }} />
             </label>
             <button className="tv-button" type="submit">Send it</button>
         </form>
@@ -65,9 +68,10 @@ function SlideBox(props: { control: Extract<Control, { type: "slider" }>; send: 
  * @param control the control.
  * @param index its place, sent back with a button press.
  * @param send sends a message to the room.
+ * @param hideTyping true when an answer must not show on the screen as it is typed.
  * @returns the element, or null for what has no place here.
  */
-function renderControl(control: Control, index: number, send: (message: PhoneMessage) => void): ReactElement | null {
+function renderControl(control: Control, index: number, send: (message: PhoneMessage) => void, hideTyping: boolean): ReactElement | null {
     if (control.type === "buttons" || control.type === "choice") {
         return (
             <div key={index} className="hand-buttons">
@@ -77,7 +81,7 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
         );
     }
     if (control.type === "textInput") {
-        return <TypeBox key={control.id} prompt={control.prompt} {...(control.note !== undefined ? { note: control.note } : {})} placeholder={control.placeholder ?? ""} maxLength={control.maxLength} numeric={false} send={(value: string) => { send({ type: "answer", controlId: control.id, value }); }} />;
+        return <TypeBox key={control.id} prompt={control.prompt} {...(control.note !== undefined ? { note: control.note } : {})} placeholder={control.placeholder ?? ""} maxLength={control.maxLength} numeric={false} hidden={hideTyping} send={(value: string) => { send({ type: "answer", controlId: control.id, value }); }} />;
     }
     if (control.type === "numberInput") {
         return <TypeBox key={control.id} prompt={control.prompt} {...(control.note !== undefined ? { note: control.note } : {})} placeholder="" maxLength={20} numeric={true} send={(value: string) => { send({ type: "answer", controlId: control.id, value: Number(value) }); }} />;
@@ -105,7 +109,7 @@ export function TvHand(props: { gameId: string | null; controls: Control[]; send
     const multipleChoice: boolean = props.controls.some((control: Control) => control.type === "buttons" && control.options.length >= MULTIPLE_CHOICE_OPTIONS);
     return (
         <section className="tv-hand">
-            {props.controls.map((control: Control, index: number) => renderControl(control, index, props.send))}
+            {props.controls.map((control: Control, index: number) => renderControl(control, index, props.send, HIDDEN_ANSWER_GAMES.includes(props.gameId ?? "")))}
             {asking === true || multipleChoice === true ? null : <TypeBox prompt={`Tell ${HOST_NAME}`} placeholder="Type here" maxLength={LINE_CHARACTER_LIMIT} numeric={false} send={(text: string) => { props.send({ type: "typed", text }); }} />}
         </section>
     );

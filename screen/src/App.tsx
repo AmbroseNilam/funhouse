@@ -69,6 +69,9 @@ if (new URLSearchParams(location.search).get("fps") === "1") {
     startFrameMeter();
 }
 
+/** True where a mouse can hover. A wall tablet has none, so a stray tap there never takes a seat. */
+const HAS_MOUSE: boolean = matchMedia("(hover: hover)").matches === true;
+
 /** How long the mouse cursor stays on show after it last moved. */
 const POINTER_IDLE_MILLISECONDS: number = 3000;
 
@@ -297,7 +300,7 @@ export function App(): ReactElement {
     useEffect(() => {
         let timer: number = 0;
         const moved = (event: PointerEvent): void => {
-            if (event.pointerType !== "mouse" || rootRef.current === null) {
+            if (ON_CONSOLE === true || event.pointerType !== "mouse" || rootRef.current === null) {
                 return;
             }
             rootRef.current.dataset.pointer = "live";
@@ -611,7 +614,7 @@ export function App(): ReactElement {
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
     const people: Seat[] = seats.filter((seat: Seat) => seat.guest === false);
     // A seated visitor follows the same rule as any phone. Nobody seated may only sit down by clicking when the table has no people at it.
-    const mayPoint: boolean = ON_CONSOLE === false && state.started === true && (tvSeat.view !== null ? tvSeat.view.pad.canDrive === true : people.length === 0);
+    const mayPoint: boolean = ON_CONSOLE === false && state.started === true && (tvSeat.view !== null ? tvSeat.view.pad.canDrive === true : people.length === 0 && HAS_MOUSE === true);
     const pointing: Pointing = mayPoint === true ? tvSeat.nav : null;
     const backLabel: string | null = tvSeat.view?.pad.backLabel ?? null;
     const showBack: boolean = pointing !== null && backLabel !== null && (shell?.screen === "play" || shell?.screen === "pick" || shell?.screen === "startCard");

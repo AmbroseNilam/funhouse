@@ -3,7 +3,7 @@
 // and the TV page gains no authority of its own. A click only ever says what a phone could say.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { parseMessage, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
+import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage } from "../../shared/protocol.ts";
 import type { NavAction } from "../../shared/shell.ts";
 import type { PhoneView } from "../../shared/controls.ts";
 
@@ -76,6 +76,8 @@ export function useTvSeat(roomCode: string, enabled: boolean): TvSeat {
     const seatedRef = useRef<boolean>(false);
     const retryRef = useRef<number>(0);
     const roomRef = useRef<string>(roomCode);
+    const heldSeatRef = useRef<RememberedSeat | null>(null);
+    const silenceRef = useRef<number>(0);
     roomRef.current = roomCode;
 
     const connect = useCallback((): void => {
@@ -86,17 +88,36 @@ export function useTvSeat(roomCode: string, enabled: boolean): TvSeat {
         const protocol: string = location.protocol === "https:" ? "wss" : "ws";
         const socket: WebSocket = new WebSocket(`${protocol}://${location.host}/ws/phone?room=${encodeURIComponent(room)}`);
         socketRef.current = socket;
+        // A dead network sends no close, so a long quiet means this socket is gone and the seat needs a new one.
+        const heardFromServer = (): void => {
+            window.clearTimeout(silenceRef.current);
+            silenceRef.current = window.setTimeout(() => {
+                if (socketRef.current !== socket) {
+                    return;
+                }
+                socketRef.current = null;
+                seatedRef.current = false;
+                socket.close();
+                if (wantedRef.current === true) {
+                    connect();
+                }
+            }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+        };
+        heardFromServer();
         socket.onopen = (): void => {
-            const seat: RememberedSeat | null = rememberedSeat(room);
+            const seat: RememberedSeat | null = heldSeatRef.current ?? rememberedSeat(room);
             const hello: PhoneMessage = seat === null ? { type: "hello", name: "" } : { type: "hello", name: "", playerId: seat.playerId, resumeToken: seat.resumeToken };
             socket.send(JSON.stringify(hello));
         };
         socket.onmessage = (event: MessageEvent<string>): void => {
+            heardFromServer();
             const message: RoomToPhoneMessage | null = parseMessage<RoomToPhoneMessage>(event.data);
             if (message?.type === "welcome") {
                 seatedRef.current = true;
                 setName(message.name);
                 setFull(false);
+                heldSeatRef.current = { playerId: message.playerId, resumeToken: message.resumeToken };
+                socket.send(JSON.stringify({ type: "presence", away: document.hidden } satisfies PhoneMessage));
                 try {
                     sessionStorage.setItem(seatKey(room), JSON.stringify({ playerId: message.playerId, resumeToken: message.resumeToken } satisfies RememberedSeat));
                 } catch {
@@ -122,6 +143,7 @@ export function useTvSeat(roomCode: string, enabled: boolean): TvSeat {
             if (socketRef.current !== socket) {
                 return;
             }
+            window.clearTimeout(silenceRef.current);
             socketRef.current = null;
             seatedRef.current = false;
             if (wantedRef.current === false || event.code >= FINAL_CLOSE_CODE) {
@@ -141,9 +163,21 @@ export function useTvSeat(roomCode: string, enabled: boolean): TvSeat {
         connect();
     }, [connect, enabled, roomCode]);
 
+    // A hidden page says so, as a phone does, so its seat can't keep the controller from people still here.
+    useEffect(() => {
+        const changed = (): void => {
+            if (seatedRef.current === true && socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current.send(JSON.stringify({ type: "presence", away: document.hidden } satisfies PhoneMessage));
+            }
+        };
+        document.addEventListener("visibilitychange", changed);
+        return (): void => { document.removeEventListener("visibilitychange", changed); };
+    }, []);
+
     useEffect(() => (): void => {
         wantedRef.current = false;
         window.clearTimeout(retryRef.current);
+        window.clearTimeout(silenceRef.current);
         socketRef.current?.close();
         socketRef.current = null;
     }, []);
@@ -173,7 +207,9 @@ export function useTvSeat(roomCode: string, enabled: boolean): TvSeat {
 
     const leave = useCallback((): void => {
         wantedRef.current = false;
+        heldSeatRef.current = null;
         window.clearTimeout(retryRef.current);
+        window.clearTimeout(silenceRef.current);
         const socket: WebSocket | null = socketRef.current;
         socketRef.current = null;
         seatedRef.current = false;

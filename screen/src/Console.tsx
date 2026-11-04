@@ -131,7 +131,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
             <img className="room-art" src="art/hero.webp" alt="" />
             <header className="shelf-heading" key={focused?.id ?? "players"}>
                 {empty === true
-                    ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.<br />No phone? Pick a box with your mouse.</p></>
+                    ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.{pointing !== null ? <><br />No phone? Pick a box with your mouse.</> : null}</p></>
                     : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here."}</p></>}
             </header>
             <div className={`shelf ${empty === true ? "dimmed" : ""}`}>
