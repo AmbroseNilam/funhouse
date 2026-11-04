@@ -101,8 +101,8 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
         return typeof message.name === "string";
     }
     if (message.type === "nav") {
-        const action: { kind?: unknown; delta?: unknown } | null = typeof message.action === "object" ? message.action : null;
-        return action?.kind === "select" || action?.kind === "back" || (action?.kind === "step" && typeof action.delta === "number" && Number.isFinite(action.delta) === true);
+        const action: { kind?: unknown; delta?: unknown; index?: unknown } | null = typeof message.action === "object" ? message.action : null;
+        return action?.kind === "select" || action?.kind === "back" || (action?.kind === "choose" && typeof action.index === "number") || (action?.kind === "step" && typeof action.delta === "number" && Number.isFinite(action.delta) === true);
     }
     if (message.type === "lean") {
         return typeof message.x === "number" && typeof message.y === "number";

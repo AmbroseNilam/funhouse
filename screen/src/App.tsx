@@ -453,7 +453,7 @@ export function App(): ReactElement {
     const seats: Seat[] = shell?.seats ?? [];
     const driver: Seat | undefined = seats.find((seat: Seat) => seat.driving === true);
     const game: ShelfGame | undefined = shell?.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
-    const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo";
+    const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd";
     const stageMood: string = playing === true ? mood : "room";
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
     const backdrop: string | undefined = state.scene?.backdrop ?? game?.art;
@@ -488,7 +488,7 @@ export function App(): ReactElement {
                 {caption !== null ? <Caption speaker={caption.speaker} text={caption.text} final={caption.final} host={caption.speaker === state.hostName} /> : null}
             </div>
             {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
-            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
+            {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

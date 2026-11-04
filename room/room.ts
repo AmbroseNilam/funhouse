@@ -393,6 +393,8 @@ export class Room implements HostStage {
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
+    /** What was chosen before each game, so saying "go again" keeps it. */
+    private readonly lastPicks: Map<string, string> = new Map();
     /** Content being written for the game. The lantern shows it as thinking; nothing else treats the host as busy. */
     private contentBeingWritten: number = 0;
     private hostMood: HostMood | null = null;
@@ -516,6 +518,7 @@ export class Room implements HostStage {
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
+        this.shell.close();
         this.host.close();
         this.speech.close();
         this.scheduleRemark(null);
@@ -1200,7 +1203,8 @@ export class Room implements HostStage {
                 out: this.game?.outIds().includes(playerId) === true,
                 watching: this.game !== null && this.gamePlayerIds.has(playerId) === false,
             })),
-            startGame: (gameId: string): void => { this.startGame(gameId); },
+            startGame: (gameId: string, pick?: string): void => { this.startGame(gameId, false, pick); },
+            pickOpened: (hostLine: string): void => { this.noticeIfAnyoneIsThere(`(Game: ${hostLine} One short line.)`, WAKE_DELAY_MILLISECONDS.screen); },
             endGame: (): void => { this.endGame(); },
             gameOver: (): boolean => this.game !== null && this.game.outcome() !== null,
             focusChanged: (gameId: string | null): void => { this.scheduleRemark(gameId); },
@@ -1305,7 +1309,7 @@ export class Room implements HostStage {
         const short: number = minPlayers - count;
         const blocked: string | null = short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
         const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
-        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, blocked };
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, blocked };
     }
 
     /**
@@ -1374,7 +1378,7 @@ export class Room implements HostStage {
      * @param gameId the game's id or name, in any case.
      * @param replay true when someone asked to play again, which the gap between starts doesn't apply to.
      */
-    private startGame(gameId: string, replay: boolean = false): void {
+    private startGame(gameId: string, replay: boolean = false, pick?: string): void {
         const wanted: string = gameId.trim().toLowerCase();
         const matches = (game: InstalledGame): boolean => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted;
         const installed: InstalledGame | undefined = this.games.find(matches);
@@ -1395,7 +1399,11 @@ export class Room implements HostStage {
         this.gamePlayerIds = new Set(this.players.keys());
         log(this.scope(), `starting ${installed.manifest.id} with ${count}`);
         this.caption = null;
-        this.game = installed.create(this.gameStage());
+        const chosen: string | undefined = pick ?? (replay === true ? this.lastPicks.get(installed.manifest.id) : undefined);
+        if (chosen !== undefined) {
+            this.lastPicks.set(installed.manifest.id, chosen);
+        }
+        this.game = installed.create(this.gameStage(), chosen);
         this.lastActivityAt = Date.now();
         this.lastLullAt = 0;
         this.lullsThisGame = 0;
@@ -2042,8 +2050,13 @@ export class Room implements HostStage {
             }
             return turn !== "";
         }
+        const asksForEveryone: boolean = command === "pause" || (decided === false && (command === "end" || command === "restart"));
+        if (asksForEveryone === true && this.shell.claimForGame(player.playerId) === false) {
+            this.host.notice(`(Game: ${player.name} asked to ${command} the game, but ${this.shell.driverName()} has the controller and decides that for everyone. Tell them in a few words, and that they can leave for themselves from their menu.)`, WAKE_DELAY_MILLISECONDS.speech);
+            return true;
+        }
         if (command === "pause") {
-            return this.shell.pauseGame();
+            return this.shell.pauseGame(player.playerId);
         }
         const actionId: string | undefined = { giveUp: "giveup", skip: "skip", changeTopic: "changeTopic" }[command as string];
         if (actionId !== undefined) {
@@ -2394,7 +2407,7 @@ export class Room implements HostStage {
             status = `${hostName} is thinking…`;
         }
         if (this.hostSpeaking === true) {
-            status = `${hostName} is talking. Press and hold to cut in.`;
+            status = `${hostName} is talking. Hold to cut in.`;
         }
         if (player.hint !== "") {
             status = player.hint;

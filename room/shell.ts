@@ -8,9 +8,15 @@ import type { NavAction, NavAxis, PadView, Seat, ShelfGame, ShellScreen, ShellVi
 const DRIVER_IDLE_MILLISECONDS: number = 10000;
 
 /** The pause menu's fixed rows. */
-const KEEP_PLAYING: string = "Keep playing";
+const RESUME: string = "Resume";
 const HOW_TO_PLAY: string = "How to play";
-const LEAVE_GAME: string = "Leave this game";
+const END_GAME: string = "End the game";
+
+/** The question before a game ends for everyone. The safe answer comes first. */
+const CONFIRM_END_MENU: string[] = ["Keep playing", "End for everyone"];
+
+/** How long a start pick waits for a choice before taking the highlighted one. */
+const PICK_MILLISECONDS: number = 15000;
 
 /** Rows once a game has been decided. */
 const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
@@ -19,7 +25,10 @@ const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
 export interface ShellStage {
     games(): ShelfGame[];
     seats(): Omit<Seat, "driving">[];
-    startGame(gameId: string): void;
+    /** Starts a game, with what was chosen for it if it asks for a choice. */
+    startGame(gameId: string, pick?: string): void;
+    /** A choice before a game has opened, for the host to mention. */
+    pickOpened(hostLine: string): void;
     endGame(): void;
     /** True when the running game has a result. */
     gameOver(): boolean;
@@ -51,6 +60,8 @@ export class Shell {
     private driverId: string | null = null;
     private lastDriveAt: number = 0;
     private freeTimer: NodeJS.Timeout | null = null;
+    private pickTimer: NodeJS.Timeout | null = null;
+    private pausedBy: string = "";
 
     /**
      * Creates a console on the shelf.
@@ -70,7 +81,11 @@ export class Shell {
             return;
         }
         if (action.kind === "back") {
-            this.back();
+            this.back(playerId);
+            return;
+        }
+        if (action.kind === "choose") {
+            this.choose(playerId, action.index);
             return;
         }
         if (action.kind === "step") {
@@ -85,6 +100,7 @@ export class Shell {
      * @param gameId the game.
      */
     public gameStarted(gameId: string): void {
+        this.stopPickTimer();
         this.gameId = gameId;
         this.screen = "play";
         this.focus = 0;
@@ -94,21 +110,25 @@ export class Shell {
 
     /** The game ended; back to its place on the shelf. */
     public gameEnded(): void {
-        if (this.screen === "pause" || this.screen === "howTo") {
+        if (this.isPausedScreen() === true) {
             this.stage.paused(false);
         }
         this.screen = "home";
         this.focus = this.shelfFocus;
+        this.pausedBy = "";
+        // The shelf is anyone's now, so nobody's phone sits there unable to do anything.
+        this.lastDriveAt = 0;
         this.stage.changed();
     }
 
     /** The running game was decided, so its result takes over the screen. */
     public gameDecided(): void {
-        if (this.screen === "pause" || this.screen === "howTo") {
+        if (this.isPausedScreen() === true) {
             this.stage.paused(false);
         }
         this.screen = "play";
         this.focus = 0;
+        this.pausedBy = "";
         this.stage.changed();
     }
 
@@ -151,6 +171,7 @@ export class Shell {
             seats,
             gameOver: this.isDecided(),
             steppedOut: this.stage.steppedOut(),
+            pausedBy: this.pausedBy,
         };
     }
 
@@ -176,6 +197,8 @@ export class Shell {
             canDrive,
             backLabel: canDrive === true ? this.backLabel() : null,
             canSelect: count > 0 && canDrive === true,
+            pausedBy: this.pausedBy,
+            confirmEnd: this.screen === "confirmEnd" && playerId === this.driverId,
         };
     }
 
@@ -186,7 +209,53 @@ export class Shell {
      */
     private mayDrive(playerId: string): boolean {
         const driverPresent: boolean = this.stage.seats().some((seat) => seat.playerId === this.driverId && seat.connected === true && seat.phoneDown === false && seat.out === false);
-        return this.driverId === playerId || driverPresent === false || Date.now() - this.lastDriveAt >= DRIVER_IDLE_MILLISECONDS;
+        if (this.driverId === playerId || driverPresent === false) {
+            return true;
+        }
+        // During a game the controller decides for everyone, so it can't be taken just because it's been quiet.
+        return this.gameIsOn() === false && Date.now() - this.lastDriveAt >= DRIVER_IDLE_MILLISECONDS;
+    }
+
+    /**
+     * Whether a game is in play or paused, rather than the shelf or a finished game.
+     * @returns true while a game is on.
+     */
+    private gameIsOn(): boolean {
+        return this.isPausedScreen() === true || (this.screen === "play" && this.isDecided() === false);
+    }
+
+    /**
+     * Whether the game is paused behind this screen.
+     * @returns true when it is.
+     */
+    private isPausedScreen(): boolean {
+        return this.screen === "pause" || this.screen === "howTo" || this.screen === "confirmEnd";
+    }
+
+    /**
+     * Whether this person may pause, resume or end the game for everyone, taking the controller if it's free.
+     * @param playerId who.
+     * @returns false while someone else holds it.
+     */
+    public claimForGame(playerId: string): boolean {
+        return this.claimDrive(playerId);
+    }
+
+    /**
+     * Who holds the controller.
+     * @returns their name, or an empty string.
+     */
+    public driverName(): string {
+        return this.nameOf(this.driverId);
+    }
+
+    /**
+     * Finds someone's name.
+     * @param playerId who.
+     * @returns the name, or an empty string.
+     */
+    private nameOf(playerId: string | null): string {
+        return this.stage.seats().find((seat) => seat.playerId === playerId)?.name ?? "";
     }
 
     /**
@@ -224,8 +293,14 @@ export class Shell {
         if (this.screen === "players") {
             return ["Back to the shelf"];
         }
+        if (this.screen === "pick") {
+            return (this.currentGame()?.startPick?.choices ?? []).map((choice) => choice.label);
+        }
+        if (this.screen === "confirmEnd") {
+            return CONFIRM_END_MENU;
+        }
         if (this.screen === "pause") {
-            return [KEEP_PLAYING, HOW_TO_PLAY, ...(this.currentGame()?.pauseActions ?? []).map((action) => action.label), LEAVE_GAME];
+            return [RESUME, HOW_TO_PLAY, ...(this.currentGame()?.pauseActions ?? []).map((action) => action.label), END_GAME];
         }
         if (this.screen === "howTo") {
             return ["Back"];
@@ -238,7 +313,7 @@ export class Shell {
      * @returns the axis, or null when there's nothing to move through.
      */
     private axis(): NavAxis {
-        if (this.screen === "home") {
+        if (this.screen === "home" || this.screen === "pick") {
             return "x";
         }
         return this.itemCount() > 1 ? "y" : null;
@@ -257,11 +332,11 @@ export class Shell {
      * @returns the label, or null.
      */
     private backLabel(): string | null {
-        if (this.screen === "game" || this.screen === "players" || this.screen === "howTo") {
+        if (this.screen === "game" || this.screen === "pick" || this.screen === "players" || this.screen === "howTo" || this.screen === "confirmEnd") {
             return "Back";
         }
         if (this.screen === "pause") {
-            return "Resume";
+            return RESUME;
         }
         return this.screen === "play" && this.isDecided() === false ? "Pause" : null;
     }
@@ -271,6 +346,9 @@ export class Shell {
      * @param delta how far.
      */
     private step(delta: number): void {
+        if (this.screen === "pick") {
+            this.restartPickTimer();
+        }
         const next: number = Math.max(0, Math.min(this.itemCount() - 1, this.focus + delta));
         if (next === this.focus) {
             this.stage.edge();
@@ -297,12 +375,20 @@ export class Shell {
             this.selectOnGamePage();
             return;
         }
+        if (this.screen === "pick") {
+            this.takePick();
+            return;
+        }
         if (this.screen === "players" || this.screen === "howTo") {
-            this.back();
+            this.back(playerId);
             return;
         }
         if (this.screen === "pause") {
             this.selectOnPause(playerId);
+            return;
+        }
+        if (this.screen === "confirmEnd") {
+            this.selectOnConfirmEnd(playerId);
             return;
         }
         if (this.isDecided() === true) {
@@ -323,7 +409,7 @@ export class Shell {
     /** Play, or back, on a game's page. */
     private selectOnGamePage(): void {
         if (this.focus === 1) {
-            this.back();
+            this.back(this.driverId ?? "");
             return;
         }
         const game: ShelfGame | undefined = this.currentGame();
@@ -334,7 +420,73 @@ export class Shell {
             this.stage.refused(game.blocked);
             return;
         }
+        if (game.startPick !== null) {
+            this.openPick(game);
+            return;
+        }
         this.stage.startGame(game.id);
+    }
+
+    /**
+     * Opens a game's choice, with its first choice highlighted.
+     * @param game the game.
+     */
+    private openPick(game: ShelfGame): void {
+        this.gameId = game.id;
+        this.screen = "pick";
+        this.focus = 0;
+        this.restartPickTimer();
+        this.stage.pickOpened(game.startPick?.hostLine ?? "");
+        this.stage.changed();
+    }
+
+    /** Starts the game with whatever is highlighted. If it can't start, goes back to its page. */
+    private takePick(): void {
+        this.stopPickTimer();
+        const game: ShelfGame | undefined = this.currentGame();
+        const choice: { id: string; label: string } | undefined = game?.startPick?.choices[this.focus];
+        if (game === undefined || choice === undefined) {
+            return;
+        }
+        this.stage.startGame(game.id, choice.id);
+        if (this.screen === "pick") {
+            this.screen = "game";
+            this.focus = 0;
+            this.stage.changed();
+        }
+    }
+
+    /** Gives a choice its full time again, so it isn't taken from under someone's thumb. */
+    private restartPickTimer(): void {
+        this.stopPickTimer();
+        this.pickTimer = setTimeout(() => { this.takePick(); }, PICK_MILLISECONDS);
+        this.pickTimer.unref();
+    }
+
+    /** Stops waiting for a choice. */
+    private stopPickTimer(): void {
+        if (this.pickTimer !== null) {
+            clearTimeout(this.pickTimer);
+            this.pickTimer = null;
+        }
+    }
+
+    /** Stops anything still waiting, as the room closes. */
+    public close(): void {
+        this.stopPickTimer();
+    }
+
+    /**
+     * Chooses a row straight from a phone's own button, as if the highlight were on it.
+     * @param playerId who.
+     * @param index the row.
+     */
+    private choose(playerId: string, index: number): void {
+        if (Number.isInteger(index) === false || index < 0 || index >= this.itemCount()) {
+            return;
+        }
+        this.focus = index;
+        this.select(playerId);
     }
 
     /**
@@ -343,8 +495,8 @@ export class Shell {
      */
     private selectOnPause(playerId: string): void {
         const row: string | undefined = this.menu()[this.focus];
-        if (row === KEEP_PLAYING) {
-            this.back();
+        if (row === RESUME) {
+            this.back(playerId);
             return;
         }
         if (row === HOW_TO_PLAY) {
@@ -353,44 +505,69 @@ export class Shell {
             this.stage.changed();
             return;
         }
-        if (row === LEAVE_GAME) {
-            this.stage.endGame();
+        if (row === END_GAME) {
+            this.screen = "confirmEnd";
+            this.focus = 0;
+            this.stage.changed();
             return;
         }
         const action: { id: string; label: string } | undefined = this.currentGame()?.pauseActions.find((candidate) => candidate.label === row);
         if (action !== undefined) {
             this.screen = "play";
             this.focus = 0;
+            this.pausedBy = "";
             this.stage.paused(false);
             this.stage.gameAction(playerId, action.id);
             this.stage.changed();
         }
     }
 
+    /**
+     * Answers whether to end the game for everyone.
+     * @param playerId who answered.
+     */
+    private selectOnConfirmEnd(playerId: string): void {
+        if (this.focus === 1) {
+            this.stage.endGame();
+            return;
+        }
+        this.back(playerId);
+    }
+
     /** Play again, or back to the shelf, once a game is decided. */
     private selectAfterGame(): void {
         const again: boolean = this.focus === 0;
-        const gameId: string | null = this.gameId;
+        const game: ShelfGame | undefined = this.currentGame();
         this.stage.endGame();
-        if (again === true && gameId !== null) {
-            this.stage.startGame(gameId);
+        if (again === false || game === undefined) {
+            return;
         }
+        if (game.startPick !== null) {
+            this.openPick(game);
+            return;
+        }
+        this.stage.startGame(game.id);
     }
 
     /**
      * Pauses a game in play, for a spoken request.
+     * @param playerId who asked.
      * @returns true when it paused.
      */
-    public pauseGame(): boolean {
+    public pauseGame(playerId: string): boolean {
         if (this.screen !== "play" || this.isDecided() === true) {
             return false;
         }
-        this.back();
+        this.back(playerId);
         return true;
     }
 
-    /** Goes to the parent screen; in a game, pauses. */
-    private back(): void {
+    /**
+     * Goes to the parent screen; in a game, pauses.
+     * @param playerId who asked, who's named if this pauses the game.
+     */
+    private back(playerId: string): void {
+        this.stopPickTimer();
         const parent: ShellScreen | null = this.parentScreen();
         if (parent === null) {
             return;
@@ -399,9 +576,11 @@ export class Shell {
         this.screen = parent;
         this.focus = parent === "home" ? this.shelfFocus : leaving === "howTo" ? 1 : 0;
         if (leaving === "play") {
+            this.pausedBy = this.nameOf(playerId);
             this.stage.paused(true);
         }
         if (parent === "play") {
+            this.pausedBy = "";
             this.stage.paused(false);
         }
         this.stage.changed();
@@ -415,7 +594,10 @@ export class Shell {
         if (this.screen === "game" || this.screen === "players") {
             return "home";
         }
-        if (this.screen === "howTo") {
+        if (this.screen === "pick") {
+            return "game";
+        }
+        if (this.screen === "howTo" || this.screen === "confirmEnd") {
             return "pause";
         }
         if (this.screen === "pause") {

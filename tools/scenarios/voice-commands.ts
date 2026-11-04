@@ -60,7 +60,7 @@ expect(progress() === before + 1, "asking whose turn isn't taken as an answer");
 sam.say("pause the game");
 await waitFor(() => screen.shell?.screen === "pause", "the pause menu");
 expect(true, "pause opens the pause menu");
-await sam.chooseRow(screen, "Keep playing");
+await sam.chooseRow(screen, "Resume");
 await waitFor(() => screen.shell?.screen === "play", "play to resume");
 sam.say("change the topic");
 await pause(800);
@@ -79,7 +79,8 @@ expect(screen.hostLines.length === lines, "say that again repeats the last line 
 
 // Words that aren't a command right now, like skip in Twenty Doors, stay ordinary talk.
 await pause(10000);
-await sam.fromPauseMenu(screen, "Leave this game");
+await sam.fromPauseMenu(screen, "End the game");
+await sam.chooseRow(screen, "End for everyone");
 await waitFor(() => screen.shell?.screen === "home", "the shelf");
 await pause(10000);
 await sam.startGame(screen, "Twenty Doors");

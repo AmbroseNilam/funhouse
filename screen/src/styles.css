@@ -186,6 +186,9 @@
     .place-cards .watching-count { flex: none; align-self: center; padding: 0; background: none; box-shadow: none; rotate: 0deg; font-size: calc(28 * var(--u)); font-weight: 500; color: var(--paper); text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
     .play-column .blocks { position: relative; left: auto; right: auto; top: auto; bottom: auto; flex: 1; min-height: 0; }
     .build-tag { position: absolute; right: calc(24 * var(--u)); bottom: calc(10 * var(--u)); color: var(--paper); opacity: 0.45; font-size: calc(20 * var(--u)); z-index: 5; }
+    .pick-boxes { position: absolute; left: calc(80 * var(--u)); right: calc(80 * var(--u)); top: calc(330 * var(--u)); display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(26 * var(--u)); margin: 0; padding: 0; list-style: none; }
+    .pick-boxes li { display: flex; align-items: center; justify-content: center; min-height: calc(130 * var(--u)); padding: calc(12 * var(--u)) calc(20 * var(--u)); background: var(--card); color: var(--paper); font-size: calc(38 * var(--u)); font-weight: 600; line-height: 1.1; text-align: center; box-shadow: calc(8 * var(--u)) calc(8 * var(--u)) 0 #000; transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .pick-boxes li.focused { background: var(--paper); color: var(--paper-ink); transform: translateY(calc(-8 * var(--u))) rotate(-1deg); }
     .corner-tag { position: absolute; right: calc(80 * var(--u)); top: calc(50 * var(--u)); text-align: right; }
     .corner-tag strong { display: block; font-size: calc(44 * var(--u)); font-weight: 600; letter-spacing: 0.08em; line-height: 1.1; }
     .corner-tag small { color: var(--paper); font-size: calc(28 * var(--u)); }

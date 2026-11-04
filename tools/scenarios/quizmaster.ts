@@ -177,7 +177,7 @@ console.warn(`Waiting out the ${QUESTION_SECONDS} second timer.`);
 await reach(3, "the timer to move past question 2");
 
 // Question 3: a skip.
-await alex.fromPauseMenu(screen, "Skip this question");
+await sam.fromPauseMenu(screen, "Skip this question");
 await reach(4, "a skip to move on");
 
 // Question 4: Alex answers right.

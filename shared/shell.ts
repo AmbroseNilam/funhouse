@@ -3,10 +3,22 @@
 // only ever says which way the thumb went.
 
 /** Which screen the TV is on. */
-export type ShellScreen = "home" | "game" | "players" | "play" | "pause" | "howTo";
+export type ShellScreen = "home" | "game" | "pick" | "players" | "play" | "pause" | "howTo" | "confirmEnd";
 
 /** Which way a phone's swipes move the highlight, if at all. */
 export type NavAxis = "x" | "y" | null;
+
+/**
+ * A choice to make before a game begins. Any game can have one: the TV shows the choices as boxes, a
+ * phone moves through them like the shelf, and the first is ready if nobody chooses in time.
+ */
+export interface StartPick {
+    /** The heading on the TV. */
+    prompt: string;
+    /** What the host is asked to say as it opens. */
+    hostLine: string;
+    choices: { id: string; label: string }[];
+}
 
 /** One game box on the shelf. */
 export interface ShelfGame {
@@ -20,6 +32,8 @@ export interface ShelfGame {
     pauseActions: { id: string; label: string }[];
     /** Why it can't start right now, or null when it can. */
     blocked: string | null;
+    /** What to choose before it begins, or null when it just begins. */
+    startPick: StartPick | null;
 }
 
 /** A person at the table. */
@@ -57,6 +71,8 @@ export interface ShellView {
     gameOver: boolean;
     /** True when every seat in a running game has dropped, so the game waits for them. */
     steppedOut: boolean;
+    /** Who paused the game, or an empty string when it isn't paused. */
+    pausedBy: string;
 }
 
 /** What a phone needs to know to behave as a controller. */
@@ -77,10 +93,15 @@ export interface PadView {
     backLabel: string | null;
     /** True when a tap on the surface would do something. */
     canSelect: boolean;
+    /** Who paused the game, or an empty string when it isn't paused. */
+    pausedBy: string;
+    /** True on the phone that's being asked whether to end the game for everyone. */
+    confirmEnd: boolean;
 }
 
 /** What a phone's thumb did. */
 export type NavAction =
     | { kind: "step"; delta: number }
     | { kind: "select" }
+    | { kind: "choose"; index: number }
     | { kind: "back" };

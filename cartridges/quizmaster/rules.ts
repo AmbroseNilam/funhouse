@@ -1,6 +1,7 @@
 // Quizmaster's rules core. The host's model writes six questions on the players' topic, and only the
 // host is told each answer. Right answers score 2, close ones 1; each player answers once per question.
 
+import type { StartPick } from "../../shared/shell.ts";
 import type { Turn } from "../../shared/turn.ts";
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
@@ -134,14 +135,53 @@ function completeQuestions(questions: QuizQuestion[]): QuizQuestion[] {
     return [...questions, ...FALLBACK_QUESTIONS].slice(0, QUESTION_COUNT);
 }
 
+/** Topics offered before a game. Nothing here needs a specialist or starts an argument. */
+const SUGGESTED_TOPICS: string[] = ["Movies", "Animals", "Food and drink", "Music", "Space", "Geography"];
+
+/** More topics a surprise can land on. */
+const SURPRISE_TOPICS: string[] = [...SUGGESTED_TOPICS, "Inventions", "Board games", "Dinosaurs", "The human body", "Cartoons", "Oceans"];
+
+/** The id of the choice that keeps the spoken topic. */
+const OWN_TOPIC: string = "own";
+
+/** The id of the choice that picks a topic for them. */
+const SURPRISE: string = "surprise";
+
+/** The choice before a game: a suggested topic, their own, or a surprise. */
+export const QUIZMASTER_PICK: StartPick = {
+    prompt: "What's the quiz on?",
+    hostLine: "They can slide to a topic and tap it, or choose to say their own. If they don't, you'll surprise them.",
+    choices: [{ id: SURPRISE, label: "Surprise me" }, { id: OWN_TOPIC, label: "Say your own topic" }, ...SUGGESTED_TOPICS.map((topic: string) => ({ id: topic, label: topic }))],
+};
+
 /**
  * Builds the Quizmaster cartridge.
+ * @param chosen what was chosen before the game, if anything; without it the room is asked for a topic.
+ * @param random a function returning [0, 1), for a surprise topic.
  * @returns the cartridge.
  */
-export function createQuizmaster(): Cartridge<QuizmasterState> {
+export function createQuizmaster(chosen?: string, random: () => number = Math.random): Cartridge<QuizmasterState> {
     const publicFact = (kind: string, text: string): ScopedFact => ({ scope: { kind: "public" }, kind, text });
     const nameOf = (state: QuizmasterState, playerId: string): string => state.players.find((player) => player.playerId === playerId)?.name ?? "Someone";
     const scoreOf = (state: QuizmasterState, playerId: string): number => state.scores[playerId] ?? 0;
+
+    /**
+     * Sets off writing the questions on a topic.
+     * @param state the state.
+     * @param topic the topic.
+     * @returns the step.
+     */
+    const prepare = (state: QuizmasterState, topic: string): Step<QuizmasterState> => {
+        const request: string = [
+            `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
+            "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
+            "Only use facts you are sure of, and don't put the answer in the question.",
+            "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field, plus a \"source\" field with the address of the page it came from if you looked it up.",
+        ].join(" ");
+        const next: QuizmasterState = { ...state, phase: "preparing", topic };
+        const fact: ScopedFact = publicFact("preparing", `The topic is ${topic}. Say you are writing the questions now, in one short line.`);
+        return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text).length >= QUESTION_COUNT, cacheable: true } };
+    };
 
     /**
      * Tells the host to read a question exactly.
@@ -224,6 +264,12 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
             const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "" };
+            if (chosen === SURPRISE) {
+                return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
+            }
+            if (chosen !== undefined && chosen !== OWN_TOPIC) {
+                return prepare(state, chosen);
+            }
             return { state, facts: [publicFact("ask-topic", "Welcome them to the quiz and ask what topic they would like to be quizzed on.")], nextPhaseId: "topic" };
         },
 
@@ -302,15 +348,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 if (topic === "") {
                     return { state, facts: [] };
                 }
-                const request: string = [
-                    `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
-                    "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
-                    "Only use facts you are sure of, and don't put the answer in the question.",
-                    "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field, plus a \"source\" field with the address of the page it came from if you looked it up.",
-                ].join(" ");
-                const next: QuizmasterState = { ...state, phase: "preparing", topic };
-                const fact: ScopedFact = publicFact("preparing", `The topic is ${topic}. Say you are writing the questions now, in one short line.`);
-                return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text).length >= QUESTION_COUNT, cacheable: true } };
+                return prepare(state, topic);
             }
             if (state.phase === "question" && (event.ruling === "right" || event.ruling === "close" || event.ruling === "wrong")) {
                 return score(state, event.ruling, event.playerId);

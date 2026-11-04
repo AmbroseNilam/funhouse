@@ -251,7 +251,8 @@ if (screen.shell?.gameOver === true) {
     await seats[0]?.phone.chooseRow(screen, "Back to the shelf");
 }
 if (screen.shell?.gameOver !== true) {
-    await seats[0]?.phone.fromPauseMenu(screen, "Leave this game");
+    await seats[0]?.phone.fromPauseMenu(screen, "End the game");
+    await seats[0]?.phone.chooseRow(screen, "End for everyone");
 }
 await waitFor(() => screen.shell?.screen === "home", "the shelf");
 console.warn("PASS");

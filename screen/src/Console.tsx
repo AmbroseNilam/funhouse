@@ -197,9 +197,10 @@ export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; 
         <div className="pause-backing">
             {shell.screen === "pause" ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
             <section className="pause-card">
+                {shell.screen === "confirmEnd" ? <h2>End the game for everyone?</h2> : null}
                 {shell.screen === "howTo"
                     ? <><h2>How to play {game?.name ?? ""}</h2><ol className="steps">{game?.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol></>
-                    : <h2>Paused</h2>}
+                    : shell.screen === "pause" ? <h2>{shell.pausedBy === "" ? "Paused" : `Paused by ${shell.pausedBy}`}</h2> : null}
                 <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
             </section>
         </div>
@@ -244,6 +245,20 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
     }
     const game: ShelfGame | undefined = shell.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
+    if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
+        return (
+            <section className="screen pick-screen">
+                <img className="room-art" src={game.art} alt="" />
+                <header className="shelf-heading">
+                    <h1>{game.startPick.prompt}</h1>
+                    <p>Slide and tap on your phone. {HOST_NAME} takes what's highlighted if nobody chooses.</p>
+                </header>
+                <ul className="pick-boxes">
+                    {shell.menu.map((label: string, index: number) => <li key={label} className={index === shell.focus ? "focused" : ""}>{label}</li>)}
+                </ul>
+            </section>
+        );
+    }
     if (shell.screen === "game" && game !== undefined) {
         return <GamePage shell={shell} driver={driver} game={game} />;
     }

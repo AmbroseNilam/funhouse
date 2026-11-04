@@ -2,6 +2,7 @@
 // to choose one, the model said garlic press 6 times in 8, so a second game would repeat the first.
 // Every yes, no, sort-of or wrong guess opens a door. Twenty doors without the answer loses.
 
+import type { StartPick } from "../../shared/shell.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
@@ -88,12 +89,20 @@ function shownQuestion(question: string): string {
     return capital.length > SHOWN_QUESTION_CHARACTERS ? `${capital.slice(0, SHOWN_QUESTION_CHARACTERS).trimEnd()}…` : `${capital}?`;
 }
 
+/** The choice before a game: a kind of secret, or whatever the host fancies. */
+export const TWENTY_DOORS_PICK: StartPick = {
+    prompt: "What kind of secret?",
+    hostLine: "They can slide to a kind of secret and tap it. If they don't, you'll surprise them.",
+    choices: [{ id: "surprise", label: "Surprise me" }, ...CATEGORIES.map((category) => ({ id: category.name, label: category.name.charAt(0).toUpperCase() + category.name.slice(1) }))],
+};
+
 /**
  * Builds the Twenty Doors cartridge with an injectable random source.
  * @param random a function returning [0, 1); defaults to Math.random.
+ * @param chosen the kind of secret chosen before the game, if any.
  * @returns the cartridge.
  */
-export function createTwentyDoors(random: () => number = Math.random): Cartridge<TwentyDoorsState> {
+export function createTwentyDoors(random: () => number = Math.random, chosen?: string): Cartridge<TwentyDoorsState> {
     const publicFact = (kind: string, text: string, quiet: boolean = false): ScopedFact => ({ scope: { kind: "public" }, kind, text, quiet });
     const nameOf = (state: TwentyDoorsState, playerId: string): string => state.players.find((player) => player.playerId === playerId)?.name ?? "Someone";
 
@@ -132,7 +141,7 @@ export function createTwentyDoors(random: () => number = Math.random): Cartridge
         manifest: TWENTY_DOORS_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
-            const category: { name: string; secrets: string[] } = pick(CATEGORIES, random) ?? { name: "an animal", secrets: ["Platypus"] };
+            const category: { name: string; secrets: string[] } = CATEGORIES.find((candidate) => candidate.name === chosen) ?? pick(CATEGORIES, random) ?? { name: "an animal", secrets: ["Platypus"] };
             const secret: string = pick(category.secrets, random) ?? "Platypus";
             const state: TwentyDoorsState = { phase: "asking", stoppedWaitingForPicture: false, players, category: category.name, secret, doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
             return {
