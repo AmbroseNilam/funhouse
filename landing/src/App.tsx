@@ -160,6 +160,7 @@ export function App(): ReactElement {
                     </p>
                 ) : null}
                 <p className="fine">You don't need an account. Players enter a name and allow the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
+                <p className="fine"><strong>Quick judgments.</strong> Some typed answers, and some of what you say in rooms trying this, go to TypeSafe AI, whose Jev model judges things like whether two answers mean the same. We haven't been able to confirm how long TypeSafe keeps that text or whether it trains on it.</p>
             </footer>
         </main>
     );
