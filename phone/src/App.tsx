@@ -794,6 +794,14 @@ export function App(): ReactElement {
         return (): void => { document.documentElement.style.background = ""; };
     }, [seatColour]);
 
+    const privateRef = useRef<HTMLElement>(null);
+    const typedEntryId: string = state.view?.controls.find((control: Control) => control.type === "textInput" || control.type === "numberInput")?.id ?? "";
+    // A typed answer may be all someone has, so its box and Send come into view rather than sitting below the fold.
+    useEffect(() => {
+        if (typedEntryId !== "" && privateRef.current !== null) {
+            privateRef.current.scrollTop = privateRef.current.scrollHeight;
+        }
+    }, [typedEntryId]);
     const [outOfDate, setOutOfDate] = useState<boolean>(false);
     // A page cached from an older release says so; one open when the server restarts reloads by itself.
     useEffect(() => {
@@ -1189,7 +1197,7 @@ export function App(): ReactElement {
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
     const quietUnderCards: boolean = hasPrivate === true && waiting === "" && canTalk === false;
     const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
-    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
+    const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true && hasPrivate === false ? "Your mic is off" : "";
     const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
@@ -1221,7 +1229,7 @@ export function App(): ReactElement {
                     </section>
                 </section>
             ) : null}
-            {hasPrivate === true && pad?.pausedBy === "" ? <section className="private" data-scrolls>{privateControls}</section> : null}
+            {hasPrivate === true && pad?.pausedBy === "" ? <section ref={privateRef} className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>
                 <div className="thumb" aria-hidden="true" />
