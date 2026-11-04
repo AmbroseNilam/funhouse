@@ -2261,6 +2261,7 @@ export class Room implements HostStage, AgentHost {
             endAgentLinks(this, player.agent);
         }
         this.agentLinks.delete(player.playerId);
+        this.guestPrompts.delete(player.playerId);
         endUnusedAgentLink(this, player.playerId);
         const lastGuest: Player | undefined = this.people().length === 0 ? [...this.players.values()][0] : undefined;
         if (lastGuest !== undefined) {

@@ -25,6 +25,9 @@ const NAME_PATTERN: RegExp = /^[A-Za-z][A-Za-z'-]{1,13}$/;
 /** What reads as an order to a machine rather than a description of a character. */
 const NOT_A_CHARACTER: RegExp = /\b(ignore|disregard|instructions?|system|prompt|rules?|reveal|secrets?|always win|developer|admin|you must)\b|\[\[|\]\]|\(\s*game\s*:/i;
 
+/** Plainly hateful or cruel characters, refused with a joke before the model can soften them into something it will write. The filter allows rude, and these aren't rude. */
+const HATEFUL: RegExp = /\b(racist|racism|sexist|sexism|homophob\w*|transphob\w*|bigot\w*|nazis?|hitler|klan|kkk|slavers?|supremacist\w*|antisemit\w*|misogynist\w*|terrorist\w*|rapists?|pedophiles?|paedophiles?|molesters?|n[-*]?word)\b/i;
+
 /** What the model is told. The line arrives as data, and its answer is checked as if it were hostile. */
 const PERSONA_SYSTEM: string = [
     "You invent a character for a family party game from a short description a player typed.",
@@ -83,7 +86,7 @@ function soundsLike(name: string, hostName: string): boolean {
  */
 export async function personaFromLine(line: string, hostName: string, classify: (text: string) => Promise<boolean>, model: GuestModel = askSpark): Promise<PersonaResult> {
     const refused: PersonaResult = { persona: null, refused: true };
-    if (NOT_A_CHARACTER.test(line) === true) {
+    if (NOT_A_CHARACTER.test(line) === true || HATEFUL.test(line) === true) {
         return refused;
     }
     // The check and the writing run together, so a person waits for the slower one and not both. A refused line's reply is thrown away.
@@ -95,7 +98,7 @@ export async function personaFromLine(line: string, hostName: string, classify: 
     }
     const name: string = /^NAME:\s*(.+)$/im.exec(reply)?.[1]?.trim() ?? "";
     const manner: string = (/^MANNER:\s*(.+)$/im.exec(reply)?.[1] ?? "").replace(/[()[\]{}:"]/g, " ").replace(/\s+/g, " ").trim().slice(0, MANNER_LIMIT);
-    if (NAME_PATTERN.test(name) === false || manner === "" || NOT_A_CHARACTER.test(manner) === true) {
+    if (NAME_PATTERN.test(name) === false || manner === "" || NOT_A_CHARACTER.test(manner) === true || HATEFUL.test(manner) === true) {
         return { persona: null, refused: false };
     }
     const fullName: string = `${name} the AI`;
