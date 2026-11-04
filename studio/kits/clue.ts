@@ -522,7 +522,7 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
         const lost: number = givers(state).length - next.survivors.length;
         const listed: string = next.survivors.length === 0 ? "None survived." : `The survivors, in order: ${next.survivors.map((clue: Clue) => `"${clue.text}"`).join(", ")}.`;
         const text: string = [
-            `The clues are in. ${lost} of ${givers(state).length} did not make it, and you don't know which or why; don't guess.`,
+            lost === 0 ? "The clues are in and every one survived." : `The clues are in. ${lost} of ${givers(state).length} did not make it, and you don't know which or why; don't guess.`,
             `${listed} Build the moment, then read them to ${nameOf(state, state.guesserId)} one at a time.`,
         ].join(" ");
         return { state: next, facts: because(publicFact("reveal", text), CLUE_DECISIONS.beat), nextPhaseId: "reveal", timers: { beat: decisions.beatSeconds } };
@@ -564,7 +564,8 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
      * @returns the step.
      */
     const abandon = (state: ClueState, verdict: ClueVerdict, decision: string): Step<ClueState> => {
-        return finishRound(state.phase === "writing" ? analyse(state) : state, verdict, "", decision);
+        // Passing or leaving mid-writing blames nobody for a missing clue, so only the clues in hand are merged.
+        return finishRound(state.phase === "writing" ? { ...analyse(state), silent: [] } : state, verdict, "", decision);
     };
 
     /**
@@ -772,7 +773,7 @@ export function createClueGame(givenBox: Box, givenDecisions: ClueDecisions, ran
                     blocks.push({ type: "text", text: "Nothing survived.", emphasis: "large" });
                 }
                 if (state.phase === "guess" || state.shown >= state.survivors.length) {
-                    blocks.push({ type: "text", text: `${lost} ${ofCount(lost, "clue", "clues")} did not make it.`, emphasis: "whisper" });
+                    blocks.push({ type: "text", text: lost === 0 ? "Every clue survived." : `${lost} ${ofCount(lost, "clue", "clues")} did not make it.`, emphasis: "whisper" });
                 }
                 if (state.phase === "guess") {
                     blocks.push({ type: "text", text: "Say it out loud or type it.", emphasis: "normal" }, { type: "timer", seconds: decisions.guessSeconds, label: "to guess", running: true });
