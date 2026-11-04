@@ -43,11 +43,12 @@ function numberFrom(name: string, fallback: number): number {
 }
 
 /** One line each to change a limit. Read when asked, so a test can set them. */
-function settings(): { on: boolean; address: number; judge: number; site: number; paintingsOffAt: number; captionsAt: number; resetHour: number; directory: string; transcribeSecondsAddress: number; transcribeSecondsSite: number; jevCallsAddress: number; jevCallsSite: number } {
+function settings(): { on: boolean; judgeReserve: number; address: number; judge: number; site: number; paintingsOffAt: number; captionsAt: number; resetHour: number; directory: string; transcribeSecondsAddress: number; transcribeSecondsSite: number; jevCallsAddress: number; jevCallsSite: number } {
     return {
         on: process.env.COST_LIMITS === "1",
-        address: numberFrom("COST_ADDRESS_DOLLARS", 2),
+        address: numberFrom("COST_ADDRESS_DOLLARS", 3),
         judge: numberFrom("COST_JUDGE_DOLLARS", 10),
+        judgeReserve: numberFrom("COST_JUDGE_RESERVE_DOLLARS", 5),
         site: numberFrom("COST_SITE_DOLLARS", 15),
         paintingsOffAt: numberFrom("COST_PAINTINGS_OFF_AT", 0.6),
         captionsAt: numberFrom("COST_CAPTIONS_AT", 0.9),
@@ -282,7 +283,9 @@ export function stageOf(payer: string | undefined = PAYER.getStore()): Stage {
     }
     const allowance: number = account?.pass === "judge" ? limits.judge : limits.address;
     const own: Stage = limits.address === 0 && account === undefined ? 0 : stageAt(allowance === 0 ? 1 : (account?.dollars ?? 0) / allowance);
-    const site: Stage = stageAt(limits.site === 0 ? 1 : siteDollars(day) / limits.site);
+    // Part of the ceiling is held back for judges, so someone burning through the public share can't lock them out.
+    const siteLimit: number = account?.pass === "judge" ? limits.site : Math.max(0, limits.site - limits.judgeReserve);
+    const site: Stage = stageAt(siteLimit === 0 ? 1 : siteDollars(day) / siteLimit);
     return Math.max(own, site) as Stage;
 }
 

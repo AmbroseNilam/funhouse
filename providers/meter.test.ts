@@ -12,6 +12,7 @@ beforeEach(() => {
     process.env.COST_LIMITS = "1";
     process.env.COST_DIR = mkdtempSync(join(tmpdir(), "meter-"));
     process.env.COST_ADDRESS_DOLLARS = "2";
+    process.env.COST_JUDGE_RESERVE_DOLLARS = "5";
     process.env.COST_SITE_DOLLARS = "15";
     process.env.COST_JUDGE_CODE = "judge-code";
     process.env.COST_OWNER_CODE = "owner-code";
@@ -40,6 +41,16 @@ test("the site ceiling stops everyone, and IPv6 counts by its /64", () => {
         withPayer(payerOf(`198.51.100.${index}`), () => { charge("spark", 1.9); });
     }
     assert.equal(stageOf(payerOf("198.51.100.200")), 3);
+});
+
+test("the public share runs out before the ceiling, and judges keep the reserve", () => {
+    for (let index: number = 0; index < 6; index += 1) {
+        withPayer(payerOf(`192.0.2.${index}`), () => { charge("spark", 1.9); });
+    }
+    assert.equal(stageOf(payerOf("192.0.2.200")), 3);
+    const judged: string = payerOf("192.0.2.201");
+    redeemPass("judge-code", [judged]);
+    assert.equal(stageOf(judged) < 3, true);
 });
 
 test("a judge pass lifts the allowance and the owner's passes everything; wrong codes do nothing", () => {

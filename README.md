@@ -181,7 +181,8 @@ Set these in `.env`. Each switch is off unless set to `1`.
 | `JEV_DECISIONS_OFF` | Comma-separated Jev judgments to turn off |
 | `GEO_RULES` | Applies Cloudflare location rules through a tunnel: refuses territories in `room/geo.ts`, keeps paintings off for India |
 | `COST_LIMITS` | Turns on dollar limits; needs `COST_DIR`, a writable folder |
-| `COST_ADDRESS_DOLLARS` / `COST_SITE_DOLLARS` | Daily allowance per address (default 2) and ceiling for the site (default 15) |
+| `COST_ADDRESS_DOLLARS` / `COST_SITE_DOLLARS` | Daily allowance per address (default 3) and ceiling for the site (default 15) |
+| `COST_JUDGE_RESERVE_DOLLARS` | Part of the site ceiling only judge-code holders can spend (default 5) |
 | `COST_PAINTINGS_OFF_AT` / `COST_CAPTIONS_AT` | Fractions where paintings stop and captions start (defaults 0.6, 0.9) |
 | `COST_RESET_UTC_HOUR` | Hour the day resets (default 8) |
 | `COST_IDLE_MINUTES` | Closes a room after this long with no person active (default 5) |
