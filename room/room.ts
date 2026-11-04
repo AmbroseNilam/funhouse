@@ -1349,8 +1349,9 @@ export class Room implements HostStage, AgentHost {
             this.agentChecks += 1;
             return this.agentChecks <= MAX_AGENT_CHECKS_PER_GAME && BUDGET.spend("guest") === true && await isFitForRoom(line);
         };
+        const game: RunningGame | null = this.game;
         const result: FilterResult = await filterText(text.slice(0, AGENT_SAY_LIMIT * 2), AGENT_SAY_LIMIT, classify);
-        if (this.players.get(player.playerId) !== player || this.agentMayTalk(player) === false) {
+        if (this.game !== game || this.players.get(player.playerId) !== player || this.agentMayTalk(player) === false) {
             return;
         }
         if (result.allowed === false) {
