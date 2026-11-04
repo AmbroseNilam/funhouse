@@ -194,10 +194,28 @@ export class Host {
         if (this.turn !== null || this.wakeTimer !== null) {
             return;
         }
+        this.wakeAfter(delayMilliseconds);
+    }
+
+    /**
+     * Wakes the host after a pause. Anything noticed meanwhile lands in the same turn.
+     * @param delayMilliseconds how long to wait.
+     */
+    private wakeAfter(delayMilliseconds: number): void {
         this.wakeTimer = setTimeout(() => {
             this.wakeTimer = null;
             this.runTurns().catch((error: unknown) => { log("host", `turn loop failed: ${error instanceof Error ? error.message : String(error)}`); });
         }, delayMilliseconds);
+    }
+
+    /** Stops the host for good when its room closes, so a held reply can't cost anything later. */
+    public close(): void {
+        if (this.wakeTimer !== null) {
+            clearTimeout(this.wakeTimer);
+            this.wakeTimer = null;
+        }
+        this.pending.length = 0;
+        this.interrupt(false);
     }
 
     /**
@@ -223,6 +241,12 @@ export class Host {
     /** Runs turns until nothing new is pending. */
     private async runTurns(): Promise<void> {
         while (this.pending.length > 0) {
+            const wait: number = this.replies.millisecondsUntilOpen();
+            if (wait > 0) {
+                log("host", `holding a reply ${wait} ms: over the limit`);
+                this.wakeAfter(wait);
+                return;
+            }
             const lines: string[] = this.pending.splice(0, this.pending.length);
             const earlier: string[] = [...this.history];
             this.remember(...lines);

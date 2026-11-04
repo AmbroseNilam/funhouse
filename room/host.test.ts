@@ -42,7 +42,7 @@ async function pause(milliseconds: number): Promise<void> {
 describe("the host's reply limit", () => {
     beforeEach(() => {
         process.env.META_MODEL_API_KEY = "stand-in";
-        globalThis.fetch = (async () => new Response('data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n', { status: 200 })) as typeof fetch;
+        globalThis.fetch = (): Promise<Response> => Promise.resolve(new Response('data: {"choices":[{"delta":{"content":"Noted."}}]}\n\ndata: [DONE]\n\n', { status: 200 }));
     });
 
     afterEach(() => {
@@ -65,5 +65,17 @@ describe("the host's reply limit", () => {
         assert.equal(said.length, 1, "still over the limit");
         await pause(WINDOW_MILLISECONDS);
         assert.equal(said.length, 2);
+    });
+
+    it("drops a held line when the room closes", async () => {
+        const said: string[] = [];
+        const host: Host = hostSaying(said);
+        host.notice("(a line)", 0);
+        await pause(WINDOW_MILLISECONDS / 3);
+        host.notice("(Game: that's the game. Announce the winner.)", 0);
+        await pause(WINDOW_MILLISECONDS / 6);
+        host.close();
+        await pause(WINDOW_MILLISECONDS);
+        assert.equal(said.length, 1);
     });
 });
