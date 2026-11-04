@@ -14,9 +14,10 @@ export const PAST_THE_GATE_BLUEPRINT: GateBlueprint = {
         name: "Past the Gate",
         pitch: `${HOST_NAME} plays a keeper with a secret rule. Talk your way past it.`,
         howToPlay: [
-            "Your phone gives you cargo: a word only you know.",
-            "Hold your phone and plead with the keeper out loud. It has a rule, and it won't say what.",
-            "Get through, and say your cargo word in the plea that does it.",
+            "A keeper guards the gate, and only a secret rule opens it.",
+            "Plead out loud on your phone. The clue on screen hints at the rule.",
+            "Your phone shows a secret cargo word. Sneak it into your winning plea.",
+            "Get everyone through before the keeper's patience runs out.",
         ],
         remarks: ["The gate is shut. It has its reasons.", "Flattery rarely works here.", "Bring a good argument."],
         art: "art/hero.webp",

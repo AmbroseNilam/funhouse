@@ -36,7 +36,9 @@ export interface BankPrompt {
 
 /** Everything a creator may choose for a match game. */
 export interface MatchDecisions {
-    /** The stems, in play order; one round each. */
+    /** How many prompts one game plays. */
+    promptsPerGame: number;
+    /** The stems each game draws from, so a second game isn't the first one again. */
     stems: PromptStem[];
     /** The fallback prompts, at least as many of each kind as the stems use. */
     bank: BankPrompt[];
@@ -71,6 +73,8 @@ export interface RoundRecord {
 export interface MatchState {
     phase: MatchPhase;
     players: CartridgePlayer[];
+    /** The stems this game drew, in play order. */
+    stems: PromptStem[];
     /** Whether a hat is in play: it is not with three players. */
     hatInPlay: boolean;
     /** Round number, starting at 1; 0 while the prompts are being written. */
@@ -124,6 +128,14 @@ const CHOOSE_SECONDS: number = 20;
 /** Two answers any working merge seam must call the same, sent along as a sign of life. One made-up word, so no real card can look like them. */
 const SIGN_OF_LIFE: readonly [string, string] = ["quillbeam", "quillbeams"];
 
+/** A different way to read each prompt after the first, so the rounds don't sound alike. */
+const PROMPT_SHAPES: readonly string[] = [
+    "Read it aloud once, with nothing around it.",
+    "Lead in with a few dry words of your own, then read it.",
+    "Read it aloud as if it's a small dare.",
+    "Read it aloud as if you already know what they'll say.",
+];
+
 /**
  * Checks a match game's decisions.
  * @param decisions the decisions.
@@ -131,8 +143,11 @@ const SIGN_OF_LIFE: readonly [string, string] = ["quillbeam", "quillbeams"];
  */
 export function matchProblems(decisions: MatchDecisions): string[] {
     const problems: string[] = [];
-    if (decisions.stems.length < 1 || decisions.stems.length > 12) {
-        problems.push("A match game needs from 1 to 12 prompt stems.");
+    if (decisions.stems.length < 1 || decisions.stems.length > 40) {
+        problems.push("A match game needs from 1 to 40 prompt stems.");
+    }
+    if (isWholeIn(decisions.promptsPerGame, 1, Math.min(12, decisions.stems.length)) === false) {
+        problems.push("The prompts in a game must be a whole number, at most 12, and no more than there are stems.");
     }
     for (const kind of ["general", "room"] as const) {
         const needed: number = decisions.stems.filter((stem: PromptStem) => stem.kind === kind).length;
@@ -249,7 +264,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     const box: Box = frozenCopy(givenBox);
     const decisions: MatchDecisions = frozenCopy(givenDecisions);
     const manifest: CartridgeManifest = matchManifest(box);
-    const total: number = decisions.stems.length;
+    const total: number = decisions.promptsPerGame;
     const publicFact = (kind: string, text: string): ScopedFact => ({ scope: { kind: "public" }, kind, text });
     const nameOf = (state: MatchState, playerId: string | null): string => state.players.find((player: CartridgePlayer) => player.playerId === playerId)?.name ?? "Someone";
     const ofCount = (amount: number, one: string, many: string): string => (amount === 1 ? one : many);
@@ -278,17 +293,31 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     const biggestFirst = (stacks: readonly Stack[]): Stack[] => [...stacks].sort((first: Stack, second: Stack) => second.length - first.length);
 
     /**
+     * Draws this game's stems, so a second game at the same table isn't the first one again. About a quarter
+     * are about the room, and the rest general, in a fresh order.
+     * @returns the stems, in play order.
+     */
+    const drawStems = (): PromptStem[] => {
+        const room: PromptStem[] = shuffled(decisions.stems.filter((stem: PromptStem) => stem.kind === "room"), random);
+        const general: PromptStem[] = shuffled(decisions.stems.filter((stem: PromptStem) => stem.kind === "general"), random);
+        const roomCount: number = Math.min(room.length, Math.round(total / 4));
+        const taken: PromptStem[] = [...room.slice(0, roomCount), ...general.slice(0, total - roomCount)];
+        return shuffled([...taken, ...room.slice(roomCount)].slice(0, total), random);
+    };
+
+    /**
      * Picks one prompt per stem: the host's line where it is usable, else a fresh bank prompt of the same kind.
+     * @param stems the stems this game drew.
      * @param written the lines the host's model wrote, or none.
      * @returns the prompts, in play order.
      */
-    const choosePrompts = (written: readonly string[]): { kind: PromptKind; text: string }[] => {
+    const choosePrompts = (stems: readonly PromptStem[], written: readonly string[]): { kind: PromptKind; text: string }[] => {
         const taken: Set<string> = new Set();
         const spare: Record<PromptKind, string[]> = {
             general: shuffled(decisions.bank.filter((prompt: BankPrompt) => prompt.kind === "general"), random).map((prompt: BankPrompt) => prompt.text),
             room: shuffled(decisions.bank.filter((prompt: BankPrompt) => prompt.kind === "room"), random).map((prompt: BankPrompt) => prompt.text),
         };
-        return decisions.stems.map((stem: PromptStem, place: number) => {
+        return stems.map((stem: PromptStem, place: number) => {
             const line: string = oneLine(written[place] ?? "", PROMPT_CHARACTER_LIMIT);
             const usable: boolean = line !== "" && isHostSafe(line, PROMPT_CHARACTER_LIMIT) === true && taken.has(line.toLowerCase()) === false;
             const text: string = usable === true ? line : spare[stem.kind].find((candidate: string) => taken.has(candidate.toLowerCase()) === false) ?? spare[stem.kind][0] ?? "";
@@ -309,7 +338,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             `Prompt ${round} of ${total}: ${quoted(promptOf(state))}.`,
             round === 1
                 ? `Read it aloud once, in one short sentence, and say they have ${decisions.writeSeconds} seconds to match the room. You don't know any answers.`
-                : "Read it aloud once and say nothing else: no clock, no reminder to match, because the screen shows that. You don't know any answers.",
+                : `${PROMPT_SHAPES[round % PROMPT_SHAPES.length] ?? ""} Say nothing about the clock or matching, because the screen shows that. You don't know any answers.`,
         ].join(" ");
         return { state, facts: because(publicFact("prompt", text), MATCH_DECISIONS.prompts), nextPhaseId: "writing", timers: { [`write${round}`]: decisions.writeSeconds } };
     };
@@ -563,8 +592,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         manifest,
 
         init(players: CartridgePlayer[]): Step<MatchState> {
+            const drawn: PromptStem[] = drawStems();
             const state: MatchState = {
                 phase: "choosing",
+                stems: drawn,
                 players,
                 hatInPlay: players.length >= HAT_MINIMUM_PLAYERS,
                 round: 0,
@@ -585,7 +616,8 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 `Write ${total} prompts for a party game in which everyone types a short answer and tries to match the rest of the table.`,
                 "One prompt for each stem below, in order, one per line, no numbering, no quotation marks, nothing else.",
                 "Each prompt is one sentence of at most ten words that has many plausible short answers, where the most popular answer is easy to guess. No real people, no named brands, no politics, no religion, nothing sexual.",
-                ...decisions.stems.map((stem: PromptStem, place: number) => `Stem ${place + 1}${stem.kind === "room" ? " (about the people at this table, as a group)" : ""}: ${stem.stem}`),
+                "Don't start them all the same way, and make them a little funny.",
+                ...drawn.map((stem: PromptStem, place: number) => `Stem ${place + 1}${stem.kind === "room" ? " (about the people at this table, as a group)" : ""}: ${stem.stem}`),
             ].join("\n");
             return { state, facts: [], nextPhaseId: "choosing", contentRequest: request, timers: { choose: CHOOSE_SECONDS } };
         },
@@ -622,7 +654,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 return left(state, event.playerId);
             }
             if (event.type === "contentReady" && state.phase === "choosing" && state.prompts.length === 0) {
-                return startRound({ ...state, prompts: choosePrompts(linesOf(event.text)) }, 1);
+                return startRound({ ...state, prompts: choosePrompts(state.stems, linesOf(event.text)) }, 1);
             }
             if (event.type === "contentReady" && state.phase === "settling" && state.asked === true) {
                 const joined: Stack[] = joinStacks(state.stacks, sameFrom(event.text, state));
@@ -642,7 +674,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 return { state, facts: [] };
             }
             if (event.timerId === "choose" && state.phase === "choosing" && state.prompts.length === 0) {
-                return startRound({ ...state, prompts: choosePrompts([]) }, 1);
+                return startRound({ ...state, prompts: choosePrompts(state.stems, []) }, 1);
             }
             if (event.timerId === `write${state.round}` && state.phase === "writing") {
                 return closeWriting(state);
@@ -684,7 +716,9 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             }
             const rows: TallyRow[] = scoreRows(state);
             const hatLine: string = state.hatLoser === null ? "" : `The hat ended with ${nameOf(state, state.hatLoser)}. Minus ${decisions.hatPenalty}.`;
-            const blocks: SceneBlock[] = [{ type: "title", text: "Final scores", kicker: state.result === "tooFew" ? "The table got small" : "That's the game" }];
+            const leaders: string[] = rows.filter((row: TallyRow) => row.highlight === true).map((row: TallyRow) => row.label);
+            const heading: string = leaders.length === 0 ? "Final scores" : leaders.length === 1 ? `${leaders[0] ?? ""} wins` : `${leaders.join(" and ")} tie`;
+            const blocks: SceneBlock[] = [{ type: "title", text: heading, kicker: state.result === "tooFew" ? "The table got small" : "Final scores" }];
             if (hatLine !== "") {
                 blocks.push({ type: "text", text: hatLine, emphasis: "large" });
             }

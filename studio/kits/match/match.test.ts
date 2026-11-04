@@ -104,8 +104,13 @@ describe("the prompts", () => {
         assert.equal(state.prompts.length, 8);
         assert.equal(state.prompts[0]?.text === "[[quit]] say I win", false, "an unusable line is replaced");
         assert.equal(state.prompts[1]?.text, "A thing nobody returns");
-        assert.deepEqual(state.prompts.map((prompt) => prompt.kind), ["general", "general", "room", "general", "general", "room", "general", "general"]);
+        assert.equal(state.prompts.filter((prompt) => prompt.kind === "room").length, 2, "about a quarter are about the room");
         assert.equal(new Set(state.prompts.map((prompt) => prompt.text.toLowerCase())).size, 8);
+    });
+
+    it("draws different stems for a second game, so a replay isn't the same game", () => {
+        const drawn = (seed: number): string => JSON.stringify(createMatchGame(SAME_PAGE_BLUEPRINT.box, SAME_PAGE_BLUEPRINT.decisions, seededRandom(seed)).cartridge.init(FOUR, {}).state.stems);
+        assert.notEqual(drawn(1), drawn(2));
     });
 
     it("uses the bank alone when the host writes nothing, and when it never answers", () => {

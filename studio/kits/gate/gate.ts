@@ -419,7 +419,7 @@ export function gateManifest(box: Box): CartridgeManifest {
             {
                 id: "gate",
                 hostBrief: [
-                    "A plea is what a player says to you while holding their phone. When you hear one, you'll be told the verdict on it in what you know.",
+                    "A plea is what a player says to you through their phone. When you hear one, you'll be told the verdict on it in what you know.",
                     "Answer only that verdict, in character, in one or two short sentences. If nothing new has been judged, say a line to keep the gate tense, or stay quiet.",
                     "Never repeat a plea back word for word. Don't count tries aloud; you'll be told when your patience is nearly gone. Don't lean on one pet word or image from line to line.",
                 ].join(" "),
@@ -661,16 +661,16 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
                     mood: "neutral",
                     transition: "fade",
                     blocks: [
-                        { type: "title", text: box.name, kicker: state.scenario.place },
-                        { type: "text", text: `${keeper}, ${state.scenario.title}, is waiting. Look at your phone. Keep it to yourself.`, emphasis: "large" },
+                        { type: "title", text: `${keeper} guards ${state.scenario.place}`, kicker: box.name },
+                        { type: "text", text: "Talk your way past. Your phone shows what you're smuggling. Keep it to yourself.", emphasis: "large" },
                     ],
                 };
             }
             if (state.phase === "gate") {
                 const lines: SceneBlock[] = state.recent.slice(-SHOWN_PLEAS).map((line: PleaLine): SceneBlock => ({ type: "text", text: `${nameOf(state, line.playerId)} ${TELL_LINES[line.tell].screen}` }));
                 const blocks: SceneBlock[] = [
-                    { type: "title", text: keeper, kicker: state.scenario.place },
-                    { type: "text", text: state.rule.clue },
+                    { type: "title", text: `Talk your way past ${keeper}`, kicker: state.scenario.place },
+                    { type: "text", text: state.rule.clue, emphasis: "large" },
                     ...lines,
                     { type: "progress", label: "The keeper's patience", current: state.patience.used, max: state.patience.max, marks: "card" },
                 ];
@@ -689,7 +689,7 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
                 { type: "title", text: `${throughCount(state)} of ${state.everyone.length} got through`, kicker: state.scenario.place },
                 { type: "text", text: state.rule.reveal },
                 { type: "tally", title: "Points", rows },
-                { type: "text", text: cargo, emphasis: "whisper" },
+                { type: "text", text: cargo },
             ];
             return { mood: throughCount(state) > 0 ? "victory" : "defeat", transition: "fade", blocks };
         },
@@ -710,7 +710,7 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
             if (state.phase === "briefing") {
                 return [card];
             }
-            return [card, { type: "notice", text: "Hold your phone and plead. Others can hear you and help.", tone: "info" }];
+            return [card, { type: "notice", text: "Plead with the keeper on your phone. Others can hear you and help.", tone: "info" }];
         },
 
         hostFacts(state: GateState, scope: Scope): ScopedFact[] {
