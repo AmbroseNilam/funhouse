@@ -14,7 +14,7 @@
 //
 // Run it (no model key needed):
 //   node tools/stub-claims-model.ts
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=x GAME_ROOM_TEXT_ONLY=1 STUDIO_SHOW_HELD=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 STUDIO_SHOW_HELD=1 npm run room
 //   ROOM_STUDIO=1 node tools/scenarios/three-claims.ts          (CLAIMS_PLAYERS=3 for a three-player game)
 // A pass prints PASS as its last line and takes about two minutes. The room's log should also show
 // "[studio] starting blueprint threeClaims on the claims kit".
