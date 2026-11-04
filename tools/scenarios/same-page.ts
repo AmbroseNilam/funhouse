@@ -216,12 +216,12 @@ const threeScripts: Round[] = [
 for (const [index, script] of threeScripts.entries()) {
     const startedAt = mark(screenTwo, three);
     await playRound(screenTwo, three, index + 1, script, startedAt);
-    if (index === 0 && (boardOf(screenTwo).some((cell: BoardCell) => /hat/.test(cell.owned ?? "")) === true || three.some((seat: Seat) => /hat/.test(JSON.stringify(seat.phone.view?.controls ?? [])) === true))) {
+    if (index === 0 && (boardOf(screenTwo).some((cell: BoardCell) => /\bhat\b/.test(cell.owned ?? "")) === true || three.some((seat: Seat) => /\bhat\b/.test(JSON.stringify(seat.phone.view?.controls ?? [])) === true))) {
         throw new Error("There is a hat at a table of three.");
     }
 }
 await waitFor(() => screenTwo.shell?.gameOver === true, "the final scores for three");
-if (sceneStrings(screenTwo.scene ?? { mood: "neutral", transition: "cut", blocks: [] }).some((line: string) => /hat/i.test(line)) === true) {
+if (sceneStrings(screenTwo.scene ?? { mood: "neutral", transition: "cut", blocks: [] }).some((line: string) => /\bhat\b/i.test(line)) === true) {
     throw new Error("The final screen for three mentions a hat.");
 }
 const rowsThree: SceneBlock | undefined = screenTwo.scene?.blocks.find((block: SceneBlock) => block.type === "tally");
