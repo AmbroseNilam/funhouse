@@ -20,7 +20,7 @@ export const WORD_SEXUAL: string[] = ["pbpx", "pbpxf", "qvpx", "qvpxf", "chffl",
 export const MINOR_WORDS: string[] = ["puvyq", "puvyqera", "xvq", "xvqf", "zvabe", "zvabef", "haqrentr", "grra", "grraf", "grrantre", "fpubbytvey", "fpubbyobl", "gbqqyre", "cergrra", "onol", "onovrf", "vasnag", "obl", "oblf", "tvey", "tveyf"];
 
 /** Words that turn a mention of a child into sexual content. */
-export const SEXUAL_CONTEXT: string[] = ["frk", "frkl", "frkhny", "anxrq", "ahqr", "ahqrf", "shpx", "shpxvat", "ubeal", "cbea", "encr", "zbyrfg", "frqhpr"];
+export const SEXUAL_CONTEXT: string[] = ["frk", "frkl", "frkhny", "anxrq", "ahqr", "ahqrf", "ubeal", "cbea", "encr", "zbyrfg", "frqhpr"];
 
 /** Terms that are about the sexual abuse of children on their own. */
 export const MINOR_SEXUAL: string[] = ["ybyv", "ybyvgn", "fubgn", "crqb", "crqbf", "cnrqb", "crqbcuvyr", "cnrqbcuvyr", "wnvyonvg", "puvyqcbea", "zbyrfgre", "xvqqvr"];

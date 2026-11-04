@@ -70,6 +70,7 @@ test("leaves ordinary and rude party answers alone", () => {
         "bloody hell Dave", "Dave's terrible cooking", "the kids are asleep", "a baby goat", "twenty seven", "1969", "Room 101", "pass the snacks", "he drinks like a fish", "assassin",
         "Nazareth", "spice rack", "chinking glasses", "raccoon", "cooney island", "a dyke on the farm road".replace(" dyke", " dike"), "peacock", "hancock", "scum of the earth", "cucumber", "document", "Mississippi",
         "Niger", "Nigeria", "sniggering", "extra nylon", "flame retardant", "the sky's the limit", "an Al Green song",
+        "a lollipop", "torpedo", "speedometer", "the kids are fucking asleep", "a 10 minute drive", "a 2 hour drive", "a 5 minute road trip",
     ];
     for (const text of fine) {
         assert.equal(localCategory(text), null, text);

@@ -17,6 +17,9 @@ export type TextClassifier = (text: string) => Promise<boolean>;
 /** Most letters a repeat may keep when squeezing, so "niiice" and "nice" read alike. */
 const REPEAT_KEEP: number = 1;
 
+/** Letters a term needs before it counts inside a longer word; shorter ones turn up in "lollipop" and "torpedo". */
+const TERM_INSIDE_WORD_LETTERS: number = 6;
+
 /** Digits in a row, ignoring separators, that look like a phone or card number. */
 const LONG_NUMBER_DIGITS: number = 7;
 
@@ -28,8 +31,8 @@ const LOOK_ALIKES: Record<string, string> = {
     "@": "a", $: "s", "!": "i", "|": "l", "+": "t", "€": "e", "£": "l", "¡": "i",
 };
 
-/** Words that make a number look like a street address. */
-const STREET_WORDS: string = "street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|court|ct|crescent|cres|way|apt|apartment|unit|suite";
+/** Words that make a number look like a street address. Ones with everyday uses, like "a 10 minute drive", are left to the classifier. */
+const STREET_WORDS: string = "street|st|avenue|ave|road|rd|boulevard|blvd|crescent|cres|apt|apartment|suite";
 
 /** Personal details and links, tested on the text as typed. */
 const PERSONAL_PATTERNS: RegExp[] = [
@@ -37,7 +40,7 @@ const PERSONAL_PATTERNS: RegExp[] = [
     /\b(?:https?:\/\/|www\.)\S+/i,
     /\b[a-z0-9-]+\.(?:com|net|org|ca|io|gg|ly|me|tv|co|xyz|app|live)\b/i,
     /(?:^|\s)@[a-z0-9_.]{2,}/i,
-    new RegExp(`\\b\\d{1,6}\\s+(?:[a-z]+\\s+){1,3}(?:${STREET_WORDS})\\b`, "i"),
+    new RegExp(`\\b\\d{1,6}\\s+(?!(?:second|minute|hour|day|week|month|year|mile|km|lane)s?\\b)(?:[a-z]+\\s+){1,3}(?:${STREET_WORDS})\\b`, "i"),
     /\b\d{1,3}(?:\.\d{1,3}){3}\b/,
     /\b(?:my|his|her|their)\s+(?:home\s+)?(?:address|phone|number|password|ssn|sin)\s+(?:is|=|:)/i,
     /\b(?:lives?|living)\s+at\s+\d/i,
@@ -176,7 +179,7 @@ export function localCategory(text: string): FilterCategory | null {
         return "instructions";
     }
     for (const group of JOINED_TERMS) {
-        const inWord = (term: string): boolean => words.some((word: string) => ORDINARY_WORDS.has(word) === false && squeeze(word).includes(squeeze(term)));
+        const inWord = (term: string): boolean => words.some((word: string) => ORDINARY_WORDS.has(word) === false && (squeeze(word) === squeeze(term) || (squeeze(term).length >= TERM_INSIDE_WORD_LETTERS && squeeze(word).includes(squeeze(term)))));
         if (group.terms.some((term: string) => inWord(term) === true || pieces.includes(squeeze(term)) === true) === true) {
             return group.category;
         }
