@@ -8,7 +8,8 @@ import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantState } from "./kits/plant.ts";
-import { createFitsGame, fitsBlueprintProblems, type FitsState } from "./kits/tap-fits.ts";
+import { createDiceGame, diceBlueprintProblems, type DiceDecisions, type DiceState } from "./kits/tap-dice.ts";
+import { createFitsGame, fitsBlueprintProblems, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
 import { createWitGame, witBlueprintProblems, type WitState } from "./kits/wit.ts";
 import { createGateGame, gateBlueprintProblems, type GateState } from "./kits/gate.ts";
 import { createEstimateGame, estimateBlueprintProblems, type EstimateState } from "./kits/estimate.ts";
@@ -19,7 +20,7 @@ import { createOddWordGame, oddWordBlueprintProblems, type OddWordState } from "
 import { createChainGame, chainBlueprintProblems, type ChainState } from "./kits/chain.ts";
 import { createGalleryGame, galleryBlueprintProblems, type GalleryState } from "./kits/gallery.ts";
 import { PLANT_GIVE_UP_ACTION } from "./kits/plant.ts";
-import { chainPersonas, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck } from "./personas.ts";
+import { chainPersonas, dicePersonas, diceSecrecyCheck, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck } from "./personas.ts";
 import { witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
@@ -67,14 +68,31 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
         pauseActions: () => [{ id: PLANT_GIVE_UP_ACTION, label: "We give up" }],
     },
     tap: {
-        problems: (blueprint: TapBlueprint): string[] => fitsBlueprintProblems(blueprint.box, blueprint.decisions),
-        create: (blueprint: TapBlueprint): AnyKitGame => erase(createFitsGame(blueprint.box, blueprint.decisions)),
+        problems(blueprint: TapBlueprint): string[] {
+            if (blueprint.decisions.style === "dice") {
+                return diceBlueprintProblems(blueprint.box, blueprint.decisions);
+            }
+            return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
+        },
+        create(blueprint: TapBlueprint, random: () => number): AnyKitGame {
+            if (blueprint.decisions.style === "dice") {
+                return erase(createDiceGame(blueprint.box, blueprint.decisions, random));
+            }
+            return erase(createFitsGame(blueprint.box, blueprint.decisions));
+        },
         check(blueprint: TapBlueprint, options: RehearsalOptions): Tally {
-            const make = (): KitGame<FitsState> => createFitsGame(blueprint.box, blueprint.decisions);
-            return rehearseMany(make, fitsPersonas(), CHECK_SEEDS, { ...options, roleCheck: fitsTapCheck(blueprint) });
+            if (blueprint.decisions.style === "dice") {
+                const dice: DiceDecisions = blueprint.decisions;
+                const makeDice = (seed: number): KitGame<DiceState> => createDiceGame(blueprint.box, dice, seededRandom(seed));
+                return rehearseMany(makeDice, dicePersonas(dice), CHECK_SEEDS, { ...options, roleCheck: diceSecrecyCheck(blueprint.box, dice) });
+            }
+            const fits: TapBlueprint<FitsDecisions> = { ...blueprint, decisions: blueprint.decisions };
+            const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);
+            return rehearseMany(makeFits, fitsPersonas(), CHECK_SEEDS, { ...options, roleCheck: fitsTapCheck(fits) });
         },
         pauseActions: NO_PAUSE,
     },
+
     wit: {
         problems: (blueprint: WitBlueprint): string[] => witBlueprintProblems(blueprint.box, blueprint.decisions),
         create: (blueprint: WitBlueprint, random: () => number): AnyKitGame => erase(createWitGame(blueprint.box, blueprint.decisions, random)),

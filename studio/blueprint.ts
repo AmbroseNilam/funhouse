@@ -15,6 +15,7 @@ import type { ChainDecisions } from "./kits/chain.ts";
 import type { GalleryDecisions } from "./kits/gallery.ts";
 import type { GuessingDecisions } from "./kits/guessing.ts";
 import type { PlantDecisions } from "./kits/plant.ts";
+import type { DiceDecisions } from "./kits/tap-dice.ts";
 import type { FitsDecisions } from "./kits/tap-fits.ts";
 import type { WitDecisions } from "./kits/wit.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
@@ -34,13 +35,13 @@ export interface PlantBlueprint {
 }
 
 /** The tap games, each its own style on the tap kit. */
-export type TapDecisions = FitsDecisions;
+export type TapDecisions = FitsDecisions | DiceDecisions;
 
 /** A tap game: people play by tapping their phones, and the host only talks. */
-export interface TapBlueprint {
+export interface TapBlueprint<Decisions extends TapDecisions = TapDecisions> {
     kit: "tap";
     box: Box;
-    decisions: TapDecisions;
+    decisions: Decisions;
 }
 
 /** A wit game: two players answer one prompt in secret and the room votes. */

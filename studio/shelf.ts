@@ -17,6 +17,7 @@ import { CLUE_GALLERY_BLUEPRINT } from "./games/clue-gallery.ts";
 import { PAINTED_WHISPERS_BLUEPRINT } from "./games/painted-whispers.ts";
 
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
+import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
@@ -28,6 +29,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
     TWENTY_DOORS_BLUEPRINT,
     LEADING_QUESTIONS_BLUEPRINT,
     WHO_FITS_BLUEPRINT,
+    UNDER_THE_CUP_BLUEPRINT,
     TWO_TAKES_BLUEPRINT,
     PAST_THE_GATE_BLUEPRINT,
     OFF_BY_A_MILE_BLUEPRINT,

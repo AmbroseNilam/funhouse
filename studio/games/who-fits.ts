@@ -5,9 +5,10 @@
 
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { TapBlueprint } from "../blueprint.ts";
+import type { FitsDecisions } from "../kits/tap-fits.ts";
 
 /** Who Fits, written as decisions on the tap kit. */
-export const WHO_FITS_BLUEPRINT: TapBlueprint = {
+export const WHO_FITS_BLUEPRINT: TapBlueprint<FitsDecisions> = {
     kit: "tap",
     box: {
         id: "whoFits",
