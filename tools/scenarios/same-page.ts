@@ -217,6 +217,9 @@ if (sceneStrings(screen.scene ?? { mood: "neutral", transition: "cut", blocks: [
 }
 console.warn("Game one passed: stacks, near-misses, hat, silent player, final scores.");
 if (REAL_HOST === true) {
+    // Leaving straight away would cut the host's last line off, as it would for a real table.
+    const linesAtEnd: number = screen.hostLines.length;
+    await waitFor(() => screen.hostLines.length > linesAtEnd, "the host's last line");
     await pause(800);
     await seats[0]?.phone.chooseRow(screen, "Back to the shelf");
     console.warn("PASS");
