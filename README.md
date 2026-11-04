@@ -197,7 +197,7 @@ node tools/stub-model.ts
 ```
 
 ```bash
-META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+META_BASE_URL=http://localhost:8799 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 ```
 
 ```bash
