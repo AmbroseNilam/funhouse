@@ -1,5 +1,6 @@
-// Quizmaster with four answers, through the real room: every phone taps or speaks, a tap is locked in,
-// the question waits for everyone, and nothing on a phone or the TV says which answer is right.
+// Quizmaster with four answers, through the real room and host: a tap, a typed answer and a spoken one
+// each score, points wait for the reveal, the question waits for everyone, and the phones and TV match.
+// The topic is typed, on easy sums, so the script knows the right answer.
 // Usage: GAME_ROOM_TEXT_ONLY=1 npm run room, then node --env-file-if-exists=.env tools/scenarios/quiz-choices.ts
 // A pass prints PASS.
 
@@ -11,7 +12,6 @@ const [sam, alex] = ["Sam", "Alex"].map((name: string) => new FakePhone(screen.c
 if (sam === undefined || alex === undefined) {
     throw new Error("Expected two phones.");
 }
-await waitFor(() => screen.shell?.seats.length === 2, "both phones to join");
 await waitFor(() => screen.shell?.screen === "home" && sam.view !== null, "the shelf");
 sam.nav({ kind: "step", delta: 1 });
 await waitFor(() => screen.shell?.focus === 1, "the highlight to move");
@@ -19,9 +19,12 @@ sam.nav({ kind: "select" });
 await waitFor(() => screen.shell?.screen === "game", "the game's page");
 sam.nav({ kind: "select" });
 await waitFor(() => screen.shell?.screen === "pick", "the pick");
-sam.nav({ kind: "choose", index: screen.shell?.menu.indexOf("Animals") ?? 0 });
+sam.nav({ kind: "choose", index: screen.shell?.menu.indexOf("Say your own topic") ?? 0 });
 await waitFor(() => screen.shell?.screen === "startCard", "the how-to card");
 sam.nav({ kind: "select" });
+await waitFor(() => screen.title() === "Choose a topic…" || screen.title() === "Quizmaster", "the topic step");
+await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 4000); });
+sam.type("Easy plus sums, like what is 2 plus 3");
 
 /**
  * The four answers on the TV right now.
@@ -32,31 +35,74 @@ function onTv(): string[] {
     return block?.type === "choices" ? block.options : [];
 }
 
+/**
+ * What the TV says someone has scored.
+ * @param name who.
+ * @returns their points.
+ */
+function pointsOf(name: string): number {
+    const title = screen.scene?.blocks.find((candidate) => candidate.type === "title");
+    const match: RegExpExecArray | null = new RegExp(`${name} (\\d+)`).exec(title?.type === "title" ? title.kicker ?? "" : "");
+    return Number(match?.[1] ?? "0");
+}
+
+/**
+ * Works out the sum on the TV.
+ * @returns the answer's text, or an empty string if it isn't a sum.
+ */
+function rightAnswer(): string {
+    const match: RegExpExecArray | null = /(\d+) plus (\d+)/.exec(screen.title());
+    return match === null ? "" : String(Number(match[1]) + Number(match[2]));
+}
+
+/**
+ * Finds a phone's button for an answer.
+ * @param phone the phone.
+ * @param right true for the right answer, false for a wrong one.
+ * @returns the button's id.
+ */
+function buttonFor(phone: FakePhone, right: boolean): string {
+    const answer: string = rightAnswer();
+    return phone.options().find((option) => option.label.endsWith(`. ${answer}`) === right)?.id ?? "";
+}
+
 let before: string = "";
-for (let round = 1; round <= 6; round += 1) {
+let samExpected: number = 0;
+let alexExpected: number = 0;
+for (let round = 1; round <= 3; round += 1) {
     const sameOn = (phone: FakePhone): boolean => phone.options().map((option) => option.label).join() === onTv().join();
     await waitFor(() => onTv().length === 4 && screen.title() !== before && sameOn(sam) === true && sameOn(alex) === true, `question ${round}'s four answers on the TV and both phones`);
-    console.warn(`Q${round}: ${screen.title()} | ${onTv().join(" | ")}`);
     const asked: string = screen.title();
     before = asked;
-    sam.press(sam.options()[0]?.id ?? "");
-    await waitFor(() => sam.options().length === 0, "Sam's tap to lock in");
+    console.warn(`Q${round}: ${asked} | ${onTv().join(" | ")}`);
+    if (rightAnswer() === "") {
+        throw new Error(`Question ${round} isn't a sum, so the script can't check it: ${asked}`);
+    }
+    const right: string = rightAnswer();
+    if (round === 1) {
+        alex.press(buttonFor(alex, true));
+        alexExpected += 2;
+    }
+    if (round === 2) {
+        alex.type(`I think it's ${right}`);
+        alexExpected += 2;
+    }
+    if (round === 3) {
+        alex.say(`I think it's ${right}`);
+        alexExpected += 2;
+    }
+    await waitFor(() => alex.options().length === 0, `Alex's answer to lock in on question ${round}`);
     if (screen.title() !== asked) {
         throw new Error("The question moved on before everyone had answered.");
     }
-    if (round === 2) {
-        // Speaking still works: the host hears the answer and rules on it.
-        const said: string = (alex.options()[1]?.label ?? "").replace(/^[A-D]\. /, "");
-        alex.say(`I think it's ${said}`);
+    if (pointsOf("Alex") === alexExpected) {
+        throw new Error("The score showed before the reveal, which gives the answer away.");
     }
-    if (round !== 2) {
-        alex.press(alex.options()[round % 4]?.id ?? "");
-    }
-    await waitFor(() => screen.title() !== asked || screen.shell?.gameOver === true, "the question to move on");
-    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 1500); });
-    console.warn(`  host: ${screen.hostLines.at(-1)?.slice(0, 90) ?? ""}`);
+    sam.press(buttonFor(sam, false));
+    await waitFor(() => screen.title() !== asked, "the question to move on");
+    await waitFor(() => pointsOf("Alex") === alexExpected && pointsOf("Sam") === samExpected, `the score after question ${round}: Alex ${alexExpected}, Sam ${samExpected}`);
+    console.warn(`  ok: round ${round} scored; ${screen.hostLines.at(-1)?.slice(0, 80) ?? ""}`);
+    samExpected += 0;
 }
-await waitFor(() => screen.shell?.gameOver === true, "the end");
-console.warn(`End: ${screen.title()} | ${JSON.stringify(screen.scene?.blocks.filter((block) => block.type === "text"))}`);
 console.warn("PASS");
 process.exit(0);

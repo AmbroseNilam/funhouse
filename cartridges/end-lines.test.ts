@@ -149,11 +149,15 @@ describe("Quizmaster's four answers", () => {
 
     it("doesn't take speech begun on the last question as an answer to this one", () => {
         const { game, state } = inQuestion();
-        const heardLate = game.onEvent(state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
+        const talking = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
+        const right: number = state.questions[0]?.choices?.indexOf("Right0") ?? -1;
+        const tapped = game.apply(talking, "a", `answer:0:${right}`).state;
+        const moved = game.apply(tapped, "b", `answer:0:${right}`).state;
+        assert.equal(moved.index, 1);
+        const heardLate = game.onEvent(moved, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
         assert.deepEqual(heardLate.state.heard, []);
-        const started = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" });
-        const heard = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
-        assert.deepEqual(heard.state.heard, ["a"]);
+        const heardNext = game.onEvent(heardLate.state, { type: "speechEnded", at: 0, playerId: "a", text: "Right1" });
+        assert.deepEqual(heardNext.state.heard, ["a"], "the next thing they say counts");
     });
 
     it("goes back to answers out loud with the switch off", () => {
