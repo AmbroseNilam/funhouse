@@ -47,7 +47,7 @@ export interface QuizQuestion {
 }
 
 /** Original general-knowledge questions used when the model can't supply any. */
-const FALLBACK_QUESTIONS: QuizQuestion[] = [
+export const FALLBACK_QUESTIONS: QuizQuestion[] = [
     { question: "Which planet in our solar system is known for its bright rings?", answer: "Saturn" },
     { question: "What is the largest ocean on Earth?", answer: "The Pacific Ocean" },
     { question: "How many sides does a hexagon have?", answer: "Six" },
