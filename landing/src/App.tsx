@@ -1,15 +1,14 @@
 // The front door, drawn as the TV's own table: the painted room, the lantern, two paper cards to
 // start on a TV or join from a phone, and the real TV and phone beside them. Then the shelf of
-// games, the vote the host really runs, and what a phone holds. The QR code skips this page and
-// goes straight to the phone. Copy is plain description that says only what the code does; the
-// host speaks only in the game demos. Follows docs/DESIGN.md and docs/LANDING-RESEARCH.md in the planning notes.
+// games, bringing your own agent, and what a night needs. The QR code skips this page and goes
+// straight to the phone. Copy is plain description that says only what the code does. Follows DESIGN.md.
 
 import { versionLine } from "../../shared/build-info.ts";
 import { useState, type FormEvent, type ReactElement } from "react";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import { GAMES, type GameBox } from "./games.ts";
 import { InstallCard, mayOfferInstall, useInstallWay, type InstallWay } from "./InstallCard.tsx";
-import { HostAtTable, LatePicture, NAMES, PhoneCard, VoteDemo, type Moment } from "./table.tsx";
+import { HostAtTable, LatePicture, type Moment } from "./table.tsx";
 
 /** Letters in a room code. */
 const ROOM_CODE_LENGTH: number = 4;
@@ -23,8 +22,14 @@ const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full"
 /** What the mic does; the same line wherever it comes up. */
 const MIC_LINE: string = "Your phone only sends sound while you talk: tap to talk, and it stops when you tap Stop or go quiet.";
 
-/** Where to watch a game and read the code. Empty until they exist; nothing shows until then. */
+/** Where to watch a game and read the code. Fill one in and its footer link appears; empty shows nothing. */
 const PROOF: { video: string; code: string } = { video: "", code: "" };
+
+/** Who holds the copyright; the same name as the repo's LICENSE. */
+const COPYRIGHT: string = "© 2026 Ambrose Nilam";
+
+/** The words the phone gives you to paste, with the link's secret part left out. */
+const AGENT_WORDS: string = "Join my party game as my AI agent and play with me. Open this link and follow what it says:";
 
 /** True on a phone-sized screen, where the big painting isn't worth its weight. */
 const SMALL_SCREEN: boolean = matchMedia("(max-width: 600px)").matches;
@@ -104,13 +109,13 @@ export function App(): ReactElement {
                         <figure className="shot-tv">
                             <img
                                 src="/landing/shots/tv.webp"
-                                alt={`The TV: a shelf of game boxes, a card with the room code and QR, and ${HOST_NAME} the lantern saying hello`}
+                                alt={`The TV: a shelf of painted game boxes, a card with the room code and QR, and ${HOST_NAME} the lantern`}
                                 width="1600"
                                 height="900"
                             />
                         </figure>
                         <figure className="shot-phone">
-                            <img src="/landing/shots/phone.webp" alt={`${NAMES.owner}'s phone: a plain orange surface that says Slide your thumb, Watch the TV`} width="585" height="1190" />
+                            <img src="/landing/shots/phone.webp" alt="A phone in the room: a plain orange surface that says Slide your thumb, Watch the TV" width="585" height="1190" />
                         </figure>
                     </div>
                     <HostAtTable moment={moment} code={code} look={look} />
@@ -128,51 +133,57 @@ export function App(): ReactElement {
                 <ul className="shelf">
                     {GAMES.map((game: GameBox) => (
                         <li key={game.name} className="box">
-                            <LatePicture src={game.art} alt={game.alt} width={1024} height={1024} />
+                            <div className="box-stand">
+                                <LatePicture src={game.art} alt={game.alt} width={600} height={600} />
+                            </div>
                             <div className="box-label">
                                 <strong>{game.name}</strong>
                                 <p>{game.line}</p>
-                                <small>{game.players} · {game.length}</small>
+                                <small>{game.players}</small>
                             </div>
                         </li>
                     ))}
                 </ul>
-                <div className="plank" />
             </section>
 
-            <section className="hears" aria-labelledby="hears">
-                <div className="hears-copy">
-                    <h2 id="hears">Talk to the host</h2>
-                    <p className="plain">
-                        Each phone is a separate mic, so the host knows who's speaking. Answer out loud, ask about a rule, or say when you're ready to vote.
-                    </p>
-                    <p className="plain mic-big">{MIC_LINE}</p>
+            <section className="agent-section" aria-labelledby="agents">
+                <div className="agent-copy">
+                    <h2 id="agents">Bring your own agent</h2>
+                    <p>Anyone at the table can give a seat to their own AI agent. It joins the room and plays alongside everyone else.</p>
+                    <ol className="agent-steps">
+                        <li>On your phone, open the ··· menu.</li>
+                        <li>Choose AI guests and agents, then Add an agent.</li>
+                        <li>Paste the link you get to your agent.</li>
+                    </ol>
+                    <p className="agent-limits">Agents can play Same Page and Twenty Doors. The agent has to be able to open a web link or connect over MCP, so not every agent app can use it.</p>
                 </div>
-                <VoteDemo />
+                <div className="agent-note" aria-hidden="true">
+                    <p>{AGENT_WORDS}</p>
+                    <p className="agent-link">funhouse.live/a/···</p>
+                </div>
             </section>
 
-            <section className="secrets" aria-labelledby="secrets">
-                <div className="hears-copy">
-                    <h2 id="secrets">Secret roles stay on your phone</h2>
-                    <p className="plain">
-                        Your role only shows while you press and hold, so a phone left on the table gives nothing away.
-                    </p>
-                </div>
-                <PhoneCard />
+            <section className="needs" aria-labelledby="needs">
+                <h2 id="needs">What a night needs</h2>
+                <dl className="needs-list">
+                    <div><dt>A TV and some phones</dt><dd>The game plays out on the TV. Each phone is a controller and a mic, so the host knows who said what.</dd></div>
+                    <div><dt>Nothing to install</dt><dd>Guests scan the code or type four letters, and they're in, with no account.</dd></div>
+                    <div><dt>A voice, or thumbs</dt><dd>Talk to the host, or choose Type instead if nobody wants to use a mic.</dd></div>
+                    <div><dt>Enough players, or AI guests</dt><dd>A short table can add AI guests from the phone menu, in the games that support them.</dd></div>
+                </dl>
+                <p className="meta-line">Built with Meta's models: Muse Spark runs the host, Muse Voice Transcribe hears the room, and Muse Image paints the art.</p>
             </section>
 
             <footer className="foot">
-                <a className="paper card start-card" href="/screen/"><strong>Start on a TV</strong><em>Start a room</em></a>
-                {PROOF.video !== "" || PROOF.code !== "" ? (
-                    <p className="proof">
-                        {PROOF.video !== "" ? <a href={PROOF.video}>Watch a game</a> : null}
-                        {PROOF.code !== "" ? <a href={PROOF.code}>Read the code</a> : null}
-                    </p>
-                ) : null}
-                <p className="fine">You don't need an account. Players enter a name and allow the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
-                <p className="fine"><strong>Quiz topics and web search.</strong> When you say a topic for Quizmaster, that topic goes to Meta's AI model, which searches the web to help write the questions. Meta runs the search, and we don't know which search services it uses, so your words may reach them. We ask Meta not to save the request as a stored response, but its usual terms still apply. The topic and its questions stay in our server's memory for up to an hour, even after your room closes, and another room choosing the same topic can get the same questions. So please don't say anything private as a topic.</p>
-                <p className="fine"><strong>Quick judgments.</strong> Some typed answers, and some of what you say in rooms trying this, go to TypeSafe AI, whose Jev model judges things like whether two answers mean the same. We haven't been able to confirm how long TypeSafe keeps that text or whether it trains on it.</p>
-                <p className="fine">{versionLine(__BUILD_INFO__)}</p>
+                <nav className="foot-links" aria-label="Site">
+                    <a href="/screen/">Start a room</a>
+                    {PROOF.video !== "" ? <a href={PROOF.video}>Watch a game</a> : null}
+                    {PROOF.code !== "" ? <a href={PROOF.code}>Code</a> : null}
+                    <a href="/landing/privacy/">Privacy</a>
+                    <a href="/landing/terms/">Terms</a>
+                </nav>
+                <p className="fine">{COPYRIGHT}</p>
+                <p className="fine build-line">{versionLine(__BUILD_INFO__)}</p>
             </footer>
         </main>
     );
