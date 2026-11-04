@@ -280,7 +280,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.driving === true) {
         return { big: "You have the controller", small: talkLine };
     }
-    if (pad.driverName === "") {
+    if (pad.driverName === "" || pad.controllerFree === true) {
         return { big: "", small: talkLine };
     }
     return pad.canDrive === true
