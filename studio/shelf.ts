@@ -40,6 +40,17 @@ export const BLUEPRINTS: readonly Blueprint[] = [
 ];
 
 /**
+ * Games that are built and pass their scripted checks but stay off the shelf until a run against the real
+ * thing clears them: each id maps to what is still missing. Clearing a game is deleting its line. A room started with STUDIO_SHOW_HELD=1 shows them anyway, for the
+ * scripted runs that prove them.
+ */
+export const HELD_BACK: Readonly<Record<string, string>> = {
+    paintedWhispers: "no run with the real picture model; its cost and latency are unmeasured",
+    clueGallery: "no run with the real picture model; its cost and latency are unmeasured",
+    twoTakes: "no run against the real classifier yet",
+};
+
+/**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
  * afterwards changes neither the shelf entry nor any game started from it.
  * @param given a runnable blueprint.
@@ -73,7 +84,7 @@ export function installBlueprint(given: Blueprint): InstalledGame {
  * @returns the shelf.
  */
 export function studioShelf(handWritten: InstalledGame[]): InstalledGame[] {
-    const installed: InstalledGame[] = BLUEPRINTS.map(installBlueprint);
+    const installed: InstalledGame[] = BLUEPRINTS.filter((blueprint: Blueprint) => process.env.STUDIO_SHOW_HELD === "1" || HELD_BACK[blueprint.box.id] === undefined).map(installBlueprint);
     const replaced: InstalledGame[] = handWritten.map((game: InstalledGame) => installed.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
     const added: InstalledGame[] = installed.filter((game: InstalledGame) => handWritten.some((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) === false);
     return [...replaced, ...added];

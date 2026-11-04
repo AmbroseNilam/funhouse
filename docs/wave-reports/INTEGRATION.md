@@ -67,3 +67,10 @@ happened to land before the reveal; the scripted scenarios check it exhaustively
 Found: the shelf screen's spine labels are clipped and broken across lines once the shelf is long ("Pas / the
 / Gat"). That is the shelf UI, not a game. One caption on Painted Whispers link 3 looked faint against its glow;
 not confirmed.
+
+## Held back
+
+`HELD_BACK` in `studio/shelf.ts` keeps Painted Whispers, Clue Gallery and Two Takes off the `?studio=1` shelf
+until a run against the real picture model (cost and latency) and the real classifier clears them; delete the
+game's line to put it on. Start the room with `STUDIO_SHOW_HELD=1` to see them anyway (the scenarios need it).
+Any new game that passes goes here until a human or real-host run clears it, except tap-only games.
