@@ -947,10 +947,10 @@ export function App(): ReactElement {
         if (holdingRef.current === true) {
             stopTalking();
         }
-        if (joined === true) {
+        if (joined === true && canTalk === true) {
             setMenu((current) => (current === "closed" ? "mic" : current));
         }
-        // Only a change in the microphone or being seated should open the card.
+        // Only a change in the microphone or being seated should open the card; a tap-only phase never does.
     }, [state.mic, joined]);
 
     const showingSurface: boolean = state.stage === "joined" && movedAway === false;
