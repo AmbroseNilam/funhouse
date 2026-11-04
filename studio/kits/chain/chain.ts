@@ -11,7 +11,7 @@
 // one empty phone never stops the table.
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../../shared/cartridge.ts";
-import type { Control } from "../../../shared/controls.ts";
+import { REVEAL_NOW, type Control } from "../../../shared/controls.ts";
 import type { GalleryItem, Scene, SceneBlock } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { Turn } from "../../../shared/turn.ts";
@@ -26,7 +26,7 @@ export interface ChainDecisions {
     starters: string[];
     /** Descriptions used when a later writer writes nothing or has left. */
     blanks: string[];
-    /** Seconds a writer has. */
+    /** Seconds a writer has; 0 means no timer, and the holder's Move on stands in for the clock. */
     writeSeconds: number;
     /** Seconds to wait for a painting before the next writer gets the words instead. */
     paintSeconds: number;
@@ -107,7 +107,7 @@ export function chainProblems(decisions: ChainDecisions): string[] {
             problems.push(`Every one of the ${name} must be one plain line of letters, up to ${STOCK_LINE_LIMIT} characters.`);
         }
     }
-    if (isWholeIn(decisions.writeSeconds, 20, 180) === false) {
+    if (decisions.writeSeconds !== 0 && isWholeIn(decisions.writeSeconds, 20, 180) === false) {
         problems.push("Writing time must be a whole number of seconds from 20 to 180.");
     }
     if (isWholeIn(decisions.paintSeconds, 15, 120) === false) {
@@ -278,7 +278,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
         const text: string = state.step === 0
             ? `${writer.name} writes the first line. Name ${writer.name} as first, then stay quiet. ${SAY_IT_ALOUD}`
             : `${writer.name} is up, describing the last painting. Say so in a few words, by name, saying nothing about the painting. ${SAY_IT_ALOUD}`;
-        return { state: fresh, facts: because(publicFact("writing", text), CHAIN_DECISIONS.write), nextPhaseId: "write", timers: { [`write:${state.step}`]: decisions.writeSeconds } };
+        return { state: fresh, facts: because(publicFact("writing", text), CHAIN_DECISIONS.write), nextPhaseId: "write", timers: decisions.writeSeconds === 0 ? {} : { [`write:${state.step}`]: decisions.writeSeconds } };
     };
 
     /**
@@ -382,8 +382,8 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
             return [];
         },
 
-        apply(state: ChainState): Step<ChainState> {
-            return { state, facts: [] };
+        apply(state: ChainState, _playerId: string, actionId: string): Step<ChainState> {
+            return state.phase === "write" && decisions.writeSeconds === 0 && actionId === REVEAL_NOW ? addLink(state, state.stock[state.step] ?? "", true) : { state, facts: [] };
         },
 
         onEvent(state: ChainState, event: RoomEvent): Step<ChainState> {
@@ -434,9 +434,9 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
             const writer: CartridgePlayer | undefined = writerOf(state);
             const progress: SceneBlock = { type: "progress", label: "Links", current: Math.min(state.step + (state.phase === "write" ? 0 : 1), state.order.length), max: state.order.length, marks: "card" };
             if (state.phase === "write" && writer !== undefined) {
-                const timer: SceneBlock = { type: "timer", seconds: decisions.writeSeconds, label: `for ${writer.name}`, running: true };
+                const timer: SceneBlock[] = decisions.writeSeconds === 0 ? [] : [{ type: "timer", seconds: decisions.writeSeconds, label: `for ${writer.name}`, running: true }];
                 if (state.step === 0) {
-                    return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is writing`, kicker: box.name }, { type: "text", text: "The first line, for the host to paint. Nobody else will read it.", emphasis: "large" }, progress, timer] };
+                    return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is writing`, kicker: box.name }, { type: "text", text: "The first line, for the host to paint. Nobody else will read it.", emphasis: "large" }, progress, ...timer] };
                 }
                 const previous: ChainLink | undefined = state.links[state.step - 1];
                 const seen: SceneBlock[] = previous === undefined
@@ -444,7 +444,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     : previous.src !== null
                         ? [{ type: "image", src: previous.src, caption: `${writer.name} describes this` }]
                         : [{ type: "text", text: `The painting didn't come. This is what it was meant to show: ${quoted(previous.text)}`, emphasis: "large" }, { type: "text", text: `${writer.name} puts it in their own words.` }];
-                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is describing this`, kicker: box.name }, ...seen, progress, timer] };
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is describing this`, kicker: box.name }, ...seen, progress, ...timer] };
             }
             if (state.phase === "paint") {
                 const wrote: ChainLink | undefined = state.links[state.step];
@@ -466,6 +466,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
 
         privateControls(state: ChainState, playerId: string): Control[] {
             const writer: CartridgePlayer | undefined = writerOf(state);
+            const moveOn: Control[] = decisions.writeSeconds === 0 ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Move on", holderOnly: true }] }] : [];
             if (state.phase === "write" && writer?.playerId === playerId) {
                 return [{
                     type: "textInput",
@@ -474,10 +475,10 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     placeholder: state.step === 0 ? "A line about anything at all" : "What you see, in one line",
                     maxLength: decisions.lineLimit,
                     note: state.step === 0 ? "One line. The host paints it, and the next person only sees the painting." : "Say what you see. Don't guess what it was meant to be.",
-                }];
+                }, ...moveOn];
             }
             if (state.phase === "write" && writer !== undefined) {
-                return [{ type: "waiting", text: `${writer.name} is ${state.step === 0 ? "writing the first line" : "describing the painting"}. Your turn comes soon.` }];
+                return [{ type: "waiting", text: `${writer.name} is ${state.step === 0 ? "writing the first line" : "describing the painting"}. Your turn comes soon.` }, ...moveOn];
             }
             if (state.phase === "paint") {
                 return [{ type: "waiting", text: "The host is painting. Watch the screen." }];

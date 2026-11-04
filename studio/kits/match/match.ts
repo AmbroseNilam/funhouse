@@ -9,7 +9,7 @@
 // pairs that look alike. Silence from any step means "separate". Same Page is this kit.
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../../shared/cartridge.ts";
-import type { Control } from "../../../shared/controls.ts";
+import { REVEAL_NOW, type Control } from "../../../shared/controls.ts";
 import type { BoardCell, Scene, SceneBlock, TallyRow } from "../../../shared/scene.ts";
 import type { AnswerGroup, RoomEvent } from "../../../shared/timeline.ts";
 import type { Turn } from "../../../shared/turn.ts";
@@ -42,7 +42,7 @@ export interface MatchDecisions {
     stems: PromptStem[];
     /** The fallback prompts, at least as many of each kind as the stems use. */
     bank: BankPrompt[];
-    /** Seconds to type a card. */
+    /** Seconds to type a card; 0 means no timer, and the round waits for everyone or the holder's Reveal now. */
     writeSeconds: number;
     /** Seconds the stacks stay on the screen. */
     revealSeconds: number;
@@ -124,6 +124,9 @@ const PROMPT_CHARACTER_LIMIT: number = 70;
 /** The most pairs the closed question carries, so one reply stays short. */
 const ASK_PAIR_LIMIT: number = 4;
 
+/** Most names listed on the TV as still writing; beyond that, the cards-in count says enough. */
+const STILL_WRITING_NAMES: number = 3;
+
 /** Seconds the host's model has to write the prompts before the bank is used. */
 const CHOOSE_SECONDS: number = 20;
 
@@ -167,7 +170,7 @@ export function matchProblems(decisions: MatchDecisions): string[] {
         problems.push("The fallback bank repeats a prompt.");
     }
     const numbers: [string, number, number, number][] = [
-        ["Writing time", decisions.writeSeconds, 5, 120],
+        ["Writing time", decisions.writeSeconds === 0 ? 5 : decisions.writeSeconds, 5, 120],
         ["Reveal time", decisions.revealSeconds, 3, 60],
         ["The wait for the merging seam", decisions.settleSeconds, 1, 10],
         ["The wait for the closed question", decisions.askSeconds, 1, 15],
@@ -339,10 +342,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const text: string = [
             `Prompt ${round} of ${total}: ${quoted(promptOf(state))}.`,
             round === 1
-                ? `Read the prompt word for word, then say they have ${decisions.writeSeconds} seconds to match the room. You don't know any answers.`
+                ? `Read the prompt word for word, then say ${decisions.writeSeconds === 0 ? "they should match the room, and it moves on once everyone's in" : `they have ${decisions.writeSeconds} seconds to match the room`}. You don't know any answers.`
                 : `${PROMPT_SHAPES[round % PROMPT_SHAPES.length] ?? ""} Say nothing about the clock or matching, because the screen shows that. You don't know any answers.`,
         ].join(" ");
-        return { state, facts: because(publicFact("prompt", text), MATCH_DECISIONS.prompts), nextPhaseId: "writing", timers: { [`write${round}`]: decisions.writeSeconds } };
+        return { state, facts: because(publicFact("prompt", text), MATCH_DECISIONS.prompts), nextPhaseId: "writing", timers: decisions.writeSeconds === 0 ? {} : { [`write${round}`]: decisions.writeSeconds } };
     };
 
     /**
@@ -673,8 +676,8 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
             return [];
         },
 
-        apply(state: MatchState): Step<MatchState> {
-            return { state, facts: [] };
+        apply(state: MatchState, _playerId: string, actionId: string): Step<MatchState> {
+            return state.phase === "writing" && decisions.writeSeconds === 0 && actionId === REVEAL_NOW ? closeWriting(state) : { state, facts: [] };
         },
 
         onEvent(state: MatchState, event: RoomEvent): Step<MatchState> {
@@ -729,7 +732,13 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 if (state.phase === "writing") {
                     blocks.push({ type: "text", text: "Type what you think the room will say.", emphasis: "large" });
                     blocks.push({ type: "progress", label: "Cards in", current: state.cards.length, max: state.players.length, marks: "card" });
-                    blocks.push({ type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` });
+                    if (decisions.writeSeconds > 0) {
+                        blocks.push({ type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` });
+                    }
+                    const writing: string[] = state.players.filter((player: CartridgePlayer) => cardOf(state, player.playerId) === undefined).map((player: CartridgePlayer) => player.name);
+                    if (decisions.writeSeconds === 0 && state.cards.length > 0 && writing.length <= STILL_WRITING_NAMES) {
+                        blocks.push({ type: "text", text: `Still writing: ${writing.join(", ")}`, emphasis: "normal" });
+                    }
                     return { mood: "neutral", transition: "fade", blocks };
                 }
                 blocks.push({ type: "text", text: "Stacking the cards.", emphasis: "large" });
@@ -754,6 +763,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         },
 
         privateControls(state: MatchState, playerId: string): Control[] {
+            const revealNow: Control = { type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true }] };
+            if (state.phase === "writing" && decisions.writeSeconds === 0 && state.players.some((player: CartridgePlayer) => player.playerId === playerId) === false) {
+                return [{ type: "waiting", text: "Look at the screen." }, revealNow];
+            }
             if (state.players.some((player: CartridgePlayer) => player.playerId === playerId) === false || state.phase === "end") {
                 return [{ type: "waiting", text: state.phase === "end" ? "That's the game." : "Look at the screen." }];
             }
@@ -768,12 +781,12 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 const wears: string = state.hat === playerId ? " You have the hat." : "";
                 return [{ type: "waiting", text: `${won === 0 ? "No match this round." : `You scored ${won}.`}${wears}` }];
             }
-            const clock: Control = { type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` };
+            const clock: Control[] = decisions.writeSeconds === 0 ? [revealNow] : [{ type: "drain", seconds: decisions.writeSeconds, key: `write-${state.round}-${promptOf(state)}` }];
             if (cardOf(state, playerId) !== undefined) {
-                return [{ type: "waiting", text: "Your card is in." }, clock];
+                return [{ type: "waiting", text: "Your card is in." }, ...clock];
             }
             const field: Control = { type: "textInput", id: controlId(state, playerId), prompt: promptOf(state), placeholder: "what will the room say", maxLength: decisions.answerLimit };
-            return (state.attempts[playerId] ?? 0) > 0 ? [clock, { ...field, note: "Try another one." }] : [clock, field];
+            return (state.attempts[playerId] ?? 0) > 0 ? [{ ...field, note: "Try another one." }, ...clock] : [field, ...clock];
         },
 
         hostFacts(state: MatchState, scope: Scope): ScopedFact[] {

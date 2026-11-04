@@ -5,5 +5,6 @@
     "guests": "model",
     "agents": true,
     "agentDecisions": { "writeSeconds": 75 },
+    "timeChoice": { "decision": "writeSeconds", "relaxed": 45, "normal": 30, "quick": 15 },
     "order": 220
 }

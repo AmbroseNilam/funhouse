@@ -169,7 +169,7 @@ while (screen.shell?.gameOver !== true) {
         }
     }
     const typed: Control | undefined = controls.find((control: Control) => control.type === "textInput" || control.type === "numberInput" || control.type === "slider");
-    const options: { id: string; label: string }[] = person.options();
+    const options: { id: string; label: string }[] = person.options().filter((option) => option.id !== "reveal-now");
     const asked: string = JSON.stringify([typed, options]);
     if (asked !== lastAsked) {
         lastAsked = asked;

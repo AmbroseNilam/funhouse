@@ -2,5 +2,6 @@
     "id": "paintedWhispers",
     "kit": "chain",
     "level": "visible",
+    "timeChoice": { "decision": "writeSeconds", "relaxed": 90, "normal": 60, "quick": 30 },
     "order": 200
 }

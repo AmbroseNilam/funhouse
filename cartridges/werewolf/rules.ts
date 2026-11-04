@@ -6,7 +6,7 @@
 import { HOST_NAME } from "../../shared/brand.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
-import type { Control } from "../../shared/controls.ts";
+import type { Control, ControlOption } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
@@ -808,14 +808,14 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return state.phase === "end" || seat.role === "werewolf" ? [] : others.map((candidate) => ({ actionId: `ghost:${candidate.playerId}`, label: candidate.name }));
             }
             if (state.phase === "pick") {
-                const actions: LegalAction[] = [{ actionId: "setup:host", label: `Let ${HOST_NAME} decide` }];
-                if (state.seats.length < TOGGLES_FROM_PLAYERS) {
-                    return actions;
+                const actions: LegalAction[] = [];
+                if (state.seats.length >= TOGGLES_FROM_PLAYERS) {
+                    for (const special of ["seer", "doctor", "hunter"] as const) {
+                        actions.push({ actionId: `setup:${special}`, label: `${special[0]?.toUpperCase() ?? ""}${special.slice(1)}: ${state.setup[special] === true ? "in" : "out"}` });
+                    }
                 }
-                for (const special of ["seer", "doctor", "hunter"] as const) {
-                    actions.push({ actionId: `setup:${special}`, label: `${special[0]?.toUpperCase() ?? ""}${special.slice(1)}: ${state.setup[special] === true ? "in" : "out"}` });
-                }
-                return state.setupChanged === true ? [...actions, { actionId: "setup:go", label: "Start with these" }] : actions;
+                actions.push({ actionId: "setup:go", label: "Start with these" });
+                return state.setupChanged === true ? [...actions, { actionId: "setup:host", label: `Use ${HOST_NAME}'s pick` }] : actions;
             }
             if (state.phase === "intro" || state.phase === "roles") {
                 return state.tappedThrough.includes(playerId) === true ? [] : [{ actionId: "gotIt", label: state.phase === "intro" ? "Got it" : "I've seen it" }];
@@ -857,7 +857,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             const targetId: string = actionId.slice(separator + 1);
             if (verb === "setup") {
                 if (targetId === "host") {
-                    return deal({ ...state, setup: presetSetup(state.seats.length) });
+                    return { state: { ...state, setup: presetSetup(state.seats.length), setupChanged: false }, facts: [], timers: { pick: PICK_SECONDS } };
                 }
                 if (targetId === "go") {
                     return deal(state);
@@ -927,50 +927,46 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return [{ type: "waiting", text: "You are watching this round." }];
             }
             const actions: LegalAction[] = this.legalActions(state, playerId);
-            const buttons = (prompt?: string): Control => ({ type: "buttons", ...(prompt !== undefined ? { prompt } : {}), options: actions.map((action) => ({ id: action.actionId, label: action.label })) });
+            const asOptions = (): ControlOption[] => actions.map((action) => ({ id: action.actionId, label: action.label }));
+            const bigAction = (): Control[] => (actions.length === 0 ? [] : [{ type: "buttons", options: actions.map((action) => ({ id: action.actionId, label: action.label, style: "primary" })) }]);
             if (state.phase === "pick") {
-                return [
-                    { type: "roleCard", title: "Choose your village", body: describeRoles(rolesFor(state.seats.length, state.setup)), secret: false },
-                    ...(actions.length > 0 ? [buttons()] : []),
-                    { type: "waiting", text: "Tap to set the village" },
-                ];
+                return pickControls(state, actions);
             }
             if (state.phase === "intro") {
-                return [
-                    { type: "roleCard", title: "How it works", body: rulesLines(state.seats.map((candidate) => candidate.role)).join("\n"), secret: false },
-                    ...(actions.length > 0 ? [buttons()] : [{ type: "notice", text: "Waiting for the others.", tone: "info" } as const]),
-                ];
+                const rules: string[] = rulesLines(state.seats.map((candidate) => candidate.role));
+                return [{ type: "roleCard", title: "How it works", body: "", secret: false, lines: rules, numbered: true }, ...bigAction()];
             }
             if (state.phase === "end") {
-                return [{ type: "waiting", text: `${state.winner === "villagers" ? "The village wins" : "The werewolves win"}. ${wolvesLine(state)}` }];
+                return endControls(state);
             }
             const card: Control = { type: "roleCard", title: `You are ${withArticle(seat.role)}`, body: roleBlurb(seat.role), secret: true, startHidden: state.phase !== "roles" };
             if (state.phase === "hunter" && state.hunterId === playerId) {
-                return [card, { type: "choice", prompt: "Take someone with you.", options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false }];
+                return [card, { type: "choice", prompt: "You were the hunter. Who do you take with you?", options: asOptions(), multiple: false }];
             }
             if (seat.alive === false) {
                 return [card, ...ghostControls(state, seat, actions)];
             }
             if (state.phase === "roles") {
-                return [card, ...(actions.length > 0 ? [buttons()] : [{ type: "notice", text: "Waiting for the others.", tone: "info" } as const])];
+                return [card, ...bigAction()];
             }
             if (state.phase === "night") {
                 return [card, ...nightControls(state, seat, actions)];
             }
-            if (state.phase === "dawn") {
-                return [card, { type: "waiting", text: "Listen for what happened" }];
+            if (state.phase === "dawn" || state.phase === "verdict") {
+                return [card, { type: "waiting", text: state.moment?.heading ?? "Watch the TV" }];
             }
             if (state.phase === "discussion") {
-                const count: string = `${state.readyToVote.length} of ${readyNeeded(state)} ready to vote`;
-                return [card, buttons(count), { type: "waiting", text: "Talk it out" }];
+                const ready: boolean = state.readyToVote.includes(playerId);
+                const body: string = `Argue it out loud. ${state.readyToVote.length} of ${readyNeeded(state)} ready to vote${ready === true ? ", you included" : ""}.`;
+                return [card, { type: "roleCard", title: "Who is the werewolf?", body, secret: false }, { type: "buttons", options: actions.map((action) => ({ id: action.actionId, label: action.label, style: ready === true ? "quiet" : "primary" })) }];
             }
             if (state.phase === "vote") {
                 const votedFor: string | undefined = state.dayVotes[playerId];
-                const prompt: string = state.runoff === null ? "Who is the werewolf?" : "Final vote: who goes?";
-                const options: Control = { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false };
-                return votedFor === undefined ? [card, options] : [card, { type: "notice", text: `You voted for ${nameOf(state, votedFor)}. You can still change it.`, tone: "info" }, options];
+                const question: string = state.runoff === null ? "Who do you vote out?" : "Final vote. Who do you vote out?";
+                const prompt: string = votedFor === undefined ? question : `You voted for ${nameOf(state, votedFor)}. Tap another to change it.`;
+                return [card, { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label, selected: action.actionId === `vote:${votedFor ?? ""}` })), multiple: false }];
             }
-            return [card, { type: "waiting", text: state.phase === "verdict" ? "The count is on the TV" : "Watch the TV" }];
+            return [card, { type: "waiting", text: "The hunter is aiming" }];
         },
 
         outOf(state: WerewolfState): string[] {
@@ -979,20 +975,20 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
 
         turn(state: WerewolfState): Turn | null {
             if (state.phase === "pick") {
-                return { kind: "anyone", label: "Anyone can choose" };
+                return { kind: "anyone", label: "Anyone can choose", phoneLine: "" };
             }
             if (state.phase === "intro" || state.phase === "roles") {
-                return { kind: "everyone", playerIds: alive(state).map((seat) => seat.playerId), doneIds: state.tappedThrough, label: state.phase === "intro" ? "Everyone taps Got it" : "Everyone checks their phone" };
+                return { kind: "everyone", playerIds: alive(state).map((seat) => seat.playerId), doneIds: state.tappedThrough, label: state.phase === "intro" ? "Everyone taps Got it" : "Everyone checks their phone", phoneLine: "" };
             }
             if (state.phase === "night") {
                 return { kind: "secret", label: "Waiting on the night" };
             }
             if (state.phase === "discussion") {
-                return { kind: "anyone", label: "Anyone can talk" };
+                return { kind: "anyone", label: "Anyone can talk", phoneLine: "" };
             }
             if (state.phase === "vote") {
                 const voters: string[] = alive(state).map((seat) => seat.playerId);
-                return { kind: "everyone", playerIds: voters, doneIds: Object.keys(state.dayVotes), label: state.runoff === null ? "Everyone votes" : "Everyone votes again" };
+                return { kind: "everyone", playerIds: voters, doneIds: Object.keys(state.dayVotes), label: state.runoff === null ? "Everyone votes" : "Everyone votes again", phoneLine: "Your vote" };
             }
             if (state.phase === "hunter" && state.hunterId !== null) {
                 return { kind: "one", playerId: state.hunterId, label: "The hunter aims" };
@@ -1032,6 +1028,39 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     };
 
     /**
+     * The pick step on a phone: the question, the village as it stands, any switches, and one big action.
+     * @param state the state.
+     * @param actions what this phone can do.
+     * @returns the controls.
+     */
+    function pickControls(state: WerewolfState, actions: LegalAction[]): Control[] {
+        const lines: string[] = describeRoles(rolesFor(state.seats.length, state.setup)).split(", ");
+        const body: string = state.setupChanged === true ? "It starts by itself in a few seconds." : `${HOST_NAME} picked this for ${state.seats.length} players. It starts by itself in a few seconds.`;
+        const going: string[] = ["setup:go", "setup:host"];
+        const toggles: ControlOption[] = actions.filter((action) => going.includes(action.actionId) === false).map((action) => ({ id: action.actionId, label: action.label, style: "toggle", on: action.label.endsWith(": in") }));
+        const starts: ControlOption[] = actions.filter((action) => going.includes(action.actionId) === true).map((action) => ({ id: action.actionId, label: action.label, style: action.actionId === "setup:go" ? "primary" : "quiet" }));
+        const controls: Control[] = [{ type: "roleCard", title: "Play this village?", body, secret: false, lines }];
+        if (toggles.length > 0) {
+            controls.push({ type: "buttons", prompt: "Change the roles", options: toggles });
+        }
+        controls.push({ type: "buttons", options: starts });
+        return controls;
+    }
+
+    /**
+     * The end of the game on a phone: who won, and everyone's role now that it can't matter.
+     * @param state the state.
+     * @returns the controls.
+     */
+    function endControls(state: WerewolfState): Control[] {
+        if (state.winner === "nobody") {
+            return [{ type: "roleCard", title: "Too few players left", body: "", secret: false }];
+        }
+        const title: string = state.winner === "villagers" ? "The village wins" : "The werewolves win";
+        return [{ type: "roleCard", title, body: "", secret: false, lines: state.seats.map((seat) => `${seat.name}: ${seat.role}`) }];
+    }
+
+    /**
      * What an eliminated player's phone shows: only what's already public, and their ghost guess.
      * @param state the state.
      * @param seat the player.
@@ -1041,16 +1070,14 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     function ghostControls(state: WerewolfState, seat: Seat, actions: LegalAction[]): Control[] {
         const stillIn: string = alive(state).map((candidate) => candidate.name).join(", ");
         const outNames: Seat[] = state.seats.filter((candidate) => candidate.alive === false && candidate.left !== true && candidate.playerId !== seat.playerId);
-        const known: string = state.variants.revealOnDeath === true
-            ? outNames.map((candidate) => `${candidate.name} was ${withArticle(candidate.role)}.`).join(" ")
-            : "";
-        const controls: Control[] = [{ type: "notice", text: `You're out, so no clues. Still in: ${stillIn}.${known !== "" ? ` ${known}` : ""}`, tone: "info" }];
-        const guess: string | undefined = state.ghostGuesses[seat.playerId];
-        if (actions.length > 0) {
-            const prompt: string = guess === undefined ? "Who do you think the werewolf is? Shown at the end." : `You think it's ${nameOf(state, guess)}. You can change it.`;
-            controls.push({ type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label })), multiple: false });
+        const known: string[] = state.variants.revealOnDeath === true ? outNames.map((candidate) => `${candidate.name} was ${withArticle(candidate.role)}.`) : [];
+        const controls: Control[] = [{ type: "roleCard", title: "You're out", body: "No clues for the living.", secret: false, lines: [`Still in: ${stillIn}.`, ...known] }];
+        if (actions.length === 0) {
+            return controls;
         }
-        return [...controls, { type: "waiting", text: "You're out. Enjoy the show" }];
+        const guess: string | undefined = state.ghostGuesses[seat.playerId];
+        const prompt: string = guess === undefined ? "Who do you think the werewolf is? It shows at the end." : `You think it's ${nameOf(state, guess)}. Tap another to change it.`;
+        return [...controls, { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label, selected: action.actionId === `ghost:${guess ?? ""}` })), multiple: false }];
     }
 
     /**
@@ -1064,21 +1091,14 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         if (actions.length === 0) {
             return [{ type: "waiting", text: "Eyes closed. Keep your phone face down." }];
         }
-        const options: ControlOptionList = actions.map((action) => ({ id: action.actionId, label: action.label }));
-        if (seat.role === "werewolf") {
-            const picked: string | undefined = state.nightChoices[seat.playerId];
-            const pack: Control[] = aliveWerewolves(state)
-                .filter((wolf) => wolf.playerId !== seat.playerId && state.nightChoices[wolf.playerId] !== undefined)
-                .map((wolf) => ({ type: "notice", text: `${wolf.name} wants ${nameOf(state, state.nightChoices[wolf.playerId] ?? "")}.`, tone: "info" }));
-            const mine: Control[] = picked === undefined ? [] : [{ type: "notice", text: `You chose ${nameOf(state, picked)}. You can still change it.`, tone: "info" }];
-            return [...pack, ...mine, { type: "choice", prompt: "Choose tonight's victim.", options, multiple: false }];
-        }
-        const target: string | null = seat.role === "seer" ? state.seerTarget : state.doctorTarget;
-        const prompt: string = seat.role === "seer" ? "Who do you want to check?" : "Who do you want to protect?";
-        const mine: Control[] = target === null ? [] : [{ type: "notice", text: `You chose ${nameOf(state, target)}. You can still change it.`, tone: "info" }];
-        return [...mine, { type: "choice", prompt, options, multiple: false }];
+        const chosenId: string | null = seat.role === "werewolf" ? state.nightChoices[seat.playerId] ?? null : seat.role === "seer" ? state.seerTarget : state.doctorTarget;
+        const verb: string = seat.role === "werewolf" ? "kill" : seat.role === "seer" ? "see" : "heal";
+        const options: ControlOption[] = actions.map((action) => ({ id: action.actionId, label: action.label, selected: action.actionId === `${verb}:${chosenId ?? ""}` }));
+        const question: string = seat.role === "werewolf" ? "Who do you choose tonight?" : seat.role === "seer" ? "Who do you want to check?" : "Who do you want to protect?";
+        const prompt: string = chosenId === null ? question : `You chose ${nameOf(state, chosenId)}. Tap another to change it.`;
+        const pack: Control[] = seat.role !== "werewolf" ? [] : aliveWerewolves(state)
+            .filter((wolf) => wolf.playerId !== seat.playerId && state.nightChoices[wolf.playerId] !== undefined)
+            .map((wolf) => ({ type: "notice", text: `${wolf.name} wants ${nameOf(state, state.nightChoices[wolf.playerId] ?? "")}.`, tone: "info" }));
+        return [...pack, { type: "choice", prompt, options, multiple: false }];
     }
 }
-
-/** The options of a choice. */
-type ControlOptionList = { id: string; label: string }[];
