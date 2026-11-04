@@ -1,5 +1,5 @@
 // The dictation waveform in tap-to-talk rooms: thin rounded bars scrolling right to left, each as
-// tall as the voice was when it was drawn, flattening to a thin line in silence.
+// tall as the voice was when it was drawn, over a steady faint line that is all there is in silence.
 
 /** Width of one bar and the gap after it, in CSS pixels. */
 const BAR_PIXELS: number = 3;
@@ -8,8 +8,14 @@ const GAP_PIXELS: number = 3;
 /** How often a new bar arrives. */
 const BAR_MILLISECONDS: number = 70;
 
-/** The height of a bar in silence, in CSS pixels. */
+/** The height of the resting line, in CSS pixels. */
 const QUIET_PIXELS: number = 2;
+
+/** How faint the resting line is. */
+const QUIET_OPACITY: number = 0.4;
+
+/** A level below this draws no bar, so background hiss doesn't speckle the line. */
+const SILENT_LEVEL: number = 0.01;
 
 /**
  * Draws the waveform until stopped.
@@ -45,7 +51,13 @@ export function drawWave(canvas: HTMLCanvasElement, readLevel: () => number): ()
         }
         const drift: number = still === true ? 0 : ((now - lastBarAt) / BAR_MILLISECONDS) * (BAR_PIXELS + GAP_PIXELS);
         context.clearRect(0, 0, width, height);
+        context.globalAlpha = QUIET_OPACITY;
+        context.fillRect(0, (height - QUIET_PIXELS) / 2, width, QUIET_PIXELS);
+        context.globalAlpha = 1;
         levels.forEach((level: number, index: number) => {
+            if (level < SILENT_LEVEL) {
+                return;
+            }
             const barHeight: number = Math.max(QUIET_PIXELS, Math.sqrt(Math.min(1, level)) * height);
             context.beginPath();
             context.roundRect(index * (BAR_PIXELS + GAP_PIXELS) - drift, (height - barHeight) / 2, BAR_PIXELS, barHeight, BAR_PIXELS / 2);
