@@ -8,7 +8,7 @@
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
-import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
+import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
@@ -687,10 +687,9 @@ export function createIdentityGame(givenBox: Box, givenDecisions: IdentityDecisi
             if (isOnTheSpot(state, playerId) === true) {
                 const hint: Control[] = state.hinted === true && mine !== undefined ? [{ type: "notice", text: `A hint: you are ${KIND_PHRASES[mine.kind]}.`, tone: "info" }] : [];
                 return [
-                    { type: "notice", text: "You're on the spot. Hold to talk and ask the room a yes-or-no question.", tone: "info" },
+                    { type: "notice", text: `You're on the spot, with ${questionsLeft(state)} ${questionsLeft(state) === 1 ? "question" : "questions"} left. Hold to talk and ask the room a yes-or-no question.`, tone: "info" },
                     ...hint,
                     { type: "buttons", options: [{ id: PASS_ACTION, label: "Pass this turn" }] },
-                    { type: "waiting", text: `${questionsLeft(state)} questions left.` },
                 ];
             }
             if (state.phase === "asking") {
@@ -734,11 +733,11 @@ export function createIdentityGame(givenBox: Box, givenDecisions: IdentityDecisi
 }
 
 /**
- * The end-of-game list of who everyone was, as a tally-free block the TV can read.
+ * The end-of-game line of who everyone was, short enough for the TV to show whole.
  * @param state the state.
  * @returns the block.
  */
 function reveals(state: IdentityState): SceneBlock {
-    const rows: TallyRow[] = state.players.map((player: CartridgePlayer): TallyRow => ({ label: `${player.name} was ${state.dealt[player.playerId]?.name ?? "someone"}`, count: state.records[player.playerId]?.questions ?? 0 }));
-    return { type: "tally", title: "Who everyone was, and the questions it took", rows };
+    const lines: string[] = state.players.map((player: CartridgePlayer): string => `${player.name} was ${state.dealt[player.playerId]?.name ?? "someone"}.`);
+    return { type: "text", text: lines.join(" "), emphasis: "normal" };
 }
