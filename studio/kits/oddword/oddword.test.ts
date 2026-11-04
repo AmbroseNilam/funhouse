@@ -15,6 +15,7 @@ import { blueprintProblems } from "../../blueprint.ts";
 import { type OddWordBlueprint } from "./index.ts";
 import { STRAY_WORD_BLUEPRINT } from "../../games/stray-word/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
+import { tooClose } from "../../kit/words.ts";
 import { oddWordRoleCheck } from "./personas.ts";
 import { PAPER_PLAYERS, roleBlindness, stringsIn } from "../../rehearse.ts";
 import { createOddWordGame, ODD_VOTE_PREFIX, parseEntry, STRAY_CARD_TITLE, type OddWordState } from "./oddword.ts";
@@ -236,6 +237,13 @@ describe("stray word: the order of words", () => {
         for (const other of ["paper1", "paper2", "paper4", "paper5"]) {
             assert.equal(stringsIn(game.cartridge.privateControls(secret, other)).join(" ").includes("Too close"), false, "nobody else is");
         }
+    });
+
+    it("takes either part of a two-word secret as too close, even with an ending on it", () => {
+        for (const clue of ["shower", "showers", "curtain", "curtains", "showercurtain"]) {
+            assert.equal(tooClose(clue, "Shower curtain"), true, clue);
+        }
+        assert.equal(tooClose("steam", "Shower curtain"), false);
     });
 
     it("lets the Stray say any word, even the secret, since they don't know it", () => {

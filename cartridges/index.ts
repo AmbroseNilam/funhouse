@@ -33,7 +33,7 @@ export const GAMES: InstalledGame[] = [
     {
         manifest: TWENTY_DOORS_MANIFEST,
         pitch: `${HOST_NAME} thinks of something. You get twenty questions to find it.`,
-        howToPlay: ["Press and hold your phone, and ask a yes-or-no question out loud.", "Every answer opens a door. You get twenty.", "Say what you think it is when you're ready."],
+        howToPlay: ["Tap Talk or press and hold on your phone, and ask a yes-or-no question out loud.", "Every answer opens a door. You get twenty.", "Say what you think it is when you're ready."],
         art: "art/twenty-doors.webp",
         pauseActions: [{ id: "giveup", label: "We give up" }],
         remarks: ["Twenty doors. I've picked something good.", "Go on. I'm hard to crack.", "Nobody's guessed mine in under ten."],
@@ -42,7 +42,7 @@ export const GAMES: InstalledGame[] = [
     {
         manifest: QUIZMASTER_MANIFEST,
         pitch: `Name any topic out loud. ${HOST_NAME} writes the questions and judges the answers.`,
-        howToPlay: ["Say a topic. Anything you think you know.", "Press and hold your phone to answer each question out loud.", "Two points for right, one for close. One try each."],
+        howToPlay: ["Say a topic. Anything you think you know.", "Tap Talk or press and hold on your phone to answer each question out loud.", "Two points for right, one for close. One try each."],
         art: "art/quizmaster.webp",
         pauseActions: [{ id: "skip", label: "Skip this question" }],
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],

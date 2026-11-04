@@ -12,6 +12,7 @@ import type { RejectedReason } from "../shared/protocol.ts";
 import { GAMES } from "../cartridges/index.ts";
 import { studioShelf } from "../studio/shelf.ts";
 import { RoomDirectory } from "./directory.ts";
+import { roomOptions, type RoomOptions } from "./room-options.ts";
 import { AddressLimits, BUDGET } from "./limits.ts";
 import type { Room } from "./room.ts";
 
@@ -124,8 +125,8 @@ function mayShowHeldGames(url: URL): boolean {
 /**
  * Opens a room for an address, if it and the day's budget allow.
  * @param address who's asking.
- * @param lively true when it's being opened to try the livelier host.
- * @param tapToTalk true when it's being opened to try tap-to-talk.
+ * @param lively true for the lively host.
+ * @param tapToTalk true for tap-to-talk.
  * @param fastReplies true when it's being opened to try the faster reply model.
  * @param studio true when it's being opened with the Studio shelf.
  * @param testing true when the Studio shelf also shows the games still on hold.
@@ -262,7 +263,8 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             return;
         }
         const showHeld: boolean = mayShowHeldGames(url);
-        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("tap") === "1", url.searchParams.get("fast") === "1", url.searchParams.get("studio") === "1" || showHeld === true, showHeld);
+        const options: RoomOptions = roomOptions(url.searchParams);
+        const room: Room | null = existing ?? openRoom(address, options.lively, options.tapToTalk, options.fastReplies, url.searchParams.get("studio") === "1" || showHeld === true, showHeld);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;

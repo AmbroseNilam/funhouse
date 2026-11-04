@@ -446,8 +446,8 @@ export class Room implements HostStage {
      * @param code the room code players type or scan.
      * @param publicUrl the base URL phones open, from PUBLIC_URL.
      * @param games what is on the shelf to begin with, in shelf order.
-     * @param livelyRoom true when the room was opened to try the livelier host.
-     * @param tapToTalk true when the room was opened to try tap-to-talk.
+     * @param livelyRoom true for the lively host.
+     * @param tapToTalk true when phones offer the Talk button.
      * @param fastReplies true when the room was opened to try the faster reply model.
      */
     public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false) {
@@ -516,7 +516,7 @@ export class Room implements HostStage {
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
-        this.host.interrupt(false);
+        this.host.close();
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();

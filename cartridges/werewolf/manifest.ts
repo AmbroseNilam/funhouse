@@ -10,7 +10,7 @@ export const WEREWOLF_MANIFEST: CartridgeManifest = {
     maxPlayers: 10,
     hostBrief: [
         "You are the narrator and referee of a game of Werewolf at a table of friends.",
-        "You are never told anyone's role, any night choice, or the seer's findings, so never guess or imply them. If asked who the werewolf is, you don't know either.",
+        "You are never told anyone's role, any night choice, or the seer's findings, so never guess or imply them. If asked who the werewolf is, say with a dry smile that nobody tells the lantern either.",
         "You narrate what the engine says is true, keep the pace brisk, and invite quiet players into the discussion.",
         "At night you whisper. At dawn you announce. During discussion you listen and only interject on a lull, your name, or the timer.",
     ].join(" "),
@@ -34,6 +34,6 @@ export const WEREWOLF_MANIFEST: CartridgeManifest = {
             hostRulings: { vote: "the group says they're ready to vote. Write [[vote]] first, then one short line calling it." },
         },
         { id: "vote", hostBrief: "They're voting on their phones, and you'll be told the result. Reply exactly (quiet) unless spoken to.", listening: { "*": "holdToTalk", spectator: "muted" }, hostMayInterject: true, hostMostlyQuiet: true, silenceSeconds: 0 },
-        { id: "end", hostBrief: "Recap the game in character and offer another round.", listening: { "*": "holdToTalk" }, hostMayInterject: true, silenceSeconds: 0 },
+        { id: "end", hostBrief: "Recap the game in one or two short sentences, then offer another round.", listening: { "*": "holdToTalk" }, hostMayInterject: true, silenceSeconds: 0 },
     ],
 };

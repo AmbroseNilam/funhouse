@@ -179,7 +179,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
                     </li>
                 ))}
             </ul>
-            <p className="players-hint">Hold your phone to talk to {HOST_NAME}. Whoever slides next takes the controller. Anyone else can scan in.</p>
+            <p className="players-hint">Talk to {HOST_NAME} from your phone. Whoever slides next takes the controller. Anyone else can scan in.</p>
             <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} />
             <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
         </section>

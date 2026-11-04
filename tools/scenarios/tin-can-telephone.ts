@@ -1,7 +1,7 @@
 // Plays Tin Can Telephone from a script with fake phones and the real room: five players by default,
 // or three with SCENARIO_PLAYERS=3, where the host gives one side's clues. The givers read the key
 // off their phones; their teams turn over exactly the words the key says, one clue spoken, one typed,
-// one the host rules a foul. Fails if any phone but a giver's ever shows whose a word is, if the TV
+// one the code refuses for being on the board, and one the host may rule either way. Fails if any phone but a giver's ever shows whose a word is, if the TV
 // shows a word's owner before it is turned over, if the host names a word's owner or says the
 // trapdoor word before the end, if a refused clue is repeated, or if the game does not end with the
 // team that found all its words winning.
@@ -178,6 +178,7 @@ checkNoLeaks();
 
 let turns: number = 0;
 let fouled: boolean = false;
+let askedHost: boolean = false;
 let missed: boolean = false;
 while (isOver() === false && turns < 14) {
     turns += 1;
@@ -191,15 +192,25 @@ while (isOver() === false && turns < 14) {
     const left: string[] = mine.filter((word: string) => boardOf(screen).some((cell: BoardCell) => squash(cell.text) === word && cell.turned === false) === true);
     const number: number = Math.min(left.length, 3);
     if (giver !== undefined) {
-        if (fouled === false && turns === 1) {
+        if (fouled === false) {
             fouled = true;
-            await giveClue(giver, "lookalike", number, false);
+            const onBoard: string = `${left[0] ?? ""}s`;
+            await giveClue(giver, onBoard, number, false);
             await waitFor(() => (giver.phone.view?.controls ?? []).some((control: Control) => control.type === "textInput" && control.note === "That one didn't count. Try another."), "a foul and a second try");
-            if (screen.hostLines.slice(gameStart).some((line: string) => squash(line).includes("lookalike") === true && /foul|sounds like/i.test(line) === false)) {
+            if (screen.hostLines.slice(gameStart).some((line: string) => squash(line).includes(onBoard) === true && /foul|refus|board/i.test(line) === false)) {
                 console.warn("NOTE: the host mentioned the refused clue without saying it was a foul.");
             }
         }
-        await giveClue(giver, "meridian", number, turns % 2 === 0);
+        let judged: boolean = false;
+        if (askedHost === false && turns >= 3) {
+            askedHost = true;
+            await giveClue(giver, "lookalike", number, false);
+            await waitFor(() => headline(screen).kicker.startsWith("Clue:") || (giver.phone.view?.controls ?? []).some((control: Control) => control.type === "textInput" && control.note === "That one didn't count. Try another."), "the host's ruling");
+            judged = headline(screen).kicker.startsWith("Clue:");
+        }
+        if (judged === false) {
+            await giveClue(giver, "meridian", number, turns % 2 === 0);
+        }
     }
     await waitFor(() => headline(screen).kicker.startsWith("Clue:") || isOver(), "guessing to open");
     checkNoLeaks();

@@ -238,11 +238,13 @@ function writeLearned(learned: Set<string>): void {
  * @param waiting what the game says to wait for, if anything.
  * @param canTalk whether the microphone may open right now.
  * @param micOff whether this phone's microphone is refused or broken, so talking can't be taught.
+ * @param talkButton whether this phone talks with the Talk button rather than by holding.
  * @returns the headline and a smaller line under it.
  */
-function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean): { big: string; small: string } {
+function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean, talkButton: boolean): { big: string; small: string } {
+    const talkHint: string = talkButton === true ? "Tap Talk to speak" : "Press and hold to talk";
     if (pad.watching === true) {
-        return { big: "You're watching this game", small: canTalk === true ? "You'll be in the next one. Press and hold to talk." : "You'll be in the next one" };
+        return { big: "You're watching this game", small: canTalk === true ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
     }
     if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
@@ -251,7 +253,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
     if (canTalk === true && micOff === false && learned.has("hold") === false) {
-        return { big: "Press and hold to talk", small: `${HOST_NAME} hears you while you hold` };
+        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
         return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
@@ -259,7 +261,7 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
-    const talkLine: string = canTalk === false ? "" : micOff === true ? "Turn on your mic from the menu" : "Press and hold to talk";
+    const talkLine: string = canTalk === false ? "" : micOff === true ? "Turn on your mic from the menu" : talkHint;
     if (pad.axis === null) {
         return { big: "", small: talkLine };
     }
@@ -343,11 +345,11 @@ function CodeScreen(): ReactElement {
  * @param props its name, its state and what to do when it changes.
  * @returns the element.
  */
-function SettingRow(props: { label: string; on: boolean; onChange: (on: boolean) => void }): ReactElement {
+function SettingRow(props: { label: string; on: boolean; onChange: (on: boolean) => void; onWord?: string; offWord?: string }): ReactElement {
     return (
         <button className="setting" role="switch" aria-checked={props.on} onClick={() => { props.onChange(props.on === false); }}>
             <span>{props.label}</span>
-            <span className="setting-state">{props.on === true ? "On" : "Off"}</span>
+            <span className="setting-state">{props.on === true ? props.onWord ?? "On" : props.offWord ?? "Off"}</span>
         </button>
     );
 }
@@ -945,10 +947,10 @@ export function App(): ReactElement {
         if (holdingRef.current === true) {
             stopTalking();
         }
-        if (joined === true) {
+        if (joined === true && canTalk === true) {
             setMenu((current) => (current === "closed" ? "mic" : current));
         }
-        // Only a change in the microphone or being seated should open the card.
+        // Only a change in the microphone or being seated should open the card; a tap-only phase never does.
     }, [state.mic, joined]);
 
     const showingSurface: boolean = state.stage === "joined" && movedAway === false;
@@ -1048,7 +1050,7 @@ export function App(): ReactElement {
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
-                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you when you hold to talk.</p>
+                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap Talk or hold to talk.</p>
             </main>
         );
     }
@@ -1108,7 +1110,7 @@ export function App(): ReactElement {
     const pad: PadView | null = view?.pad ?? null;
     const controls: Control[] = view?.controls ?? [];
     const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
-    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok");
+    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     const secretTitle: string = controls.flatMap((control: Control) => (control.type === "roleCard" && control.secret === true ? [control.title] : []))[0] ?? "";
     const secretLines: string[] = controls.flatMap((control: Control) => {
         if (control.type === "roleCard" && control.secret === true) {
@@ -1191,7 +1193,7 @@ export function App(): ReactElement {
                                 <p>These stay on this phone.</p>
                                 <SettingRow label={`${HOST_NAME}'s quick reactions`} on={settings.reactions} onChange={(on: boolean) => { changeSettings({ ...settings, reactions: on }); }} />
                                 {"vibrate" in navigator ? <SettingRow label="Vibration" on={settings.vibration} onChange={(on: boolean) => { changeSettings({ ...settings, vibration: on }); }} /> : null}
-                                {view?.tapToTalk === true ? <SettingRow label="Talk button" on={settings.talkButton} onChange={(on: boolean) => { changeSettings({ ...settings, talkButton: on }); }} /> : null}
+                                {view?.tapToTalk === true ? <SettingRow label="To talk" on={settings.talkButton} onWord="Tap" offWord="Hold" onChange={(on: boolean) => { changeSettings({ ...settings, talkButton: on }); }} /> : null}
                                 <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
                         ) : null}
