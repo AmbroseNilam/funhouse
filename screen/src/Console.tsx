@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
 import { Poster } from "./Poster.tsx";
-import type { NavAction, Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+import { startPickAt, type NavAction, type Seat, type ShelfGame, type ShellView, type StartPick } from "../../shared/shell.ts";
 
 /** What a mouse may do on this screen right now, or null when it can only watch. */
 export type Pointing = ((action: NavAction) => void) | null;
@@ -285,13 +285,14 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
             </section>
         );
     }
-    if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
+    const question: StartPick | null = startPickAt(game?.startPick, shell.pickStep);
+    if (shell.screen === "pick" && game !== undefined && question !== null) {
         return (
             <section className="screen pick-screen">
                 <Poster className="room-art" id={game.id} art={game.art} />
                 <header className="shelf-heading">
-                    <h1>{game.startPick.prompt}</h1>
-                    <p>{pointing !== null ? "Pick one." : "Slide and tap on your phone."} {HOST_NAME} takes what's highlighted if nobody chooses.</p>
+                    <h1>{question.prompt}</h1>
+                    <p>{pointing !== null ? "Pick one." : "Slide and tap on your phone."}{question.waits === true ? "" : ` ${HOST_NAME} takes what's highlighted if nobody chooses.`}</p>
                 </header>
                 <ul className="pick-boxes">
                     {shell.menu.map((label: string, index: number) => <li key={label} {...chooseProps(pointing, index)} className={index === shell.focus ? "focused" : ""}>{label}</li>)}

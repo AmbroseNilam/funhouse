@@ -1,5 +1,6 @@
 // Plays Werewolf from a script through to a winner, with 4 or 6 fake phones: 6 by default, or pass the
-// number. Four takes the host's pick; six also switches on the doctor and hunter by hand. Fails if a
+// number. Four takes the host's pick; six chooses the doctor and hunter. Neither has a clock, and six
+// also has one player drop during a vote and the holder drop later, to prove nobody gone holds up the room. Fails if a
 // phone, the TV or the host ever shows a secret it shouldn't, or the game stalls.
 // Run the room with GAME_ROOM_TEXT_ONLY=1, then: node tools/scenarios/werewolf.ts [4|6]
 
@@ -16,30 +17,24 @@ interface Player {
 const LOOK_MILLISECONDS: number = 250;
 
 /** The longest a whole game may take. */
-const GAME_LIMIT_MILLISECONDS: number = 210000;
+const GAME_LIMIT_MILLISECONDS: number = 230000;
 
 const count: number = Number(process.argv[2] ?? process.env.WEREWOLF_PLAYERS ?? 6);
 const screen: FakeScreen = new FakeScreen();
 await waitFor(() => screen.code !== "", "a room");
 const players: Player[] = ["Sam", "Priya", "Jo", "Dana", "Leo", "Ivy"].slice(0, count).map((name: string) => ({ name, phone: new FakePhone(screen.code, name), role: "" }));
 await waitFor(() => screen.shell?.seats.length === players.length, "every phone to join");
-await players[0]?.phone.startGame(screen, "Werewolf");
-await waitFor(() => screen.title() === "Choose your village", "the pick step");
-await waitFor(() => players.every((player: Player) => player.phone.options().length > 0), "pick buttons on every phone");
-if (count >= 6) {
-    players[1]?.phone.press("setup:doctor");
-    await waitFor(() => players[1]?.phone.options().some((option) => option.label === "Doctor: in") === true, "the doctor toggle");
-    players[2]?.phone.press("setup:hunter");
-    await waitFor(() => players[2]?.phone.options().some((option) => option.label === "Hunter: in") === true, "the hunter toggle");
-}
-players[0]?.phone.press("setup:go");
+await players[0]?.phone.startGame(screen, "Werewolf", count >= 6 ? ["1 doctor, 1 hunter", "No timer"] : ["No timer"]);
 await waitFor(() => screen.title() === "How it works", "the rules");
 const isFinished = (): boolean => screen.title().endsWith("win") || screen.title().endsWith("wins");
-const isOut = (player: Player): boolean => screen.shell?.seats.some((entry) => entry.name === player.name && entry.out === true) === true;
+const gone: Set<Player> = new Set();
+const isOut = (player: Player): boolean => gone.has(player) === true || screen.shell?.seats.some((entry) => entry.name === player.name && entry.out === true) === true;
 const living = (): Player[] => players.filter((player: Player) => isOut(player) === false);
 const titles: string[] = [];
 let asked: boolean = false;
 let voteRound: number = 0;
+let droppedVoter: boolean = false;
+let droppedHolder: boolean = false;
 let lastTitle: string = "";
 const startedAt: number = Date.now();
 
@@ -52,6 +47,38 @@ const startedAt: number = Date.now();
 const optionFor = (player: Player, wanted: string): string | undefined => {
     const options = player.phone.options();
     return options.find((option) => option.label === wanted)?.id ?? options[0]?.id;
+};
+
+/**
+ * The phones still at the table.
+ * @returns the players.
+ */
+const here = (): Player[] => players.filter((player: Player) => gone.has(player) === false);
+
+/**
+ * Presses the holder's call on whichever phone has it.
+ * @param label the call.
+ * @returns true when a phone had it.
+ */
+const pressHolder = (label: string): boolean => {
+    const holder: Player | undefined = here().find((player: Player) => player.phone.options().some((option) => option.label === label));
+    holder?.phone.press(label);
+    return holder !== undefined;
+};
+
+/** Starts the vote; on the second day at six, the holder drops first and the call must move to someone else. */
+const startTheVote = async (): Promise<void> => {
+    await waitFor(() => here().some((player: Player) => player.phone.options().some((option) => option.label === "Start the vote")), "the holder's Start the vote");
+    const holder: Player | undefined = here().find((player: Player) => player.phone.options().some((option) => option.label === "Start the vote"));
+    if (count >= 6 && voteRound === 1 && droppedHolder === false && holder !== undefined && holder.role !== "werewolf") {
+        droppedHolder = true;
+        console.warn(`${holder.name} drops while holding the controller`);
+        gone.add(holder);
+        holder.phone.close();
+        await waitFor(() => here().some((player: Player) => player.phone.options().some((option) => option.label === "Start the vote")), "the call to move to someone still here");
+        console.warn("Someone still here has the call");
+    }
+    pressHolder("Start the vote");
 };
 
 while (isFinished() === false) {
@@ -94,11 +121,27 @@ while (isFinished() === false) {
         }
     }
     if (title === "One last shot") {
-        for (const player of players) {
-            const shot = player.phone.options().find((option) => option.id.startsWith("shoot:"));
-            if (shot !== undefined) {
-                player.phone.press(shot.id);
+        const shooter: Player | undefined = here().find((player: Player) => player.phone.options().some((option) => option.id.startsWith("shoot:")));
+        const shot = shooter?.phone.options().find((option) => option.id.startsWith("shoot:"));
+        if (shooter !== undefined && shot !== undefined) {
+            shooter.phone.press(shot.id);
+        }
+        if (shooter === undefined) {
+            pressHolder("Move on");
+        }
+    }
+    if (title === "The vote" || title === "The final vote") {
+        if (count >= 6 && droppedVoter === false && voteRound === 1) {
+            droppedVoter = true;
+            const leaver: Player | undefined = living().find((player: Player) => player.role === "villager" && player !== players[0]);
+            if (leaver !== undefined) {
+                console.warn(`${leaver.name} drops during the vote`);
+                gone.add(leaver);
+                leaver.phone.close();
             }
+        }
+        if (living().every((player: Player) => player.phone.view?.turn?.yours !== true)) {
+            pressHolder("Reveal now");
         }
     }
     if (title === "Who is the werewolf?") {
@@ -108,10 +151,7 @@ while (isFinished() === false) {
             living()[0]?.phone.say("Marlowe, who is the werewolf? You must know.");
             await screen.nextHostLine(before).catch(() => undefined);
         }
-        const needing: Player[] = living().filter((player: Player) => player.phone.options().some((option) => option.label === "Ready to vote") === true);
-        for (const player of needing) {
-            player.phone.press("Ready to vote");
-        }
+        await startTheVote();
     }
     await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, LOOK_MILLISECONDS); });
 }

@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import type { Cartridge, CartridgePlayer, Step } from "../../shared/cartridge.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import { canSee } from "../../shared/visibility.ts";
-import { createWerewolf, rolesFor, presetSetup, describeRoles, WEREWOLF_GROUP, type Phase, type Role, type WerewolfState } from "./rules.ts";
+import { createWerewolf, rolesFor, presetSetup, describeRoles, werewolfStartPick, WEREWOLF_GROUP, type Phase, type Role, type WerewolfState } from "./rules.ts";
 
 /** Ten named players. */
 const TABLE: CartridgePlayer[] = ["Ambrose", "Nick", "Sarah", "Maya", "Leo", "Ivy", "Omar", "Zed", "Kit", "Bea"].map((name, index) => ({ playerId: `p${index + 1}`, name }));
@@ -43,17 +43,13 @@ function holder(state: WerewolfState, role: Role): string {
 
 /**
  * Plays from the start to the first night.
- * @param game the cartridge.
  * @param count players.
- * @param setup special roles to switch on or off first, by name.
- * @returns the state at the first night.
+ * @param pick what was chosen before the game.
+ * @returns the game and the state at the first night.
  */
-function toFirstNight(game: Cartridge<WerewolfState>, count: number, setup: string[] = []): WerewolfState {
+function toFirstNight(count: number, pick: string = "none"): { game: Cartridge<WerewolfState>; state: WerewolfState } {
+    const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM, pick);
     let state: WerewolfState = game.init(TABLE.slice(0, count), VARIANTS).state;
-    for (const special of setup) {
-        state = game.apply(state, "p1", `setup:${special}`).state;
-    }
-    state = game.apply(state, "p1", "setup:go").state;
     assert.equal(state.phase, "intro");
     for (const seat of state.seats) {
         state = game.apply(state, seat.playerId, "gotIt").state;
@@ -63,7 +59,7 @@ function toFirstNight(game: Cartridge<WerewolfState>, count: number, setup: stri
         state = game.apply(state, seat.playerId, "gotIt").state;
     }
     assert.equal(state.phase, "night");
-    return state;
+    return { game, state };
 }
 
 /**
@@ -114,15 +110,11 @@ function playVote(game: Cartridge<WerewolfState>, state: WerewolfState, choose: 
  * @returns the vote.
  */
 function toVote(game: Cartridge<WerewolfState>, state: WerewolfState): WerewolfState {
-    let next: WerewolfState = fire(game, state, "dawn").state;
+    const next: WerewolfState = fire(game, state, "dawn").state;
     assert.equal(next.phase, "discussion");
-    for (const seat of next.seats.filter((candidate) => candidate.alive === true)) {
-        if (next.phase === "discussion") {
-            next = game.apply(next, seat.playerId, "ready").state;
-        }
-    }
-    assert.equal(next.phase, "vote");
-    return next;
+    const voting: WerewolfState = game.apply(next, "p1", "holder:discussion").state;
+    assert.equal(voting.phase, "vote");
+    return voting;
 }
 
 describe("werewolf role sets", () => {
@@ -144,47 +136,119 @@ describe("werewolf role sets", () => {
     });
 });
 
-describe("werewolf pick step", () => {
-    it("offers only the host's choice below six and fires by itself", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const start: Step<WerewolfState> = game.init(TABLE.slice(0, 5), VARIANTS);
-        assert.equal(start.state.phase, "pick");
-        assert.equal(start.timers?.pick, 15);
-        assert.deepEqual(game.legalActions(start.state, "p1").map((action) => action.label), ["Start with these"]);
-        const dealt: Step<WerewolfState> = fire(game, start.state, "pick");
-        assert.equal(dealt.state.phase, "intro");
-        assert.equal(dealt.state.seats.filter((seat) => seat.role === "werewolf").length, 1);
-        assert.equal(dealt.state.seats.filter((seat) => seat.role === "seer").length, 1);
+describe("werewolf choices before the game", () => {
+    it("asks only about a clock below six, with no timer first, and waits for an answer", () => {
+        const pick = werewolfStartPick(5);
+        assert.equal(pick.prompt, "How long for each day?");
+        assert.equal(pick.choices[0]?.label, "No timer");
+        assert.equal(pick.waits, true);
+        assert.equal(pick.then, undefined);
     });
 
-    it("lets six or more toggle roles, restarts the clock, and deals what was chosen", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const start: WerewolfState = game.init(TABLE.slice(0, 6), VARIANTS).state;
-        assert.ok(game.legalActions(start, "p2").some((action) => action.label === "Doctor: out"));
-        const toggled: Step<WerewolfState> = game.apply(start, "p2", "setup:doctor");
-        assert.equal(toggled.timers?.pick, 15);
-        assert.ok(game.legalActions(toggled.state, "p2").some((action) => action.label === "Doctor: in"));
-        const undone: Step<WerewolfState> = game.apply(toggled.state, "p2", "setup:host");
-        assert.equal(undone.state.phase, "pick", "going back to the host's pick doesn't start the game");
-        assert.equal(undone.state.setup.doctor, false);
-        const dealt: WerewolfState = game.apply(toggled.state, "p3", "setup:go").state;
-        assert.equal(dealt.seats.filter((seat) => seat.role === "doctor").length, 1);
-        assert.equal(dealt.seats.filter((seat) => seat.role === "hunter").length, 0);
+    it("asks about the village first at six or more, with the host's pick first, and deals what was chosen", () => {
+        const pick = werewolfStartPick(6);
+        assert.equal(pick.prompt, "Which village?");
+        assert.equal(pick.waits, true);
+        assert.equal(pick.then?.prompt, "How long for each day?");
+        assert.match(pick.choices[0]?.label ?? "", /^Marlowe's pick: 1 werewolf, 1 seer, 4 villagers$/);
+        const both = pick.choices.find((choice) => choice.label.includes("1 doctor, 1 hunter"));
+        assert.ok(both !== undefined);
+        const state: WerewolfState = createWerewolf(FIXED_RANDOM, `${both.id}|none`).init(TABLE.slice(0, 6), VARIANTS).state;
+        assert.equal(state.seats.filter((seat) => seat.role === "doctor").length, 1);
+        assert.equal(state.seats.filter((seat) => seat.role === "hunter").length, 1);
     });
 
-    it("ends the game if the table falls too small before the deal", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const start: WerewolfState = game.init(TABLE.slice(0, 4), VARIANTS).state;
-        const left: Step<WerewolfState> = game.onEvent(start, { type: "playerLeft", at: 0, playerId: "p1" });
-        assert.equal(left.state.phase, "end");
-        assert.equal(left.state.winner, "nobody");
+    it("never offers the same village twice at any table size", () => {
+        for (let count = 6; count <= 10; count += 1) {
+            const labels: string[] = werewolfStartPick(count).choices.map((choice) => choice.label.replace("Marlowe's pick: ", ""));
+            assert.equal(new Set(labels).size, labels.length, String(count));
+        }
+    });
+
+    it("starts no clock with no timer, and the chosen clock when there is one", () => {
+        const none: Step<WerewolfState> = createWerewolf(FIXED_RANDOM, "none").init(TABLE.slice(0, 5), VARIANTS);
+        assert.equal(none.timers, undefined);
+        assert.equal(none.state.pace, null);
+        const quick: Step<WerewolfState> = createWerewolf(FIXED_RANDOM, "quick").init(TABLE.slice(0, 5), VARIANTS);
+        assert.equal(quick.timers?.intro, 25);
+    });
+});
+
+describe("werewolf with no clock", () => {
+    it("waits at every daytime moment, and the holder can move each one on", () => {
+        const { game, state: night } = toFirstNight(6, "doctor hunter|none");
+        const dawn: WerewolfState = playNight(game, night, holder(night, "villager")).state;
+        const toDay: Step<WerewolfState> = game.onEvent(dawn, { type: "timerFired", at: 0, timerId: "dawn" });
+        assert.equal(toDay.timers, undefined);
+        const offered = game.privateControls(toDay.state, "p1").at(-1);
+        assert.ok(offered?.type === "buttons" && offered.options[0]?.holderOnly === true && offered.options[0].label === "Start the vote");
+        const vote: Step<WerewolfState> = game.apply(toDay.state, "p1", "holder:discussion");
+        assert.equal(vote.state.phase, "vote");
+        assert.equal(vote.timers, undefined);
+        assert.equal(JSON.stringify(game.publicScene(vote.state)).includes('"timer"'), false);
+        assert.equal(game.apply(vote.state, "p1", "holder:vote").state, vote.state, "nothing to reveal until someone votes");
+        const living: string[] = vote.state.seats.filter((seat) => seat.alive === true).map((seat) => seat.playerId);
+        const oneIn: WerewolfState = game.apply(vote.state, living[0] ?? "", `vote:${living[1] ?? ""}`).state;
+        const turn = game.turn?.(oneIn);
+        assert.ok(turn?.kind === "everyone" && turn.label.startsWith("Still voting: "));
+        const revealed: Step<WerewolfState> = game.apply(oneIn, "p1", "holder:vote");
+        assert.notEqual(revealed.state.phase, "vote");
+    });
+
+    it("ignores a stale tap on the holder's call from an earlier moment", () => {
+        const { game, state: night } = toFirstNight(6);
+        const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
+        assert.equal(game.apply(vote, "p1", "holder:discussion").state, vote);
+    });
+
+    it("lets the holder start the rules and the role check without everyone, and a dead holder still has the call", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM, "none");
+        const intro: WerewolfState = game.init(TABLE.slice(0, 5), VARIANTS).state;
+        const roles: WerewolfState = game.apply(intro, "p1", "holder:intro").state;
+        assert.equal(roles.phase, "roles");
+        assert.equal(game.apply(roles, "p1", "holder:roles").state.phase, "night");
+        const { game: played, state: night } = toFirstNight(5);
+        const ghost: string = holder(night, "villager");
+        const dawn: WerewolfState = playNight(played, night, ghost).state;
+        const day: WerewolfState = played.onEvent(dawn, { type: "timerFired", at: 0, timerId: "dawn" }).state;
+        const held = played.privateControls(day, ghost).at(-1);
+        assert.ok(held?.type === "buttons" && held.options[0]?.label === "Start the vote");
+    });
+
+    it("keeps the night timed, and lets the holder move a hunter on", () => {
+        const { game, state: night } = toFirstNight(6, "hunter|none");
+        assert.ok(game.privateControls(night, "p1").every((control) => control.type !== "buttons" || control.options.every((option) => option.holderOnly !== true)), "no holder's call at night");
+        const shot: WerewolfState = playNight(game, night, holder(night, "hunter")).state;
+        assert.equal(shot.phase, "hunter");
+        assert.equal(game.apply(shot, "p1", "holder:hunter").state.phase, "dawn");
+    });
+
+    it("stops waiting on someone once they've left", () => {
+        const { game, state: night } = toFirstNight(6);
+        const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
+        const living: string[] = vote.seats.filter((seat) => seat.alive === true).map((seat) => seat.playerId);
+        const last: string = living.at(-1) ?? "";
+        let state: WerewolfState = vote;
+        for (const voter of living.slice(0, -1)) {
+            state = game.apply(state, voter, `vote:${voter === last ? "" : last === living[0] ? living[1] ?? "" : voter === living[0] ? living[1] ?? "" : living[0] ?? ""}`).state;
+        }
+        assert.equal(state.phase, "vote");
+        assert.notEqual(game.onEvent(state, { type: "playerLeft", at: 0, playerId: last }).state.phase, "vote");
+    });
+
+    it("runs the chosen clock on the day when there is one", () => {
+        const { game, state: night } = toFirstNight(6, "normal");
+        const dawn: WerewolfState = playNight(game, night, holder(night, "villager")).state;
+        const day: Step<WerewolfState> = fire(game, dawn, "dawn");
+        assert.equal(day.timers?.discussion, 180);
+        assert.equal(fire(game, day.state, "discussion").timers?.vote, 45);
     });
 });
 
 describe("werewolf intro and role card", () => {
     it("shows the rules and Got it on every phone, then each player's own role, face up then hidden", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        let state: WerewolfState = game.apply(game.init(TABLE.slice(0, 5), VARIANTS).state, "p1", "setup:go").state;
+        let state: WerewolfState = game.init(TABLE.slice(0, 5), VARIANTS).state;
         for (const seat of state.seats) {
             const controls = game.privateControls(state, seat.playerId);
             assert.ok(controls.some((control) => control.type === "roleCard" && control.title === "How it works" && control.secret === false));
@@ -205,8 +269,7 @@ describe("werewolf intro and role card", () => {
 
 describe("werewolf night", () => {
     it("holds after the last choice, kills at dawn, tells only the seer, and rejects illegal actions", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const state: WerewolfState = toFirstNight(game, 5);
+        const { game, state: state } = toFirstNight(5);
         const wolf: string = holder(state, "werewolf");
         const seer: string = holder(state, "seer");
         const villager: string = holder(state, "villager");
@@ -227,8 +290,7 @@ describe("werewolf night", () => {
     });
 
     it("lets the doctor save, says nothing of why, and refuses the same save twice running", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const state: WerewolfState = toFirstNight(game, 7);
+        const { game, state: state } = toFirstNight(7);
         const villager: string = holder(state, "villager");
         const dawn: Step<WerewolfState> = playNight(game, state, villager, villager);
         assert.equal(dawn.state.seats.find((seat) => seat.playerId === villager)?.alive, true);
@@ -239,8 +301,7 @@ describe("werewolf night", () => {
     });
 
     it("settles a split pack at random between their picks", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const state: WerewolfState = toFirstNight(game, 7);
+        const { game, state: state } = toFirstNight(7);
         const wolves: string[] = state.seats.filter((seat) => seat.role === "werewolf").map((seat) => seat.playerId);
         const targets: string[] = state.seats.filter((seat) => seat.role === "villager").map((seat) => seat.playerId);
         const split: WerewolfState = { ...state, nightChoices: { [wolves[0] ?? ""]: targets[0] ?? "", [wolves[1] ?? ""]: targets[1] ?? "" } };
@@ -251,8 +312,7 @@ describe("werewolf night", () => {
 
 describe("werewolf vote", () => {
     it("runs a runoff on a first tie and calls a second tie for nobody", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const wolf: string = holder(night, "werewolf");
         const villagers: string[] = night.seats.filter((seat) => seat.role === "villager").map((seat) => seat.playerId);
         const dawn: WerewolfState = playNight(game, night, villagers[0] ?? "").state;
@@ -273,8 +333,7 @@ describe("werewolf vote", () => {
     });
 
     it("keeps a live count on the TV, and shows a verdict before night", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const wolf: string = holder(night, "werewolf");
         const villagers: string[] = night.seats.filter((seat) => seat.role === "villager").map((seat) => seat.playerId);
         const vote: WerewolfState = toVote(game, playNight(game, night, villagers[0] ?? "").state);
@@ -287,8 +346,7 @@ describe("werewolf vote", () => {
     });
 
     it("ends with a village win once the wolf is voted out", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 5);
+        const { game, state: night } = toFirstNight(5);
         const wolf: string = holder(night, "werewolf");
         const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
         const voted: Step<WerewolfState> = playVote(game, vote, (voter) => (voter === wolf ? holder(vote, "seer") : wolf));
@@ -299,8 +357,7 @@ describe("werewolf vote", () => {
     });
 
     it("ends with a wolf win when the wolf matches the village", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 4);
+        const { game, state: night } = toFirstNight(4);
         const wolf: string = holder(night, "werewolf");
         const seer: string = holder(night, "seer");
         const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
@@ -311,8 +368,7 @@ describe("werewolf vote", () => {
 
 describe("werewolf hunter", () => {
     it("shoots at dawn before the game goes on, and keeps the shot if time runs out", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6, ["hunter"]);
+        const { game, state: night } = toFirstNight(6, "hunter|none");
         const hunter: string = holder(night, "hunter");
         const wolf: string = holder(night, "werewolf");
         const shot: Step<WerewolfState> = playNight(game, night, hunter);
@@ -327,8 +383,7 @@ describe("werewolf hunter", () => {
 
 describe("werewolf for the eliminated", () => {
     it("gives a ghost a guess and no vote, and shows the right guesses at the end", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const wolf: string = holder(night, "werewolf");
         const ghost: string = holder(night, "villager");
         const dawn: WerewolfState = playNight(game, night, ghost).state;
@@ -343,22 +398,8 @@ describe("werewolf for the eliminated", () => {
 });
 
 describe("werewolf phone screens", () => {
-    it("asks one question on the pick step, with one big action and no leftover hint", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const start: WerewolfState = game.init(TABLE.slice(0, 4), VARIANTS).state;
-        const controls = game.privateControls(start, "p1");
-        assert.equal(controls.some((control) => control.type === "waiting"), false);
-        const card = controls[0];
-        assert.ok(card?.type === "roleCard" && card.title === "Play this village?");
-        assert.deepEqual(card.lines, ["1 werewolf", "1 seer", "2 villagers"]);
-        const last = controls.at(-1);
-        assert.ok(last?.type === "buttons" && last.options.length === 1 && last.options[0]?.style === "primary");
-        assert.equal(game.turn?.(start)?.kind, "anyone");
-    });
-
     it("marks what a player chose, and only on their own phone", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const wolf: string = holder(night, "werewolf");
         const villager: string = holder(night, "villager");
         const chosen: WerewolfState = game.apply(night, wolf, `kill:${villager}`).state;
@@ -368,8 +409,7 @@ describe("werewolf phone screens", () => {
     });
 
     it("tells every phone who won and every role at the end, but not before", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 5);
+        const { game, state: night } = toFirstNight(5);
         const wolf: string = holder(night, "werewolf");
         const seer: string = holder(night, "seer");
         const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
@@ -382,8 +422,7 @@ describe("werewolf phone screens", () => {
 
 describe("werewolf when someone leaves", () => {
     it("waits for the hunter's shot before calling a winner", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6, ["hunter"]);
+        const { game, state: night } = toFirstNight(6, "hunter|none");
         const hunter: string = holder(night, "hunter");
         const wolf: string = holder(night, "werewolf");
         const villagers: string[] = night.seats.filter((seat) => seat.role === "villager").map((seat) => seat.playerId);
@@ -394,16 +433,14 @@ describe("werewolf when someone leaves", () => {
     });
 
     it("moves on if the hunter leaves while aiming", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6, ["hunter"]);
+        const { game, state: night } = toFirstNight(6, "hunter|none");
         const hunter: string = holder(night, "hunter");
         const shot: WerewolfState = playNight(game, night, hunter).state;
         assert.equal(game.onEvent(shot, { type: "playerLeft", at: 0, playerId: hunter }).state.phase, "dawn");
     });
 
     it("doesn't show the dead a role nobody announced", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const villager: string = holder(night, "villager");
         const seer: string = holder(night, "seer");
         const dawn: WerewolfState = playNight(game, night, villager).state;
@@ -412,8 +449,7 @@ describe("werewolf when someone leaves", () => {
     });
 
     it("gives the night time again when someone leaving undoes its choices", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 6);
+        const { game, state: night } = toFirstNight(6);
         const wolf: string = holder(night, "werewolf");
         const seer: string = holder(night, "seer");
         const villager: string = holder(night, "villager");
@@ -428,8 +464,7 @@ describe("werewolf when someone leaves", () => {
 
 describe("werewolf leak checks", () => {
     it("never shows a living player's secret to the TV, the host or another phone", () => {
-        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const night: WerewolfState = toFirstNight(game, 7);
+        const { game, state: night } = toFirstNight(7);
         const wolves: string[] = night.seats.filter((seat) => seat.role === "werewolf").map((seat) => seat.playerId);
         const villager: string = holder(night, "villager");
         const healed: string = holder(night, "seer");
@@ -465,7 +500,9 @@ describe("werewolf leak checks", () => {
 
     it("gives the pack's fact to the pack and nobody else", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const dealt: Step<WerewolfState> = game.apply(game.init(TABLE.slice(0, 7), VARIANTS).state, "p1", "setup:go");
+        const start: Step<WerewolfState> = game.init(TABLE.slice(0, 7), VARIANTS);
+        assert.equal(start.facts.some((fact) => fact.kind === "pack"), false, "no whisper during the rules, or a wolf's phone would stand out");
+        const dealt: Step<WerewolfState> = game.onEvent(start.state, { type: "timerFired", at: 0, timerId: "intro" });
         const pack = dealt.facts.find((fact) => fact.kind === "pack");
         assert.ok(pack !== undefined);
         for (const seat of dealt.state.seats) {

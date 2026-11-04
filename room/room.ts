@@ -1811,7 +1811,8 @@ export class Room implements HostStage, AgentHost {
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
-        if (this.paused === true || (value === REVEAL_NOW && this.shell.isDriving(player.playerId) === false)) {
+        const holdersCall: boolean = value === REVEAL_NOW || this.game?.controls(player.playerId).some((control: Control) => control.type === "buttons" && control.options.some((option) => option.id === value && option.holderOnly === true)) === true;
+        if (this.paused === true || (holdersCall === true && this.shell.holdsControl(player.playerId) === false)) {
             return;
         }
         this.game?.input(player.playerId, value);
@@ -2075,7 +2076,7 @@ export class Room implements HostStage, AgentHost {
         const agentsBarred: boolean = game.agents !== true && this.agents().length > 0;
         const blocked: string | null = agentsBarred === true ? NO_AGENTS_HERE : guestsBarred === true ? NO_GUESTS_HERE : short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
         const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
-        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, startCard: game.startCard ?? null, blocked, guestsWelcome: GUESTS_ON === true && game.guests !== undefined };
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPickFor?.(count) ?? game.startPick ?? null, startCard: game.startCard ?? null, blocked, guestsWelcome: GUESTS_ON === true && game.guests !== undefined };
     }
 
     /**
@@ -3397,7 +3398,7 @@ export class Room implements HostStage, AgentHost {
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
-        const holding: boolean = this.shell.isDriving(player.playerId);
+        const holding: boolean = this.shell.holdsControl(player.playerId);
         return (this.game?.controls(player.playerId) ?? []).flatMap((control: Control): Control[] => {
             if (control.type !== "buttons" || holding === true || control.options.some((option) => option.holderOnly === true) === false) {
                 return [control];

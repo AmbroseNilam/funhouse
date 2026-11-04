@@ -206,8 +206,9 @@ export class FakePhone {
      * Walks the shelf to a game and starts it, the way a person would.
      * @param screen the TV.
      * @param name the game's name.
+     * @param wanted words a row should have on each question asked before it starts; otherwise the first row.
      */
-    public async startGame(screen: FakeScreen, name: string): Promise<void> {
+    public async startGame(screen: FakeScreen, name: string, wanted: string[] = []): Promise<void> {
         await waitFor(() => screen.shell !== null, "the shelf");
         const target: number = screen.shell?.games.findIndex((game) => game.name === name) ?? -1;
         console.warn(`${this.name} opens ${name}`);
@@ -217,10 +218,12 @@ export class FakePhone {
         await waitFor(() => screen.shell?.screen === "game", "the game's page");
         this.nav({ kind: "select" });
         await waitFor(() => screen.shell?.screen === "pick" || screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the game to start or ask what to pick");
-        if (screen.shell?.screen === "pick") {
-            // Quizmaster's scenarios bring their own topic; anything else takes the surprise.
-            const own: number = name === "Quizmaster" ? screen.shell.menu.indexOf("Say your own topic") : 0;
-            this.nav({ kind: "choose", index: Math.max(0, own) });
+        for (let asked: number = 0; screen.shell?.screen === "pick"; asked += 1) {
+            // Quizmaster's scenarios bring their own topic; anything else takes the first row.
+            const menu: string[] = screen.shell.menu;
+            const words: string = name === "Quizmaster" ? "Say your own topic" : wanted[asked] ?? "";
+            this.nav({ kind: "choose", index: Math.max(0, words === "" ? 0 : menu.findIndex((row: string) => row.includes(words))) });
+            await waitFor(() => screen.shell?.screen !== "pick" || screen.shell.pickStep > asked, "the next question");
         }
         await waitFor(() => screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the how-to card or the game");
         if (screen.shell?.screen === "startCard") {
