@@ -88,6 +88,8 @@ export interface Step<State> {
      * answersMerged event with this id. Only filtered text, and no player names.
      */
     mergeRequest?: { id: string; question: string; answers: string[] };
+    /** Asks the fast model for one setup follow-up. It returns as followUpReady, with empty text if it failed. */
+    followUpRequest?: { id: string; prompt: string };
     /** Pictures to draw ahead of need; each returns as drawingReady, or never if drawing fails. */
     draws?: { id: string; prompt: string }[];
 }

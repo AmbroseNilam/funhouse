@@ -48,6 +48,8 @@ await sam.startGame(screen, "Quizmaster");
 await waitFor(() => screen.title() === "Quizmaster", "the quiz");
 await pause(1000);
 sam.say("Let's do the topic of dogs.");
+await waitFor(() => sam.options().some((option) => option.label === "Just start"), "setup");
+sam.press("Just start");
 await waitFor(() => screen.scene?.blocks.some((block) => block.type === "progress") === true, "questions");
 const progress = (): number => { const block = screen.scene?.blocks.find((candidate) => candidate.type === "progress"); return block?.type === "progress" ? block.current : 0; };
 const before: number = progress();

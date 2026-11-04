@@ -11,6 +11,8 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { isHostSafe, shuffled } from "../../studio/kit/text.ts";
+import { answerSetup, followUpPrompt, parseFollowUp, SETUP_START, setupBlocks, setupControls, setupFinished, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
+import { REVEAL_NOW } from "../../shared/controls.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 
 /** Questions in one game. */
@@ -29,7 +31,30 @@ export const REVEAL_REACT_SECONDS: number = 2;
 export const REVEAL_HOLD_SECONDS: number = 8;
 
 /** Asked for beyond the game's length, since any that give their answer away are dropped. */
-const QUESTIONS_REQUESTED: number = QUESTION_COUNT + 2;
+const EXTRA_QUESTIONS_REQUESTED: number = 2;
+
+/** The most questions a game can ask, and so the most worth keeping from the model. */
+const MOST_QUESTIONS: number = 10;
+
+/** How long the model gets to write a follow-up before setup carries on without one. */
+const FOLLOW_UP_WAIT_SECONDS: number = 5;
+
+/** The fixed setup questions. Each game of Quizmaster asks these after any follow-up. */
+const SETUP_QUESTIONS: readonly SetupQuestion[] = [
+    { id: "level", prompt: "How hard?", options: [{ id: "easy", label: "Easy" }, { id: "medium", label: "Medium" }, { id: "hard", label: "Hard" }] },
+    { id: "count", prompt: "How many questions?", options: [{ id: "5", label: "5" }, { id: "10", label: "10" }] },
+    { id: "time", prompt: "How long for each one?", options: [{ id: "relaxed", label: "Relaxed" }, { id: "normal", label: "Normal" }, { id: "quick", label: "Quick" }, { id: "none", label: "No timer" }] },
+];
+
+/** Seconds for each question at each pace; No timer has none. */
+const PACE_SECONDS: Record<string, number | null> = { relaxed: 45, normal: QUESTION_SECONDS, quick: 15, none: null };
+
+/** How the questions are pitched at each level. */
+const LEVEL_WORDS: Record<string, string> = {
+    easy: "Keep them all easy: anyone should have a fair shot.",
+    medium: "Aim for two easy, three medium and one hard.",
+    hard: "Make most of them hard, for people who know the subject well, but still fair.",
+};
 
 /** Seconds added once when time runs out with an answer on its way, so it isn't judged against the next question. */
 const ANSWER_GRACE_SECONDS: number = 6;
@@ -82,7 +107,7 @@ export const FALLBACK_QUESTIONS: QuizQuestion[] = [
 
 /** The whole game, immutable between steps. */
 export interface QuizmasterState {
-    phase: "topic" | "preparing" | "question" | "lockedIn" | "reveal" | "end";
+    phase: "topic" | "thinking" | "setup" | "preparing" | "question" | "lockedIn" | "reveal" | "end";
     players: CartridgePlayer[];
     topic: string;
     questions: QuizQuestion[];
@@ -106,6 +131,16 @@ export interface QuizmasterState {
     staleSpeakers: string[];
     /** Points from the current question, held back until the reveal so the scores can't give the answer away. */
     pending: Record<string, number>;
+    /** Where setup is, once its questions are ready. */
+    setup: SetupProgress | null;
+    /** How many questions this game has. */
+    count: number;
+    /** How the questions are pitched, by level id. */
+    level: string;
+    /** The room's answer to the follow-up, if it gave one. */
+    focus: string;
+    /** Seconds for each question; null means no timer. */
+    questionSeconds: number | null;
     /** Points from the question being revealed, for counting up on the TV. */
     gained: Record<string, number>;
     /** What ended the question being revealed, for the host. */
@@ -146,7 +181,7 @@ export function parseQuestions(text: string, sources: string[] = [], random?: ()
             found.push({ question, answer, ...(source === "" ? {} : { source }), ...(random === undefined ? {} : { wrong, choices: shuffled([answer, ...wrong], random) }) });
         }
     }
-    return found.filter((question: QuizQuestion) => givesItAway(question) === false).slice(0, QUESTION_COUNT);
+    return found.filter((question: QuizQuestion) => givesItAway(question) === false).slice(0, MOST_QUESTIONS);
 }
 
 /**
@@ -182,11 +217,12 @@ export function givesItAway(question: QuizQuestion): boolean {
  * Fills a short list of questions up to a full game from the built-in bank.
  * @param questions the questions the model supplied.
  * @param random for mixing answers, when the questions are multiple choice.
- * @returns exactly QUESTION_COUNT questions.
+ * @param count how many a full game has.
+ * @returns that many questions, or every one there is if the bank runs short.
  */
-function completeQuestions(questions: QuizQuestion[], random?: () => number): QuizQuestion[] {
+function completeQuestions(questions: QuizQuestion[], random?: () => number, count: number = QUESTION_COUNT): QuizQuestion[] {
     const bank: QuizQuestion[] = FALLBACK_QUESTIONS.map((entry: QuizQuestion) => (random === undefined ? { question: entry.question, answer: entry.answer } : { ...entry, choices: shuffled([entry.answer, ...(entry.wrong ?? [])], random) }));
-    return [...questions, ...bank].slice(0, QUESTION_COUNT);
+    return [...questions, ...bank].slice(0, count);
 }
 
 /** Topics offered before a game. Nothing here needs a specialist or starts an argument. */
@@ -229,11 +265,11 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      */
     const prepare = (state: QuizmasterState, topic: string): Step<QuizmasterState> => {
         const request: string = [
-            `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
+            `Write ${state.count + EXTRA_QUESTIONS_REQUESTED} trivia questions about the topic "${state.focus === "" ? topic : `${topic}: ${state.focus}`}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
             "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
             "Only use facts you are sure of, and don't put the answer in the question.",
             ...(multipleChoice === true ? [
-                "Four answers will be on screen, so aim for two easy, three medium and one hard, none so easy the wrong answers look silly, and no clue in the question that points straight at the answer.",
+                `Four answers will be on screen. ${LEVEL_WORDS[state.level] ?? ""} None so easy the wrong answers look silly, and no clue in the question that points straight at the answer.`,
                 "Avoid claims like \"the only\" or \"the first\" unless they're beyond doubt.",
                 "Give three wrong answers of the same kind and about the same length as the right one, each believable to someone who isn't sure. No jokes, no \"all of the above\".",
             ] : []),
@@ -241,8 +277,57 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         ].join(" ");
         const next: QuizmasterState = { ...state, phase: "preparing", topic };
         const fact: ScopedFact = publicFact("preparing", `The topic is ${topic}. Say you are writing the questions now, in one short line.`);
-        return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text, [], mixing).length >= QUESTION_COUNT, cacheable: true } };
+        return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text, [], mixing).length >= state.count, cacheable: true } };
     };
+
+    /**
+     * Has a think about the topic: asks for a follow-up, with setup open meanwhile so Just start works.
+     * @param state the state.
+     * @param topic the topic.
+     * @returns the step.
+     */
+    const startThinking = (state: QuizmasterState, topic: string): Step<QuizmasterState> => {
+        const fact: ScopedFact = publicFact("thinking", `The topic is ${topic}. Say you're having a quick think about it, in a few words.`);
+        return {
+            state: { ...state, phase: "thinking", topic, setup: null, focus: "" },
+            facts: [fact],
+            nextPhaseId: "thinking",
+            followUpRequest: { id: `follow-up-${topic}`, prompt: followUpPrompt(topic) },
+            timers: { "setup-wait": FOLLOW_UP_WAIT_SECONDS },
+        };
+    };
+
+    /**
+     * Opens the setup questions.
+     * @param state the state.
+     * @param followUp the model's question, if it wrote a good one.
+     * @returns the step.
+     */
+    const askSetup = (state: QuizmasterState, followUp: SetupQuestion | null): Step<QuizmasterState> => {
+        const questions: SetupQuestion[] = [...(followUp === null ? [] : [followUp]), ...SETUP_QUESTIONS];
+        return { state: { ...state, phase: "setup", setup: { questions, at: 0, chosen: {} } }, facts: [], nextPhaseId: "setup" };
+    };
+
+    /**
+     * Ends setup and writes the questions, with defaults for whatever wasn't answered.
+     * @param state the state.
+     * @returns the step.
+     */
+    const finishSetup = (state: QuizmasterState): Step<QuizmasterState> => {
+        const chosen: Record<string, string> = state.setup?.chosen ?? {};
+        const followUp: SetupQuestion | undefined = state.setup?.questions.find((question: SetupQuestion) => question.id === "follow-up");
+        const focus: string = followUp?.options.find((option) => option.id === chosen["follow-up"])?.label ?? "";
+        const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "normal"];
+        return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace === undefined ? QUESTION_SECONDS : pace }, state.topic);
+    };
+
+    /**
+     * The clock for one question, if this game has one.
+     * @param state the state.
+     * @param index which question.
+     * @returns the timers.
+     */
+    const questionTimers = (state: QuizmasterState, index: number): Record<string, number> => (state.questionSeconds === null ? {} : { [`question-${index}`]: state.questionSeconds });
 
     /**
      * Tells the host to read a question exactly.
@@ -320,7 +405,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         return {
             state: next,
             facts: [publicFact("question", announced === true ? readInstruction(next) : `${reveal}Then ${readInstruction(next)}`)],
-            timers: { [`question-${nextIndex}`]: QUESTION_SECONDS },
+            timers: questionTimers(next, nextIndex),
             ...(announced === true ? { nextPhaseId: "question" } : {}),
         };
     };
@@ -388,12 +473,12 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
+            const state: QuizmasterState = { phase: "topic", setup: null, count: QUESTION_COUNT, level: "medium", focus: "", questionSeconds: QUESTION_SECONDS, gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
             if (chosen !== undefined && chosen !== OWN_TOPIC) {
-                return prepare(state, chosen);
+                return startThinking(state, chosen);
             }
             return { state, facts: [publicFact("ask-topic", "Welcome them to the quiz and ask what topic they would like to be quizzed on.")], nextPhaseId: "topic" };
         },
@@ -415,6 +500,20 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         },
 
         apply(state: QuizmasterState, playerId: string, actionId: string): Step<QuizmasterState> {
+            if ((state.phase === "thinking" || state.phase === "setup") && actionId === SETUP_START) {
+                return finishSetup(state);
+            }
+            if (state.phase === "setup" && state.setup !== null) {
+                const progress: SetupProgress | null = answerSetup(state.setup, actionId);
+                if (progress === null) {
+                    return { state, facts: [] };
+                }
+                const answered: QuizmasterState = { ...state, setup: progress };
+                return setupFinished(progress) === true ? finishSetup(answered) : { state: answered, facts: [] };
+            }
+            if (state.phase === "question" && state.questionSeconds === null && actionId === REVEAL_NOW) {
+                return finishQuestion(state, "The host of the room asked to see the answer.");
+            }
             if (state.phase === "question" && actionId.startsWith(ANSWER_ACTION) === true) {
                 const question: QuizQuestion | undefined = state.questions[state.index];
                 const [asked, place] = actionId.slice(ANSWER_ACTION.length).split(":").map(Number);
@@ -447,7 +546,13 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 const settled: boolean = players.length === 0 || players.every((player) => state.answered.includes(player.playerId));
                 return settled === true ? finishQuestion(remaining, "Everyone left has answered.") : { state: remaining, facts: [] };
             }
+            if (event.type === "followUpReady") {
+                return state.phase === "thinking" ? askSetup(state, parseFollowUp(event.text)) : { state, facts: [] };
+            }
             if (event.type === "timerFired") {
+                if (state.phase === "thinking" && event.timerId === "setup-wait") {
+                    return askSetup(state, null);
+                }
                 if (state.phase === "lockedIn" && event.timerId === "reveal-build") {
                     return lightAnswer(state);
                 }
@@ -481,13 +586,13 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return { state: { ...state, speaking, staleSpeakers, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: late === true ? [] : reminder };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
-                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources, mixing), mixing);
+                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources, mixing), mixing, state.count);
                 const next: QuizmasterState = { ...state, phase: "question", questions, index: 0, answered: [], heard: [] };
                 return {
                     state: next,
                     facts: [publicFact("question", `The questions are ready. Say the quiz is starting, ${multipleChoice === true ? "tap an answer or say it" : "answers are out loud"}, one try each. Then ${readInstruction(next)}`)],
                     nextPhaseId: "question",
-                    timers: { "question-0": QUESTION_SECONDS },
+                    timers: questionTimers(next, 0),
                 };
             }
             if (event.type !== "hostRuled") {
@@ -498,7 +603,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 if (topic === "") {
                     return { state, facts: [] };
                 }
-                return prepare(state, topic);
+                return startThinking(state, topic);
             }
             if (state.phase === "question" && (event.ruling === "right" || event.ruling === "close" || event.ruling === "wrong")) {
                 return score(state, event.ruling, event.playerId);
@@ -509,6 +614,12 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         publicScene(state: QuizmasterState): Scene {
             if (state.phase === "topic") {
                 return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Say or type a topic.", emphasis: "large" }] };
+            }
+            if (state.phase === "thinking") {
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster", kicker: state.topic }, { type: "text", text: `${HOST_NAME} is thinking…`, emphasis: "large" }] };
+            }
+            if (state.phase === "setup" && state.setup !== null) {
+                return { mood: "neutral", transition: "cut", blocks: setupBlocks(state.setup, state.topic) };
             }
             if (state.phase === "preparing") {
                 const waiting: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: state.topic }, { type: "text", text: "Writing the questions…", emphasis: "whisper" }];
@@ -560,6 +671,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                     blocks: [
                         { type: "title", text: state.questions[state.index]?.question ?? "", kicker: `${state.topic} · ${standings}` },
                         { type: "choices", options: lettered },
+                        ...(state.questionSeconds === null ? [] : [{ type: "timer" as const, seconds: state.questionSeconds, running: true }]),
                         { type: "progress", label: "Question", current: state.index + 1, max: state.questions.length },
                     ],
                 };
@@ -580,6 +692,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             if (state.phase === "topic") {
                 return [{ type: "buttons", prompt: "Say or type a topic.", options: [{ id: SURPRISE, label: "Surprise me instead" }] }];
             }
+            if (state.phase === "thinking" || state.phase === "setup") {
+                return setupControls(state.setup, `${HOST_NAME} is thinking…`);
+            }
             if (state.phase === "preparing") {
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];
             }
@@ -594,12 +709,13 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 const gained: number = state.gained[playerId] ?? 0;
                 return [{ type: "waiting", text: seated === false ? "Watch the TV." : gained > 0 ? `You got it! +${gained}` : "Not this time." }];
             }
+            const revealNow: Control[] = state.questionSeconds === null ? [{ type: "buttons", options: [{ id: REVEAL_NOW, label: "Reveal now", holderOnly: true }] }] : [];
             const onScreen: string[] = state.questions[state.index]?.choices ?? [];
             if (onScreen.length > 0 && seated === true && state.answered.includes(playerId) === false) {
-                return [{ type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }];
+                return [{ type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }, ...revealNow];
             }
             const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
-            return [{ type: "waiting", text: line }];
+            return [{ type: "waiting", text: line }, ...revealNow];
         },
 
         turn(state: QuizmasterState): Turn | null {
