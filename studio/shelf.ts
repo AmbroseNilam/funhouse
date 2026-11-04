@@ -33,7 +33,7 @@ export function installBlueprint(given: Blueprint): InstalledGame {
         pitch: blueprint.box.pitch,
         howToPlay: [...blueprint.box.howToPlay],
         art: blueprint.box.art,
-        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || blueprint.decisions.giveUpButton === true),
+        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || (blueprint.kit === "guessing" && blueprint.decisions.giveUpButton === true)),
         remarks: [...blueprint.box.remarks],
         create: (stage: GameStage): RunningGame => {
             log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);
