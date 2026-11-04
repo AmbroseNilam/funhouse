@@ -48,7 +48,7 @@
     .game-screen .join-tag strong { font-size: calc(38 * var(--u)); }
     .tv-strip { position: absolute; z-index: 4; right: calc(110 * var(--u)); bottom: calc(6 * var(--u)); display: none; align-items: center; gap: calc(14 * var(--u)); color: var(--paper); font-size: calc(28 * var(--u)); }
     .tv[data-pointer="live"] .tv-strip { display: flex; }
-    .start-now { position: absolute; left: calc(80 * var(--u)); bottom: calc(150 * var(--u)); font-size: calc(36 * var(--u)); }
+    .start-now { position: absolute; left: calc(1080 * var(--u)); top: calc(644 * var(--u)); font-size: calc(36 * var(--u)); }
     .shelf-arrow { position: absolute; z-index: 3; top: 50%; width: calc(64 * var(--u)); height: calc(96 * var(--u)); border: 0; background: var(--paper); color: var(--paper-ink); font: inherit; font-size: calc(60 * var(--u)); line-height: 1; box-shadow: calc(5 * var(--u)) calc(5 * var(--u)) 0 #000; display: none; }
     .shelf-arrow:disabled { display: none !important; }
     .shelf-arrow.previous { left: calc(12 * var(--u)); }
