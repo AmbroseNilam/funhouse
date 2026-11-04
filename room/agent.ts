@@ -43,6 +43,9 @@ const ADDRESS_REQUESTS_PER_SECOND: number = 20;
 /** Longest body a POST may send. */
 const MAX_BODY_BYTES: number = 4096;
 
+/** MCP sessions one unused link remembers. */
+const MAX_MCP_SESSIONS: number = 8;
+
 /** Longest a request may take to send its body, so a slow one can't hold a move open past its link. */
 const BODY_TIME_LIMIT_MILLISECONDS: number = 5000;
 
@@ -155,6 +158,8 @@ interface AgentLink {
     note: string;
     /** The MCP session that sat down, which is then the only thing this key answers. */
     mcpSession: string | null;
+    /** MCP sessions this link has handed out; only one of these can sit down. */
+    issuedSessions: string[];
 }
 
 /** The links in use on this server. A link is random and can't be guessed from a room code. */
@@ -184,7 +189,7 @@ export function issueAgentLink(room: AgentHost, ownerId: string): string | null 
         return null;
     }
     const key: string = randomBytes(16).toString("base64url");
-    LINKS.set(key, { room, ownerId, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "", mcpSession: null });
+    LINKS.set(key, { room, ownerId, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "", mcpSession: null, issuedSessions: [] });
     return key;
 }
 
@@ -656,14 +661,15 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     }
     const format: string = url.searchParams.get("format") ?? (request.method === "POST" || request.headers.accept === "application/json" ? "json" : "html");
     let base: string = `${publicUrl.replace(/\/$/, "")}/a/${key ?? ""}`;
-    if (link.seat !== null) {
-        link.room.agentLooked(link.seat);
-    }
     const session: string | undefined = typeof request.headers["mcp-session-id"] === "string" ? request.headers["mcp-session-id"] : undefined;
     // Once an MCP client has sat down, this key answers only that client.
     if (link.mcpSession !== null && (action !== "mcp" || session !== link.mcpSession)) {
         send(response, 404, "text/plain", LINK_ENDED);
         return true;
+    }
+    // Only a request that has passed every check counts as the agent having looked.
+    if (link.seat !== null) {
+        link.room.agentLooked(link.seat);
     }
     if (action === "mcp") {
         if (request.method !== "POST") {
@@ -671,10 +677,14 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
             return true;
         }
         if (body.method === "initialize") {
-            response.setHeader("mcp-session-id", randomBytes(16).toString("base64url"));
+            const issued: string = link.mcpSession ?? randomBytes(16).toString("base64url");
+            if (link.mcpSession === null) {
+                link.issuedSessions = [...link.issuedSessions, issued].slice(-MAX_MCP_SESSIONS);
+            }
+            response.setHeader("mcp-session-id", issued);
         }
         const params: Record<string, unknown> = typeof body.params === "object" && body.params !== null ? body.params as Record<string, unknown> : {};
-        if (body.method === "tools/call" && params.name === "sit_down" && link.seat === null && session === undefined) {
+        if (body.method === "tools/call" && params.name === "sit_down" && link.seat === null && (session === undefined || link.issuedSessions.includes(session) === false)) {
             send(response, 200, "application/json", JSON.stringify({ jsonrpc: "2.0", id: body.id ?? null, result: { isError: true, content: [{ type: "text", text: "This client didn't keep its MCP session, so it can't take a seat here. Open the link as a web page instead." }] } }));
             return true;
         }

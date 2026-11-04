@@ -1722,7 +1722,7 @@ export class Room implements HostStage, AgentHost {
             return;
         }
         const steps: number = typeof value === "number" ? (value - control.min) / (control.step ?? 1) : Number.NaN;
-        if (typeof value !== "number" || value < control.min || value > control.max || Math.abs(steps - Math.round(steps)) > 1e-9) {
+        if (typeof value !== "number" || Number.isFinite(value) === false || value < control.min || value > control.max || Math.abs(steps - Math.round(steps)) > 1e-9) {
             return;
         }
         this.acceptAnswer(player, controlId, value);

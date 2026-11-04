@@ -607,7 +607,7 @@ function AgentInvite(props: { link: string; games: string[]; joined: string; onC
             <p className="sheet-status" role="status">Waiting for your agent&hellip;</p>
             {canShare === true ? <button className="primary" onClick={() => { navigator.share(shared).catch(() => { /* someone closed the share sheet */ }); }}>Share the link</button> : null}
             {canCopy === true ? <button className={canShare === true ? "sheet-quiet" : "primary"} onClick={copy}>{copied === true ? "Copied" : "Copy the link"}</button> : null}
-            <p className="sheet-small selectable">{canShare === true || canCopy === true ? `${short}\u2026` : props.link}</p>
+            <p className="sheet-small selectable">{canCopy === true ? `${short}\u2026` : props.link}</p>
             <button className="sheet-text danger-text" onClick={props.onCancel}>Cancel link</button>
         </>
     );
