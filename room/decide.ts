@@ -100,10 +100,10 @@ export async function utteranceKind(said: string, asker: JevAsk = askJev): Promi
 /**
  * Reduces an answer to what can be compared without a model.
  * @param answer the answer.
- * @returns lower case, with no punctuation or leading article.
+ * @returns lower case, with no leading article and no punctuation at the ends, so "C++" and "C#", or "1.5" and "15", stay apart.
  */
 function plainAnswer(answer: string): string {
-    return answer.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim().replace(/^(?:the|a|an) /, "");
+    return answer.toLowerCase().replace(/\s+/g, " ").trim().replace(/^["'“‘]+/u, "").replace(/["'”’.,!?;:]+$/u, "").replace(/^(?:the|a|an) /, "");
 }
 
 /**

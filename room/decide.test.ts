@@ -55,6 +55,11 @@ test("identical answers merge without asking", async () => {
     assert.equal(asked, 0);
 });
 
+test("symbols and decimals that change the meaning aren't treated as identical", async () => {
+    const groups = await mergeAnswers("", ["C++", "C#", "1.5", "15"], down);
+    assert.equal(groups.length, 4);
+});
+
 test("an answer joins a group only if it matches everyone there", async () => {
     const groups = await mergeAnswers("", ["moon", "moonlight", "light"], matching([["moon", "moonlight"], ["moonlight", "light"]]));
     assert.deepEqual(groups.map((group) => group.indexes), [[0, 1], [2]]);
@@ -91,6 +96,8 @@ test("the client reads both answer shapes and refuses anything else, without quo
         const choice: JevQuestion = { type: "choice", instructions: "q", criteria: { yes: "y", no: "n" } };
         assert.deepEqual(await askJev("text", choice, 100), { type: "choice", choice: "yes" });
         await assert.rejects(askJev("private words", choice, 100), (error: Error) => error.message.includes("private") === false && error.message.includes("secret") === false);
+        globalThis.fetch = () => Promise.resolve(new Response("not json: private words"));
+        await assert.rejects(askJev("private words", choice, 100), (error: Error) => error.message.includes("private") === false);
         globalThis.fetch = () => Promise.resolve(new Response("", { status: 500 }));
         await assert.rejects(askJev("private words", choice, 100), /500/);
     } finally {

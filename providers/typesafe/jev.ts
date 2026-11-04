@@ -47,7 +47,7 @@ export const askJev: JevAsk = async (state: string, question: JevQuestion, timeo
         await response.body?.cancel();
         throw new Error(`Jev responded ${response.status}.`);
     }
-    const parsed = await response.json() as { answers?: { answer?: { noul?: unknown; choice?: unknown } } };
+    const parsed = await response.json().catch(() => { throw new Error("Jev returned an answer of an unexpected shape."); }) as { answers?: { answer?: { noul?: unknown; choice?: unknown } } };
     const answer: { noul?: unknown; choice?: unknown } | undefined = parsed.answers?.answer;
     if (question.type === "noul" && typeof answer?.noul === "number") {
         return { type: "noul", noul: answer.noul };
