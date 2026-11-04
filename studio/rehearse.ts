@@ -9,6 +9,7 @@ import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from ".
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { Turn } from "../shared/turn.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
+import { mergeIdenticalAnswers } from "../room/decide.ts";
 import { appears, appearsAsWord, squash, type HiddenValue, type KitGame } from "./kit/kit.ts";
 
 export { appears };
@@ -244,6 +245,7 @@ interface Run<State> {
     state: State | null;
     players: CartridgePlayer[];
     pendingContent: boolean;
+    pendingMerges: { id: string; question: string; answers: string[] }[];
     /** When each running timer is due, by id, in seconds on the virtual clock. */
     timers: Map<string, number>;
     now: number;
@@ -263,7 +265,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     const trace: TraceEntry<State>[] = [];
     const phases: Set<string> = new Set();
     const problems: string[] = [];
-    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, timers: new Map(), now: 0, stopped: false };
+    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, pendingMerges: [], timers: new Map(), now: 0, stopped: false };
 
     /**
      * Calls the rules safely: a throw, including one from changing frozen state, becomes a problem.
@@ -307,6 +309,9 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             run.stopped = true;
         }
         run.pendingContent = run.pendingContent === true || step.contentRequest !== undefined;
+        if (step.mergeRequest !== undefined) {
+            run.pendingMerges.push(step.mergeRequest);
+        }
         for (const [timerId, seconds] of Object.entries(step.timers ?? {})) {
             run.timers.set(timerId, run.now + seconds);
         }
@@ -333,6 +338,12 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     let moves: number = 0;
     while (run.state !== null && run.stopped === false && cartridge.outcome(run.state) === null && moves < MOVE_BUDGET) {
         const current: State = run.state;
+        const merge = run.pendingMerges.shift();
+        if (merge !== undefined) {
+            const event: RoomEvent = { type: "answersMerged", at: run.now, id: merge.id, groups: mergeIdenticalAnswers(merge.answers) };
+            take(event, () => cartridge.onEvent(current, event));
+            continue;
+        }
         if (run.pendingContent === true) {
             run.pendingContent = false;
             const event: RoomEvent = { type: "contentReady", at: run.now, text: options.content ?? "" };

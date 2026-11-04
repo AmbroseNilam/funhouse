@@ -17,6 +17,8 @@ import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessag
 import { isFitForRoom } from "../providers/meta/moderation.ts";
 import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
 import { filterText, nicknameCategory, type FilterResult } from "./content-filter.ts";
+import { kindByRule, mergeAnswers, utteranceKind, voiceCommand, type UtteranceKind } from "./decide.ts";
+import { commandByKeywords, DESTRUCTIVE_COMMANDS, type VoiceCommand } from "./voice-commands.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -101,9 +103,6 @@ const NEUTRAL_REACTIONS: string[] = ["Hm.", "Let's see.", "Okay."];
 /** After a question, only thinking sounds; anything else sounds like an answer. */
 const QUESTION_REACTIONS: string[] = ["Hm.", "Let's see."];
 
-/** How a spoken question usually starts, for when the transcript has no question mark. */
-const QUESTION_START: RegExp = /^(who|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
-
 /**
 /** The one game the livelier host is tried in, in rooms opened for it: moods, callbacks, quicker reactions and now and then speaking up. */
 const LIVELY_GAME: string = "twentyDoors";
@@ -134,6 +133,9 @@ const CAPTION_WAIT_MILLISECONDS: number = 2500;
 
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
+
+/** How long someone has to repeat a command that would lose the game. */
+const COMMAND_CONFIRM_MILLISECONDS: number = 20000;
 
 /** Longest typed answer a game can ask for. */
 const TEXT_ANSWER_LIMIT: number = 80;
@@ -399,6 +401,10 @@ export class Room implements HostStage {
     private lullsThisGame: number = 0;
     private readonly livelyRoom: boolean;
     private readonly tapToTalk: boolean;
+    /** A command waiting to be said again. */
+    private pendingCommand: { playerId: string; command: VoiceCommand; at: number } | null = null;
+    /** The last line spoken, for "say that again". */
+    private lastSpoken: { text: string; style: string } | null = null;
     /** Controls each player has answered this game, as "player|control". */
     private readonly answered: Set<string> = new Set();
     /** Typed answers waiting on the filter. */
@@ -415,6 +421,8 @@ export class Room implements HostStage {
     private readonly acknowledgements: Uint8Array[] = [];
     /** Indexes of the latest acknowledgements played, newest last. */
     private readonly recentAcknowledgements: number[] = [];
+    /** Counts filler plans, so one still waiting on a decision can tell it has been called off. */
+    private fillerTurn: number = 0;
     /** Waits to play a filler. */
     private acknowledgeTimer: NodeJS.Timeout | null = null;
     /** What is on this room's shelf; a room may gain games while it is open. */
@@ -761,6 +769,7 @@ export class Room implements HostStage {
      * @param style delivery direction.
      */
     public say(text: string, style: string): void {
+        this.lastSpoken = { text, style };
         if (this.replyClockAt !== 0) {
             log(this.scope(), `reply ready ${Date.now() - this.replyClockAt} ms after release`);
             this.replyClockAt = 0;
@@ -1352,8 +1361,9 @@ export class Room implements HostStage {
     /**
      * Starts a game, if it's installed and the room has the right number of players.
      * @param gameId the game's id or name, in any case.
+     * @param replay true when someone asked to play again, which the gap between starts doesn't apply to.
      */
-    private startGame(gameId: string): void {
+    private startGame(gameId: string, replay: boolean = false): void {
         const wanted: string = gameId.trim().toLowerCase();
         const matches = (game: InstalledGame): boolean => game.manifest.id.toLowerCase() === wanted || game.manifest.name.toLowerCase() === wanted;
         const installed: InstalledGame | undefined = this.games.find(matches);
@@ -1367,7 +1377,7 @@ export class Room implements HostStage {
             this.host.notice(`(Game: ${name} needs ${minPlayers} to ${maxPlayers} players and there are ${count}.)`, WAKE_DELAY_MILLISECONDS.screen);
             return;
         }
-        if (Date.now() - this.lastGameStartAt < GAME_START_GAP_MILLISECONDS) {
+        if (replay === false && Date.now() - this.lastGameStartAt < GAME_START_GAP_MILLISECONDS) {
             return;
         }
         this.lastGameStartAt = Date.now();
@@ -1425,6 +1435,7 @@ export class Room implements HostStage {
                 this.refreshPhones();
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
+            requestMerge: (id: string, question: string, answers: string[]): void => { void this.mergeForGame(id, question, answers); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
             record: (event: RoomEvent): void => {
                 this.record(event);
@@ -1433,6 +1444,20 @@ export class Room implements HostStage {
                 }
             },
         };
+    }
+
+    /**
+     * Merges answers for the running game. Merging can't fail: an outage only means fewer merges.
+     * @param id the game's id for this request.
+     * @param question what was asked.
+     * @param answers the answers.
+     */
+    private async mergeForGame(id: string, question: string, answers: string[]): Promise<void> {
+        const game: RunningGame | null = this.game;
+        const groups = await mergeAnswers(question, answers);
+        if (this.game === game) {
+            game?.event({ type: "answersMerged", at: Date.now(), id, groups });
+        }
     }
 
     /**
@@ -1894,7 +1919,9 @@ export class Room implements HostStage {
         }
         this.logMoment(`heard ${player.playerId}`);
         this.onHeard(player, said);
-        this.scheduleFiller(player, said);
+        if (commandByKeywords(said) === null) {
+            this.scheduleFiller(player, said);
+        }
     }
 
     /**
@@ -1905,13 +1932,111 @@ export class Room implements HostStage {
     private onHeard(player: Player, heard: string): void {
         const said: string = heard.slice(0, MAX_HEARD_CHARACTERS);
         this.lastActivityAt = Date.now();
-        const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
-        this.record(event);
         this.lastSpeakerId = player.playerId;
-        this.game?.event(event);
         this.caption = { speaker: player.name, text: said, final: true };
         this.broadcastScene();
+        const sure: VoiceCommand | null = commandByKeywords(said);
+        if (sure !== null) {
+            if (this.runCommand(player, sure) === false) {
+                this.passToGame(player, said);
+            }
+            return;
+        }
+        if (this.livelyRoom === false && this.tapToTalk === false) {
+            this.passToGame(player, said);
+            return;
+        }
+        void voiceCommand(said, true).then((decision) => {
+            if (decision.value !== null && this.runCommand(player, decision.value) === true) {
+                this.cancelAcknowledgement();
+                return;
+            }
+            this.passToGame(player, said);
+        });
+    }
+
+    /**
+     * Treats a press as talk: the game hears it and the host may answer.
+     * @param player who spoke.
+     * @param said their words.
+     */
+    private passToGame(player: Player, said: string): void {
+        const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
+        this.record(event);
+        this.game?.event(event);
         this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
+    }
+
+    /**
+     * Does what a voice command says, if it means anything right now, and has the host narrate what
+     * really happened. Restarting, ending or changing the topic of a game in progress waits for the same player to say it again.
+     * @param player who said it.
+     * @param command the command.
+     * @returns false when it doesn't apply, so the words are ordinary talk.
+     */
+    private runCommand(player: Player, command: VoiceCommand): boolean {
+        const game: RunningGame | null = this.game;
+        const decided: boolean = game?.outcome() !== null && game?.outcome() !== undefined;
+        if (command === "repeat") {
+            if (this.lastSpoken === null) {
+                return false;
+            }
+            this.hostTurn = { text: "" };
+            this.say(this.lastSpoken.text, this.lastSpoken.style);
+            return true;
+        }
+        if (game === null || this.gamePlayerIds.has(player.playerId) === false) {
+            return false;
+        }
+        if (command === "whoseTurn") {
+            const turn: string = this.turnBrief();
+            if (turn !== "") {
+                this.host.notice(`(Game: ${player.name} asked whose turn it is. ${turn} Tell them in a few words.)`, WAKE_DELAY_MILLISECONDS.speech);
+            }
+            return turn !== "";
+        }
+        if (command === "pause") {
+            return this.shell.pauseGame();
+        }
+        const actionId: string | undefined = { giveUp: "giveup", skip: "skip", changeTopic: "changeTopic" }[command as string];
+        if (actionId !== undefined) {
+            if (decided === true || game.hasAction(player.playerId, actionId) === false) {
+                return false;
+            }
+            if (DESTRUCTIVE_COMMANDS.includes(command) === true && this.confirmed(player, command) === false) {
+                this.host.notice(`(Game: ${player.name} asked to change the topic. Nothing has changed yet. Ask them to say it again if they mean it, in a few words.)`, WAKE_DELAY_MILLISECONDS.speech);
+                return true;
+            }
+            game.input(player.playerId, actionId);
+            this.refreshPhones();
+            return true;
+        }
+        if (decided === false && DESTRUCTIVE_COMMANDS.includes(command) === true && this.confirmed(player, command) === false) {
+            this.host.notice(`(Game: ${player.name} asked to ${command === "restart" ? "restart" : "end"} the game. Nothing has changed yet. Ask them to say it again if they mean it, in a few words.)`, WAKE_DELAY_MILLISECONDS.speech);
+            return true;
+        }
+        const gameId: string = game.manifest.id;
+        this.pendingCommand = null;
+        this.endGame();
+        if (command === "restart") {
+            this.startGame(gameId, true);
+            return true;
+        }
+        this.host.notice(`(Game: ${player.name} ended the game. Everyone is back at the shelf of games. Say so in a few words.)`, WAKE_DELAY_MILLISECONDS.speech);
+        return true;
+    }
+
+    /**
+     * Notes a request that needs saying twice.
+     * @param player who said it.
+     * @param command the command.
+     * @returns true when this is the second time, from the same player, in time.
+     */
+    private confirmed(player: Player, command: VoiceCommand): boolean {
+        const pending = this.pendingCommand;
+        const again: boolean = pending?.playerId === player.playerId && pending.command === command && Date.now() - pending.at <= COMMAND_CONFIRM_MILLISECONDS;
+        this.pendingCommand = again === true ? null : { playerId: player.playerId, command, at: Date.now() };
+        return again;
     }
 
     /**
@@ -2014,12 +2139,20 @@ export class Room implements HostStage {
         if (eligible === false) {
             return;
         }
-        const question: boolean = said.endsWith("?") === true || QUESTION_START.test(said) === true;
         this.cancelAcknowledgement();
-        this.acknowledgeTimer = setTimeout(() => {
-            this.acknowledgeTimer = null;
-            this.playReaction(question);
-        }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
+        const turn: number = this.fillerTurn;
+        const kind: Promise<UtteranceKind> = this.livelyRoom === true || this.tapToTalk === true
+            ? utteranceKind(said).then((decision) => decision.value)
+            : Promise.resolve(kindByRule(said));
+        void kind.then((value: UtteranceKind) => {
+            if (turn !== this.fillerTurn || value === "noise" || value === "command") {
+                return;
+            }
+            this.acknowledgeTimer = setTimeout(() => {
+                this.acknowledgeTimer = null;
+                this.playReaction(value === "question");
+            }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
+        });
     }
 
     /**
@@ -2098,6 +2231,7 @@ export class Room implements HostStage {
 
     /** Cancels a pending acknowledgement. */
     private cancelAcknowledgement(): void {
+        this.fillerTurn += 1;
         if (this.acknowledgeTimer === null) {
             return;
         }

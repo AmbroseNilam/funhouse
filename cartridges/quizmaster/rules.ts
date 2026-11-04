@@ -233,10 +233,14 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         },
 
         legalActions(state: QuizmasterState): LegalAction[] {
-            return state.phase === "question" ? [{ actionId: "skip", label: "Skip this question" }] : [];
+            return state.phase === "question" ? [{ actionId: "skip", label: "Skip this question" }, { actionId: "changeTopic", label: "Change the topic" }] : [];
         },
 
         apply(state: QuizmasterState, _playerId: string, actionId: string): Step<QuizmasterState> {
+            if (state.phase === "question" && actionId === "changeTopic") {
+                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "" };
+                return { state: fresh, facts: [publicFact("ask-topic", "They want a new topic. Scores stay. Ask what topic they would like next.")], nextPhaseId: "topic" };
+            }
             if (state.phase !== "question" || actionId !== "skip") {
                 return { state, facts: [] };
             }

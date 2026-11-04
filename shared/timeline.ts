@@ -4,6 +4,13 @@
 
 import type { ScopedFact } from "./visibility.ts";
 
+/** Answers that count as one, by their places in the list given. */
+export interface AnswerGroup {
+    /** The first answer in the group as it was typed. */
+    answer: string;
+    indexes: number[];
+}
+
 /** One entry on the timeline. */
 export type RoomEvent =
     | { type: "playerJoined"; at: number; playerId: string; name: string }
@@ -20,6 +27,7 @@ export type RoomEvent =
     | { type: "fact"; at: number; fact: ScopedFact }
     | { type: "hostRuled"; at: number; ruling: string; detail: string; playerId: string | null }
     | { type: "contentReady"; at: number; text: string }
+    | { type: "answersMerged"; at: number; id: string; groups: AnswerGroup[] }
     | { type: "drawingReady"; at: number; id: string; src: string };
 
 /** Maximum events a room keeps in memory; older ones roll off the front. */

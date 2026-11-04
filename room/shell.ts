@@ -377,6 +377,18 @@ export class Shell {
         }
     }
 
+    /**
+     * Pauses a game in play, for a spoken request.
+     * @returns true when it paused.
+     */
+    public pauseGame(): boolean {
+        if (this.screen !== "play" || this.isDecided() === true) {
+            return false;
+        }
+        this.back();
+        return true;
+    }
+
     /** Goes to the parent screen; in a game, pauses. */
     private back(): void {
         const parent: ShellScreen | null = this.parentScreen();
