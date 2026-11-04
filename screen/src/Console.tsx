@@ -1,11 +1,27 @@
 // The console's screens, drawn from what the room says: the shelf of game boxes, a game's page,
 // who's at the table, and the pause menu. Nothing here decides anything. Text is written for
-// reading across a room, and every screen is driven only from the phone.
+// reading across a room. Every screen works from the phone alone; a mouse only says what a phone could.
 
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
 import { Poster } from "./Poster.tsx";
-import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+import type { NavAction, Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+
+/** What a mouse may do on this screen right now, or null when it can only watch. */
+export type Pointing = ((action: NavAction) => void) | null;
+
+/**
+ * The class and click for something a mouse can choose.
+ * @param pointing what the mouse may do.
+ * @param index the item's place.
+ * @returns the props; nothing at all when the mouse can only watch.
+ */
+function chooseProps(pointing: Pointing, index: number): { onClick?: () => void; "data-clickable"?: true } {
+    if (pointing === null) {
+        return {};
+    }
+    return { onClick: (): void => { pointing({ kind: "choose", index }); }, "data-clickable": true };
+}
 
 /** Slightly different box shapes, so the shelf reads as objects and not a grid. */
 const BOX_SHAPES: { height: number; tilt: number; width: number }[] = [
@@ -47,6 +63,9 @@ function shelfShift(boxes: number, focus: number): number {
     return Math.max(0, Math.min(total - SHELF_WIDTH_UNITS, centre - SHELF_WIDTH_UNITS / 2));
 }
 
+/** How many boxes fit on the shelf before it has to slide. */
+const SHELF_BOXES_IN_VIEW: number = 4;
+
 /** Names that fit in the table box above its label. */
 const TABLE_BOX_NAMES: number = 4;
 
@@ -67,11 +86,11 @@ function DriverFlag(props: { seat: Seat | undefined }): ReactElement | null {
  * @param props the rows, the highlighted one, and who's driving.
  * @returns the element.
  */
-function Rows(props: { rows: string[]; focus: number; driver: Seat | undefined; muted?: number[] }): ReactElement {
+function Rows(props: { rows: string[]; focus: number; driver: Seat | undefined; pointing: Pointing; muted?: number[] }): ReactElement {
     return (
         <ol className="rows">
             {props.rows.map((row: string, index: number) => (
-                <li key={row} className={`row ${index === props.focus ? "focused leaning" : ""} ${props.muted?.includes(index) === true ? "muted" : ""}`}>
+                <li key={row} {...chooseProps(props.pointing, index)} className={`row ${index === props.focus ? "focused leaning" : ""} ${props.muted?.includes(index) === true ? "muted" : ""}`}>
                     {row}
                     {index === props.focus ? <DriverFlag seat={props.driver} /> : null}
                 </li>
@@ -102,8 +121,8 @@ export function JoinTag(props: { qr: string; code: string; big: boolean; joinHos
  * @param props the console, the join image, and the room code.
  * @returns the element.
  */
-function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string }): ReactElement {
-    const { shell, driver } = props;
+function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string; pointing: Pointing }): ReactElement {
+    const { shell, driver, pointing } = props;
     const focused: ShelfGame | undefined = shell.games[shell.focus];
     const empty: boolean = shell.seats.length === 0;
     const boxCount: number = shell.games.length + (empty === true ? 0 : 1);
@@ -112,19 +131,19 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
             <img className="room-art" src="art/hero.webp" alt="" />
             <header className="shelf-heading" key={focused?.id ?? "players"}>
                 {empty === true
-                    ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.</p></>
+                    ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.{pointing !== null ? <><br />No phone? Pick a box with your mouse.</> : null}</p></>
                     : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here, or add a player."}</p></>}
             </header>
             <div className={`shelf ${empty === true ? "dimmed" : ""}`}>
                 <div className="shelf-rail" style={{ transform: `translateX(calc(${-shelfShift(boxCount, shell.focus)} * var(--u)))` }}>
                 {shell.games.map((game: ShelfGame, index: number) => (
-                    <div key={game.id} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${boxShape(index).height}%`, rotate: `${boxShape(index).tilt}deg`, width: `calc(${boxShape(index).width * BOX_WIDTH_UNITS} * var(--u))`, viewTransitionName: `box-${game.id}` }}>
+                    <div key={game.id} {...chooseProps(pointing, index)} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${boxShape(index).height}%`, rotate: `${boxShape(index).tilt}deg`, width: `calc(${boxShape(index).width * BOX_WIDTH_UNITS} * var(--u))`, viewTransitionName: `box-${game.id}` }}>
                         <Poster id={game.id} art={game.art} />
                         <span className="box-name">{game.name}</span>
                         {index === shell.focus && empty === false ? <DriverFlag seat={driver} /> : null}
                     </div>
                 ))}
-                {empty === true ? null : <div className={`box table-box ${shell.focus === shell.games.length ? "focused leaning" : ""}`} style={{ height: `${boxShape(shell.games.length).height}%`, rotate: `${boxShape(shell.games.length).tilt}deg`, width: `calc(${boxShape(shell.games.length).width * BOX_WIDTH_UNITS} * var(--u))` }}>
+                {empty === true ? null : <div {...chooseProps(pointing, shell.games.length)} className={`box table-box ${shell.focus === shell.games.length ? "focused leaning" : ""}`} style={{ height: `${boxShape(shell.games.length).height}%`, rotate: `${boxShape(shell.games.length).tilt}deg`, width: `calc(${boxShape(shell.games.length).width * BOX_WIDTH_UNITS} * var(--u))` }}>
                     <ul className="table-names">
                         {shell.seats.slice(0, TABLE_BOX_NAMES).map((seat: Seat) => <li key={seat.playerId} style={{ background: seat.colour }}>{seat.name}</li>)}
                         {shell.seats.length > TABLE_BOX_NAMES ? <li className="more">and {shell.seats.length - TABLE_BOX_NAMES} more</li> : null}
@@ -134,6 +153,10 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                 </div>}
                 </div>
             </div>
+            {pointing !== null && boxCount > SHELF_BOXES_IN_VIEW ? <>
+                <button className="shelf-arrow previous" disabled={shell.focus === 0} aria-label="Earlier games" onClick={() => { pointing({ kind: "step", delta: -1 }); }}>‹</button>
+                <button className="shelf-arrow next" disabled={shell.focus >= boxCount - 1} aria-label="Later games" onClick={() => { pointing({ kind: "step", delta: 1 }); }}>›</button>
+            </> : null}
             <div className="plank" />
             <JoinTag qr={props.qr} code={props.code} big={empty} joinHost={props.joinHost} />
         </section>
@@ -145,7 +168,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
  * @param props the console and game.
  * @returns the element.
  */
-function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame }): ReactElement {
+function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame; pointing: Pointing }): ReactElement {
     const { shell, game, driver } = props;
     return (
         <section className="screen game-screen">
@@ -156,7 +179,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
                 <p className="pitch">{game.pitch}</p>
                 <ol className="steps">{game.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol>
                 <p className={`players-note ${game.blocked !== null ? "blocked" : ""}`}>{game.blocked ?? game.players}</p>
-                <Rows rows={shell.menu} focus={shell.focus} driver={driver} {...(game.blocked !== null ? { muted: [0] } : {})} />
+                <Rows rows={shell.menu} focus={shell.focus} driver={driver} pointing={props.pointing} {...(game.blocked !== null ? { muted: [0] } : {})} />
             </div>
         </section>
     );
@@ -167,7 +190,7 @@ function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: She
  * @param props the console.
  * @returns the element.
  */
-function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string }): ReactElement {
+function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: string; code: string; joinHost: string; pointing: Pointing }): ReactElement {
     const { shell, driver } = props;
     return (
         <section className={`screen players-screen ${shell.screen === "players" ? "" : "adding"}`}>
@@ -184,7 +207,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
             {shell.screen === "agentOnPhone" ? <p className="players-hint">The link is on {driver?.name ?? "your"}'s phone. Paste it to your agent there.</p> : null}
             <p className="players-hint" hidden={shell.screen !== "players"}>Talk to {HOST_NAME} from your phone. Whoever slides next takes the controller. Anyone else can scan in.</p>
             {shell.screen === "players" ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
-            <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
+            <Rows rows={shell.menu} focus={shell.focus} driver={driver} pointing={props.pointing} />
         </section>
     );
 }
@@ -194,7 +217,7 @@ function PlayersPage(props: { shell: ShellView; driver: Seat | undefined; qr: st
  * @param props the console, the game, and how to join.
  * @returns the element.
  */
-export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame | undefined; qr: string; code: string; joinHost: string }): ReactElement {
+export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame | undefined; qr: string; code: string; joinHost: string; pointing: Pointing }): ReactElement {
     const { shell, driver, game } = props;
     return (
         <div className="pause-backing">
@@ -204,7 +227,7 @@ export function PausePanel(props: { shell: ShellView; driver: Seat | undefined; 
                 {shell.screen === "howTo"
                     ? <><h2>How to play {game?.name ?? ""}</h2><ol className="steps">{game?.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol></>
                     : shell.screen === "pause" ? <h2>{shell.pausedBy === "" ? "Paused" : `Paused by ${shell.pausedBy}`}</h2> : null}
-                <Rows rows={shell.menu} focus={shell.focus} driver={driver} />
+                <Rows rows={shell.menu} focus={shell.focus} driver={driver} pointing={props.pointing} />
             </section>
         </div>
     );
@@ -232,8 +255,8 @@ export function SteppedOutPanel(props: { qr: string; code: string; joinHost: str
  * @param props the console.
  * @returns the element.
  */
-export function GameOverMenu(props: { shell: ShellView; driver: Seat | undefined }): ReactElement {
-    return <section className="over-card"><Rows rows={props.shell.menu} focus={props.shell.focus} driver={props.driver} /></section>;
+export function GameOverMenu(props: { shell: ShellView; driver: Seat | undefined; pointing: Pointing }): ReactElement {
+    return <section className="over-card"><Rows rows={props.shell.menu} focus={props.shell.focus} driver={props.driver} pointing={props.pointing} /></section>;
 }
 
 /**
@@ -241,11 +264,11 @@ export function GameOverMenu(props: { shell: ShellView; driver: Seat | undefined
  * @param props the console, the join image, the room code and the address to join at.
  * @returns the element, or null during play.
  */
-export function ConsolePage(props: { shell: ShellView; qr: string; code: string; joinHost: string }): ReactElement | null {
-    const { shell } = props;
+export function ConsolePage(props: { shell: ShellView; qr: string; code: string; joinHost: string; pointing: Pointing }): ReactElement | null {
+    const { shell, pointing } = props;
     const driver: Seat | undefined = shell.seats.find((seat: Seat) => seat.driving === true);
     if (shell.screen === "home") {
-        return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
+        return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} pointing={pointing} />;
     }
     const game: ShelfGame | undefined = shell.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
     if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
@@ -254,10 +277,10 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
                 <Poster className="room-art" id={game.id} art={game.art} />
                 <header className="shelf-heading">
                     <h1>{game.startPick.prompt}</h1>
-                    <p>Slide and tap on your phone. {HOST_NAME} takes what's highlighted if nobody chooses.</p>
+                    <p>{pointing !== null ? "Pick one." : "Slide and tap on your phone."} {HOST_NAME} takes what's highlighted if nobody chooses.</p>
                 </header>
                 <ul className="pick-boxes">
-                    {shell.menu.map((label: string, index: number) => <li key={label} className={index === shell.focus ? "focused" : ""}>{label}</li>)}
+                    {shell.menu.map((label: string, index: number) => <li key={label} {...chooseProps(pointing, index)} className={index === shell.focus ? "focused" : ""}>{label}</li>)}
                 </ul>
             </section>
         );
@@ -269,14 +292,15 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
                 <header className="shelf-heading"><h1>{game.name}</h1></header>
                 <ol className="steps start-card">{game.startCard?.map((line: string) => <li key={line}>{line}</li>)}</ol>
                 <p className="start-note">{driver === undefined ? "Starting soon." : `Starting soon. ${driver.name} can tap to start now.`}</p>
+                {pointing !== null ? <button className="tv-button start-now" onClick={() => { pointing({ kind: "select" }); }}>{shell.menu[0] ?? "Start now"}</button> : null}
             </section>
         );
     }
     if (shell.screen === "game" && game !== undefined) {
-        return <GamePage shell={shell} driver={driver} game={game} />;
+        return <GamePage shell={shell} driver={driver} game={game} pointing={pointing} />;
     }
     if (shell.screen === "players" || shell.screen === "addPlayer" || shell.screen === "addGuest" || shell.screen === "guestLine" || shell.screen === "agentOnPhone") {
-        return <PlayersPage shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
+        return <PlayersPage shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} pointing={pointing} />;
     }
     return null;
 }
