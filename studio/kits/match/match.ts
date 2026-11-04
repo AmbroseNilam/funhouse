@@ -132,10 +132,10 @@ const SIGN_OF_LIFE: readonly [string, string] = ["quillbeam", "quillbeams"];
 
 /** A different way to read each prompt after the first, so the rounds don't sound alike. */
 const PROMPT_SHAPES: readonly string[] = [
-    "Read it aloud once, with nothing around it.",
-    "Lead in with a few dry words of your own, then read it.",
-    "Read it aloud as if it's a small dare.",
-    "Read it aloud as if you already know what they'll say.",
+    "Read the prompt word for word, with nothing around it.",
+    "Say two or three dry words of your own, then read the prompt word for word.",
+    "Read the prompt word for word, then add two or three dry words.",
+    "Say next, or something as short, then read the prompt word for word.",
 ];
 
 /**
@@ -222,7 +222,7 @@ export function matchManifest(box: Box): CartridgeManifest {
             {
                 id: "writing",
                 hostBrief: [
-                    "You'll be given the prompt. Read it aloud once, in one short sentence, and do what you're told about the clock.",
+                    "You'll be given the prompt. Read it word for word, because it's on the screen too, and do what you're told about the clock.",
                     "Then stop; they are typing in silence. Never guess at answers.",
                 ].join(" "),
                 listening: { "*": "muted" },
@@ -339,7 +339,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const text: string = [
             `Prompt ${round} of ${total}: ${quoted(promptOf(state))}.`,
             round === 1
-                ? `Read it aloud once, in one short sentence, and say they have ${decisions.writeSeconds} seconds to match the room. You don't know any answers.`
+                ? `Read the prompt word for word, then say they have ${decisions.writeSeconds} seconds to match the room. You don't know any answers.`
                 : `${PROMPT_SHAPES[round % PROMPT_SHAPES.length] ?? ""} Say nothing about the clock or matching, because the screen shows that. You don't know any answers.`,
         ].join(" ");
         return { state, facts: because(publicFact("prompt", text), MATCH_DECISIONS.prompts), nextPhaseId: "writing", timers: { [`write${round}`]: decisions.writeSeconds } };
@@ -742,15 +742,12 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 return { mood: "dawn", transition: "fade", blocks };
             }
             const rows: TallyRow[] = scoreRows(state);
-            const hatLine: string = state.hatLoser === null ? "" : `The hat ended with ${nameOf(state, state.hatLoser)}. Minus ${decisions.hatPenalty}.`;
+            const hatLine: string = state.hatLoser === null ? "" : ` The hat ended with ${nameOf(state, state.hatLoser)}: minus ${decisions.hatPenalty}.`;
             const leaders: string[] = rows.filter((row: TallyRow) => row.highlight === true).map((row: TallyRow) => row.label);
             const heading: string = leaders.length === 0 ? "Final scores" : leaders.length === 1 ? `${leaders[0] ?? ""} wins` : `${leaders.join(" and ")} tie`;
             const blocks: SceneBlock[] = [{ type: "title", text: heading, kicker: state.result === "tooFew" ? "The table got small" : "Final scores" }];
-            if (hatLine !== "") {
-                blocks.push({ type: "text", text: hatLine, emphasis: "large" });
-            }
             blocks.push({ type: "text", text: whyWon(state, rows), emphasis: "large" });
-            blocks.push({ type: "text", text: "Every other card in your stack is a point, and a pair scores two each." });
+            blocks.push({ type: "text", text: `Every other card in your stack is a point, and a pair scores two each.${hatLine}` });
             blocks.push({ type: "tally", title: "Points", rows });
             return { mood: "victory", transition: "fade", blocks };
         },
