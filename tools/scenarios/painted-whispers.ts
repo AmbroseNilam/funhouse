@@ -84,12 +84,12 @@ function boxOf(view: PhoneView | null): Extract<Control, { type: "textInput" }> 
 }
 
 /**
- * How many pictures the stub has drawn so far, or -1 when there is no stub.
+ * How many pictures the stub has been asked for so far, or -1 when there is no stub.
  * @returns the count.
  */
 async function picturesDrawn(): Promise<number> {
     try {
-        return ((await (await fetch(`${STUB_URL}/__stats`)).json()) as { images: unknown[] }).images.length;
+        return ((await (await fetch(`${STUB_URL}/__stats`)).json()) as { requests: unknown[] }).requests.length;
     } catch {
         return -1;
     }
@@ -196,15 +196,15 @@ if (seats.some((seat: Seat) => boxOf(seat.phone.view) !== undefined) === true) {
 }
 
 try {
-    const stats = await (await fetch(`${STUB_URL}/__stats`)).json() as { images: { prompt: string }[]; failed: number };
-    const asked: string[] = stats.images.slice(Math.max(0, drawnBefore)).map((image: { prompt: string }) => image.prompt);
-    if (EXPECT_PICTURES === true && asked.length !== LINES.length) {
+    const stats = await (await fetch(`${STUB_URL}/__stats`)).json() as { requests: string[]; images: unknown[]; failed: number };
+    const asked: string[] = stats.requests.slice(Math.max(0, drawnBefore));
+    if (asked.length !== LINES.length) {
         throw new Error(`Expected ${LINES.length} pictures to be asked for, saw ${asked.length}.`);
     }
     if (asked.some((prompt: string) => prompt.endsWith(HOUSE_RULE) === false || /ignore|instructions|example\.com/i.test(prompt) === true) === true) {
         throw new Error("A picture prompt was missing the house rule, or held a refused line.");
     }
-    console.warn(`The stub drew ${asked.length} pictures, ${stats.failed} failed; every prompt carried the house rule and none held a refused line.`);
+    console.warn(`The room asked the stub for ${asked.length} pictures, ${stats.failed} of them failed; every prompt carried the house rule and none held a refused line.`);
 } catch (error: unknown) {
     if (error instanceof Error && error.message.startsWith("Expected") === true || error instanceof Error && error.message.startsWith("A picture") === true) {
         throw error;

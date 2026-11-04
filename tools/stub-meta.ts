@@ -27,8 +27,16 @@ const FAIL_EVERY: number = Number(process.env.STUB_IMAGE_FAIL_EVERY ?? 0);
 /** Width and height of a stub picture. */
 const SIZE: number = 96;
 
-/** What the stub has been asked, for GET /__stats. */
-const stats: { images: { prompt: string; at: number; ms: number }[]; failed: number; moderated: number; chats: number } = { images: [], failed: 0, moderated: 0, chats: 0 };
+/** What the stub has been asked, for GET /__stats. Every prompt is kept in requests, including the ones it failed. */
+interface Stats {
+    images: { prompt: string; at: number; ms: number }[];
+    requests: string[];
+    failed: number;
+    moderated: number;
+    chats: number;
+}
+
+const stats: Stats = { images: [], requests: [], failed: 0, moderated: 0, chats: 0 };
 
 /**
  * The checksum a PNG chunk ends with.
@@ -122,7 +130,8 @@ async function handle(request: IncomingMessage, response: ServerResponse): Promi
     if (path === "/images/generations") {
         const prompt: string = typeof body.prompt === "string" ? body.prompt : "";
         const startedAt: number = Date.now();
-        const asked: number = stats.images.length + stats.failed + 1;
+        stats.requests.push(prompt);
+        const asked: number = stats.requests.length;
         await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, IMAGE_MILLISECONDS); });
         if (FAIL_ALL === true || (FAIL_EVERY > 0 && asked % FAIL_EVERY === 0)) {
             stats.failed += 1;
