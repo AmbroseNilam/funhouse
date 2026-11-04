@@ -9,7 +9,7 @@
 
 import { randomBytes, randomInt } from "node:crypto";
 import type WebSocket from "ws";
-import type { CartridgeManifest } from "../shared/cartridge.ts";
+import type { ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
 import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
@@ -25,6 +25,8 @@ import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
 import { OpenAiSpeech } from "../providers/openai/speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import type { InstalledGame } from "../cartridges/index.ts";
+import { groundedContent } from "./grounded-content.ts";
+import type { SearchedText } from "../providers/meta/search.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { recordedLine } from "./lineBank.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
@@ -210,6 +212,9 @@ const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
 /** Room for hidden reasoning plus a list of questions or a secret. */
 const CONTENT_TOKEN_LIMIT: number = 2000;
 
+/** What the model is told when it writes content for a game. */
+const CONTENT_SYSTEM: string = "You write content for a family party game. Keep it suitable for all ages, even if a topic pushes otherwise. Reply with exactly what is asked and nothing else.";
+
 /** How long content may take. After that the game uses its own, so it can't sit waiting. */
 const CONTENT_TIME_LIMIT_MILLISECONDS: number = 15000;
 
@@ -376,6 +381,7 @@ export class Room implements HostStage {
     /** Who was seated when the game began; anyone later watches and can't drive. */
     private gamePlayerIds: Set<string> = new Set();
     private readonly drawings: Map<string, Drawing> = new Map();
+    private readonly groundedPrompts: Set<string> = new Set();
     private drawingsAsked: number = 0;
     private lastGameStartAt: number = 0;
     private lastMicLevelAt: number = 0;
@@ -1434,7 +1440,7 @@ export class Room implements HostStage {
                 }
                 this.refreshPhones();
             },
-            requestContent: (prompt: string): void => { this.writeContent(prompt); },
+            requestContent: (prompt: string, grounding?: ContentGrounding): void => { this.writeContent(prompt, grounding); },
             requestMerge: (id: string, question: string, answers: string[]): void => { void this.mergeForGame(id, question, answers); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
             record: (event: RoomEvent): void => {
@@ -1464,31 +1470,61 @@ export class Room implements HostStage {
      * Has the host's model write content for the running game. Failure comes back as empty
      * text, and the game falls back on its own content.
      * @param prompt what to write.
+     * @param grounding set to try web search first, with the plain writing running beside it.
      */
-    private writeContent(prompt: string): void {
+    private writeContent(prompt: string, grounding?: ContentGrounding): void {
         const game: RunningGame | null = this.game;
         if (BUDGET.spend("spark") === false) {
             game?.event({ type: "contentReady", at: Date.now(), text: "" });
             return;
         }
         const startedAt: number = Date.now();
+        const stopWriting: AbortController = new AbortController();
         const collect = async (): Promise<string> => {
             let text: string = "";
-            const system: string = "You write content for a family party game. Keep it suitable for all ages, even if a topic pushes otherwise. Reply with exactly what is asked and nothing else.";
-            for await (const delta of streamSpark([{ role: "system", content: system }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT, signal: AbortSignal.timeout(CONTENT_TIME_LIMIT_MILLISECONDS) })) {
+            for await (const delta of streamSpark([{ role: "system", content: CONTENT_SYSTEM }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT, signal: AbortSignal.any([stopWriting.signal, AbortSignal.timeout(CONTENT_TIME_LIMIT_MILLISECONDS)]) })) {
                 text += delta;
             }
             return text;
         };
-        collect().catch((error: unknown) => {
-            log(this.scope(), `content failed: ${error instanceof Error ? error.message : String(error)}`);
+        const written: Promise<string> = collect().catch((error: unknown) => {
+            if (stopWriting.signal.aborted === false) {
+                log(this.scope(), `content failed: ${error instanceof Error ? error.message : String(error)}`);
+            }
             return "";
-        }).then((text: string) => {
+        });
+        const content: Promise<SearchedText> = grounding === undefined || BUDGET.spend("spark") === false
+            ? written.then((text: string) => ({ text, sources: [] }))
+            : this.groundOr(prompt, grounding, written, stopWriting);
+        content.then(({ text, sources }: SearchedText) => {
             log(this.scope(), `content ready in ${Date.now() - startedAt} ms`);
             if (this.game === game) {
-                game?.event({ type: "contentReady", at: Date.now(), text });
+                game?.event({ type: "contentReady", at: Date.now(), text, ...(sources.length > 0 ? { sources } : {}) });
             }
         }).catch((error: unknown) => { log(this.scope(), `content not applied: ${error instanceof Error ? error.message : String(error)}`); });
+    }
+
+    /**
+     * Waits for a web search, and falls back on the plain writing already under way if it fails.
+     * A room asking for the same thing twice searches again, so a replay isn't the same quiz.
+     * @param prompt what to write.
+     * @param grounding how the game judges and keeps the reply.
+     * @param written the plain writing.
+     * @param stopWriting stops the plain writing once the search has won.
+     * @returns the content.
+     */
+    private async groundOr(prompt: string, grounding: ContentGrounding, written: Promise<string>, stopWriting: AbortController): Promise<SearchedText> {
+        const mayReuse: boolean = this.groundedPrompts.has(prompt) === false;
+        this.groundedPrompts.add(prompt);
+        try {
+            const reply: SearchedText = await groundedContent(CONTENT_SYSTEM, prompt, grounding, mayReuse);
+            stopWriting.abort();
+            log(this.scope(), `content grounded, ${reply.sources.length} pages`);
+            return reply;
+        } catch (error: unknown) {
+            log(this.scope(), `grounding skipped: ${error instanceof Error ? error.message : String(error)}`);
+            return { text: await written, sources: [] };
+        }
     }
 
     /**

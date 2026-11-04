@@ -63,6 +63,14 @@ export interface LegalAction {
     label: string;
 }
 
+/** How a game wants web search used for content it asks for. */
+export interface ContentGrounding {
+    /** Whether a searched reply is good enough to use; if not, the game gets what the model writes without searching. */
+    usable: (text: string) => boolean;
+    /** True when the same request can get the same reply for a while, such as a quiz on one topic. */
+    cacheable: boolean;
+}
+
 /** Result of applying an action or event: the new state plus facts to record. */
 export interface Step<State> {
     state: State;
@@ -73,6 +81,8 @@ export interface Step<State> {
     timers?: Record<string, number>;
     /** Asks the host's model to write content, such as a secret; it returns as contentReady. */
     contentRequest?: string;
+    /** Asks that contentRequest be tried with web search first; without it the model only writes from memory. */
+    contentGrounding?: ContentGrounding;
     /**
      * Asks which answers say the same thing, such as "the moon" and "luna". It returns as an
      * answersMerged event with this id. Only filtered text, and no player names.
