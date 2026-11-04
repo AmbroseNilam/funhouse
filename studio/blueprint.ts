@@ -6,7 +6,8 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
-import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
+import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
+import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
 export interface GuessingBlueprint {
@@ -22,8 +23,18 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** The tap games, each its own style on the tap kit. */
+export type TapDecisions = FitsDecisions;
+
+/** A tap game: people play by tapping their phones, and the host only talks. */
+export interface TapBlueprint {
+    kit: "tap";
+    box: Box;
+    decisions: TapDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -41,7 +52,10 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "guessing") {
         return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
     }
-    return plantBlueprintProblems(blueprint.box, blueprint.decisions);
+    if (blueprint.kit === "plant") {
+        return plantBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
+    return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
 /**
@@ -55,7 +69,25 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     if (blueprint.kit === "guessing") {
         return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
     }
-    return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
+    if (blueprint.kit === "plant") {
+        return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
+    }
+    return erase(createFitsGame(blueprint.box, blueprint.decisions));
+}
+
+/**
+ * The rows a game adds to the pause menu, so one stray tap can't end it.
+ * @param blueprint the game.
+ * @returns the actions, by id and label.
+ */
+export function blueprintPauseActions(blueprint: Blueprint): { id: string; label: string }[] {
+    if (blueprint.kit === "guessing") {
+        return blueprint.decisions.giveUpButton === true ? [{ id: "giveup", label: "We give up" }] : [];
+    }
+    if (blueprint.kit === "plant") {
+        return [{ id: PLANT_GIVE_UP_ACTION, label: "We give up" }];
+    }
+    return [];
 }
 
 /**

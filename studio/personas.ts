@@ -4,9 +4,10 @@
 // rehearses. Between them they reach every ending a kit has.
 
 import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
-import type { PlantBlueprint } from "./blueprint.ts";
+import type { PlantBlueprint, TapBlueprint } from "./blueprint.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
+import { createFitsGame, FITS_PREFIX, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
 import type { KitGame } from "./kit/kit.ts";
 import type { Glimpse, Move, Persona, RoleCheck, TraceEvent } from "./rehearse.ts";
 
@@ -233,6 +234,85 @@ export function plantRoleCheck(blueprint: PlantBlueprint): RoleCheck<PlantState>
         deal(seat: number, players: readonly CartridgePlayer[]): KitGame<PlantState> {
             const draws: number[] = [0, (seat + 0.5) / players.length];
             return createPlantGame(blueprint.box, blueprint.decisions, () => draws.shift() ?? 0);
+        },
+        script,
+    };
+}
+
+/**
+ * Who Fits' personas: a table that taps at once, one where someone never taps so the clock runs
+ * out, one where someone leaves mid-round, and one where nobody taps at all.
+ * @returns the personas.
+ */
+export function fitsPersonas(): Persona<FitsState>[] {
+    /**
+     * The next tapper who hasn't tapped, tapping their first choice, or a wait for the clock.
+     * @param glimpse what the persona sees.
+     * @param skip tappers who never tap.
+     * @returns the move.
+     */
+    const tapNext = (glimpse: Glimpse<FitsState>, skip: readonly string[] = []): Move => {
+        const tapper: string | undefined = glimpse.state.tappers.find((id: string) => glimpse.state.taps[id] === undefined && skip.includes(id) === false);
+        const action: string | null = tapper === undefined ? null : firstAction(glimpse, tapper);
+        return tapper === undefined || action === null ? { kind: "wait", seconds: 10 } : { kind: "press", playerId: tapper, actionId: action };
+    };
+    return [
+        { name: "the quick table", move: (glimpse: Glimpse<FitsState>): Move => (glimpse.phase === "tapping" ? tapNext(glimpse) : { kind: "wait", seconds: 10 }) },
+        { name: "the one who never taps", move: (glimpse: Glimpse<FitsState>): Move => (glimpse.phase === "tapping" ? tapNext(glimpse, [glimpse.players[0]?.playerId ?? ""]) : { kind: "wait", seconds: 10 }) },
+        {
+            name: "the one who leaves",
+            move(glimpse: Glimpse<FitsState>): Move {
+                const leaver: string | undefined = glimpse.players[1]?.playerId;
+                if (glimpse.phase === "tapping" && glimpse.state.round === 1 && leaver !== undefined && glimpse.players.length > 3) {
+                    return { kind: "leave", playerId: leaver };
+                }
+                return glimpse.phase === "tapping" ? tapNext(glimpse) : { kind: "wait", seconds: 10 };
+            },
+        },
+        { name: "the table that never taps", move: (): Move => ({ kind: "wait", seconds: 15 }) },
+    ];
+}
+
+/**
+ * Who Fits' secrecy check: the same taps are played, except that one player taps someone else,
+ * and nothing anyone else sees may change before the counts are shown. Only two people tap, so the
+ * round stays open at any table size.
+ * @param blueprint the game.
+ * @returns the check.
+ */
+export function fitsTapCheck(blueprint: TapBlueprint & { decisions: FitsDecisions }): RoleCheck<FitsState> {
+    const script: TraceEvent[] = [
+        { type: "contentReady", at: 0, text: "" },
+        { type: "input", playerId: "paper1", actionId: `${FITS_PREFIX}paper2` },
+        { type: "input", playerId: "paper2", actionId: `${FITS_PREFIX}paper3` },
+    ];
+    return {
+        deal(seat: number, players: readonly CartridgePlayer[]): KitGame<FitsState> {
+            const game: KitGame<FitsState> = createFitsGame(blueprint.box, blueprint.decisions);
+            const changer: string | undefined = players[seat]?.playerId;
+            /**
+             * The changed player's tap, aimed at someone else.
+             * @param state the state.
+             * @param playerId who tapped.
+             * @param actionId what they tapped.
+             * @returns the tap to play.
+             */
+            const changed = (state: FitsState, playerId: string, actionId: string): string => {
+                if (playerId !== changer) {
+                    return actionId;
+                }
+                const other: CartridgePlayer | undefined = state.players.find((player: CartridgePlayer) => {
+                    return player.playerId !== playerId && `${FITS_PREFIX}${player.playerId}` !== actionId;
+                });
+                return other === undefined ? actionId : `${FITS_PREFIX}${other.playerId}`;
+            };
+            return {
+                cartridge: {
+                    ...game.cartridge,
+                    apply: (state: FitsState, playerId: string, actionId: string) => game.cartridge.apply(state, playerId, changed(state, playerId, actionId)),
+                },
+                hidden: (state: FitsState) => game.hidden(state),
+            };
         },
         script,
     };
