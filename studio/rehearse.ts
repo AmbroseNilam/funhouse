@@ -30,6 +30,8 @@ export type Move =
     | { kind: "say"; playerId: string; text: string; ruling: string | null }
     | { kind: "press"; playerId: string; actionId: string }
     | { kind: "answer"; playerId: string; controlId: string; value: string | number }
+    /** The judge rules with no one speaking, as the host does when it asks or guesses; the detail is what it wrote inside the ruling. */
+    | { kind: "rule"; ruling: string; detail: string }
     | { kind: "leave"; playerId: string }
     | { kind: "wait"; seconds: number };
 
@@ -426,6 +428,12 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             if (live === null || cartridge.phaseOf(live) !== cartridge.phaseOf(current)) {
                 continue;
             }
+            // A press that was on offer when the player looked, but whose question a clock closed while the table was still tapping, arrives too late and is dropped.
+            const lateToLive: boolean = move.kind === "press" && cartridge.legalActions(current, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === true && cartridge.legalActions(live, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === false;
+            if (lateToLive === true) {
+                current = live;
+                continue;
+            }
             current = live;
         }
         if (move.kind === "leave") {
@@ -450,6 +458,19 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
                 problems.push(`${persona.name} pressed "${move.actionId}" when it was not offered.`);
             }
             take({ type: "input", playerId: move.playerId, actionId: move.actionId }, () => cartridge.apply(current, move.playerId, move.actionId));
+            fireDue();
+            continue;
+        }
+        if (move.kind === "rule") {
+            if (phase?.hostRulings?.[move.ruling] === undefined) {
+                problems.push(`The judge ruled "${move.ruling}" in phase ${cartridge.phaseOf(current)}, which does not allow it.`);
+                continue;
+            }
+            const spoken: RoomEvent = { type: "hostRuled", at: run.now, ruling: move.ruling, detail: move.detail, playerId: null };
+            const result: Step<State> | null = take(spoken, () => cartridge.onEvent(current, spoken));
+            if (result !== null && result.state === current && result.facts.length === 0) {
+                problems.push(`The ruling "${move.ruling}" was allowed but did nothing.`);
+            }
             fireDue();
             continue;
         }
