@@ -2394,7 +2394,7 @@ export class Room implements HostStage {
             status = `${hostName} is thinking…`;
         }
         if (this.hostSpeaking === true) {
-            status = `${hostName} is talking. Press and hold to cut in.`;
+            status = `${hostName} is talking. Hold to cut in.`;
         }
         if (player.hint !== "") {
             status = player.hint;

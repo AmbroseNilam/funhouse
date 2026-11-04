@@ -63,6 +63,21 @@
     .slider-labels { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 16px; }
     .slider-labels strong { font-size: 30px; }
     .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
+    .paper p { white-space: pre-line; }
+    .has-private .private { flex: 1 1 auto; max-height: none; min-height: 0; padding-bottom: 4px; }
+    .has-private .surface { flex: 0 0 96px; padding: 8px 120px calc(8px + env(safe-area-inset-bottom)) 16px; justify-content: flex-start; }
+    .has-private .line { text-align: left; gap: 2px; }
+    .has-private .line strong { font-size: 20px; line-height: 1.15; }
+    .has-private .line small { font-size: 15px; }
+    .pad-screen.has-private.dictating .surface { flex-basis: 170px; padding-right: 16px; padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+    .has-private .dictation { bottom: calc(10px + env(safe-area-inset-bottom)); left: 16px; right: 16px; }
+    .has-private .dictation canvas { height: 56px; }
+    .has-private .dictation button { width: 60px; height: 60px; font-size: 18px; }
+    .role-face, .role-strip { display: flex; flex-direction: column; width: 100%; text-align: left; flex: none; }
+    .role-face { gap: 8px; padding: 18px; font-size: 21px; line-height: 1.25; }
+    .role-face strong { font-size: 38px; font-weight: 600; line-height: 1.08; }
+    .role-face small { font-size: 16px; opacity: 0.75; margin-top: 4px; }
+    .role-strip { background: var(--card); color: var(--paper); padding: 12px 16px; font-size: 18px; }
     .peek { display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 150px; justify-content: center; text-align: center; touch-action: none; background: var(--card); color: var(--paper); font-size: 22px; line-height: 1.25; transition: background 80ms ease-out; }
     .peek em { font-style: normal; font-size: 22px; color: var(--paper); }
     .peek strong { font-size: 44px; font-weight: 600; line-height: 1.05; }
@@ -96,7 +111,7 @@
     .tap-talk:disabled { opacity: 0.45; }
     .tap-talk { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
     .tap-talk:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
-    .tap-talk { left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
+    .tap-talk { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); min-width: 88px; height: 56px; padding: 0 18px; background: var(--paper); color: var(--paper-ink); font-size: 22px; }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }

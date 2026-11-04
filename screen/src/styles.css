@@ -110,6 +110,34 @@
     .players-screen .players-hint { max-width: calc(1100 * var(--u)); }
     .players-screen .rows { position: absolute; right: calc(80 * var(--u)); top: calc(520 * var(--u)); width: calc(670 * var(--u)); }
 
+    /* Werewolf's big moments: a card turned over, a moon on a paper sky. */
+    .moment { position: relative; align-self: stretch; }
+    .moment-card { display: flex; flex-direction: column; gap: calc(10 * var(--u)); width: fit-content; max-width: calc(1240 * var(--u)); padding: calc(26 * var(--u)) calc(38 * var(--u)); background: var(--paper); color: var(--paper-ink); rotate: 0.7deg; box-shadow: calc(12 * var(--u)) calc(12 * var(--u)) 0 #000; transform-origin: 50% 0; animation: card-turn 620ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms backwards; }
+    .moment-card strong { font-size: calc(76 * var(--u)); font-weight: 600; line-height: 1.06; }
+    .moment-card span { font-size: calc(44 * var(--u)); line-height: 1.15; }
+    .moment-out .moment-card, .moment-shot .moment-card { background: var(--wine); color: var(--paper); }
+    .moment-night { order: 2; }
+    .moment-night .moment-card { background: var(--card); color: var(--paper); rotate: -0.6deg; animation: slip-in 400ms ease-out 2600ms backwards; }
+    .moment-night .moment-card strong { font-size: calc(56 * var(--u)); }
+    .moment-night .moment-card span { font-size: calc(36 * var(--u)); }
+    .night-sky { position: absolute; right: calc(-360 * var(--u)); top: calc(-340 * var(--u)); width: calc(540 * var(--u)); height: calc(460 * var(--u)); pointer-events: none; }
+    .moon { position: absolute; right: calc(40 * var(--u)); top: 0; width: calc(250 * var(--u)); height: calc(250 * var(--u)); border-radius: 50%; background: var(--paper); box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; animation: moon-rise 1500ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .eyes { position: absolute; left: calc(40 * var(--u)); bottom: calc(14 * var(--u)); display: flex; gap: calc(26 * var(--u)); animation: eyes-open 500ms ease-out 2200ms backwards, eyes-blink 5s linear 3s infinite; }
+    .eyes b { display: block; width: calc(46 * var(--u)); height: calc(24 * var(--u)); border-radius: 60% 60% 50% 50%; background: var(--lamp); rotate: 12deg; }
+    .eyes b:last-child { rotate: -12deg; }
+    .blocks .tally tr.highlight td { background: var(--lamp); color: var(--lamp-ink); padding-inline: calc(10 * var(--u)); }
+    .tally td:last-child { font-variant-numeric: tabular-nums; }
+    .over .roster li { animation: card-turn 480ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+    .over .roster li:nth-child(2) { animation-delay: 180ms; }
+    .over .roster li:nth-child(3) { animation-delay: 360ms; }
+    .over .roster li:nth-child(4) { animation-delay: 540ms; }
+    .over .roster li:nth-child(5) { animation-delay: 720ms; }
+    .over .roster li:nth-child(6) { animation-delay: 900ms; }
+    .over .roster li:nth-child(7) { animation-delay: 1080ms; }
+    .over .roster li:nth-child(8) { animation-delay: 1260ms; }
+    .over .roster li:nth-child(9) { animation-delay: 1440ms; }
+    .over .roster li:nth-child(10) { animation-delay: 1620ms; }
+
     /* The game on the table */
     .backdrop { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; opacity: 0.2; }
     .blocks { position: absolute; left: calc(80 * var(--u)); right: calc(420 * var(--u)); top: calc(56 * var(--u)); bottom: calc(300 * var(--u)); display: flex; flex-direction: column; gap: calc(22 * var(--u)); justify-content: safe center; align-items: flex-start; }
@@ -283,6 +311,23 @@
     from { opacity: 0; transform: translateX(calc(44 * var(--u))); }
 }
 
+@keyframes card-turn {
+    from { opacity: 0; transform: perspective(calc(1200 * var(--u))) rotateX(-82deg); }
+}
+
+@keyframes moon-rise {
+    from { opacity: 0; transform: translateY(calc(280 * var(--u))); }
+}
+
+@keyframes eyes-open {
+    from { opacity: 0; transform: scaleY(0.1); }
+}
+
+@keyframes eyes-blink {
+    0%, 94%, 100% { transform: scaleY(1); }
+    97% { transform: scaleY(0.1); }
+}
+
 @keyframes paper-drop {
     from { opacity: 0; transform: translateY(calc(-20 * var(--u))) rotate(1.5deg); }
 }
@@ -326,7 +371,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .slip, .pause-card, .pause-backing, .title, .row, .shelf-heading { animation: none; }
+    .slip, .pause-card, .pause-backing, .title, .row, .shelf-heading, .moment-card, .moon, .eyes, .over .roster li { animation: none; }
     .lantern-body, .eye, .glass { animation: none !important; transition: none; }
     .box, .row, .shelf-rail { transition: none; }
     ::view-transition-group(*), ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0s; }
