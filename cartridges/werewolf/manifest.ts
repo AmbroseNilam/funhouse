@@ -1,7 +1,6 @@
 // Werewolf's declarative half: who the host is in this game, what it must never say, how
 // each phase listens, and the variant options the game starts with. The rules core is in rules.ts.
 
-import { HOST_NAME } from "../../shared/brand.ts";
 import type { CartridgeManifest } from "../../shared/cartridge.ts";
 
 export const WEREWOLF_MANIFEST: CartridgeManifest = {
@@ -17,11 +16,9 @@ export const WEREWOLF_MANIFEST: CartridgeManifest = {
     ].join(" "),
     keywords: ["werewolf", "werewolves", "villager", "seer", "doctor", "hunter", "vote", "lynch", "accuse", "night", "dawn"],
     variants: [
-        { id: "dayTimer", label: "Discussion timer", description: "Limit each day's discussion to three minutes.", defaultOn: true },
         { id: "revealOnDeath", label: "Reveal roles on death", description: "Announce a player's role when they are eliminated.", defaultOn: true },
     ],
     phases: [
-        { id: "pick", hostBrief: `One short line: they can choose the village on their phones, or you, ${HOST_NAME}, will decide in a moment.`, listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },
         { id: "intro", hostBrief: "Say what the game is in one line of 25 words at most, using the numbers you're told. The rules are on the TV and every phone, so don't read them out. Answer rules questions in a sentence, without hinting at anyone's role.", listening: { "*": "holdToTalk" }, hostMayInterject: false, silenceSeconds: 0 },
         { id: "roles", hostBrief: "One line: their role is on their phone now; read it, keep it to themselves, and tap to hide it.", listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },
         { id: "night", hostBrief: "One hushed line: eyes closed, phones down, and those with something to do do it quietly.", listening: { "*": "muted" }, hostMayInterject: false, silenceSeconds: 0 },

@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
 import { Poster } from "./Poster.tsx";
-import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+import { startPickAt, type Seat, type ShelfGame, type ShellView, type StartPick } from "../../shared/shell.ts";
 
 /** Slightly different box shapes, so the shelf reads as objects and not a grid. */
 const BOX_SHAPES: { height: number; tilt: number; width: number }[] = [
@@ -246,13 +246,14 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         return <Shelf shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} />;
     }
     const game: ShelfGame | undefined = shell.games.find((candidate: ShelfGame) => candidate.id === shell.gameId);
-    if (shell.screen === "pick" && game?.startPick !== null && game?.startPick !== undefined) {
+    const question: StartPick | null = startPickAt(game?.startPick, shell.pickStep);
+    if (shell.screen === "pick" && game !== undefined && question !== null) {
         return (
             <section className="screen pick-screen">
                 <Poster className="room-art" id={game.id} art={game.art} />
                 <header className="shelf-heading">
-                    <h1>{game.startPick.prompt}</h1>
-                    <p>Slide and tap on your phone. {HOST_NAME} takes what's highlighted if nobody chooses.</p>
+                    <h1>{question.prompt}</h1>
+                    <p>{question.waits === true ? "Slide and tap on your phone." : `Slide and tap on your phone. ${HOST_NAME} takes what's highlighted if nobody chooses.`}</p>
                 </header>
                 <ul className="pick-boxes">
                     {shell.menu.map((label: string, index: number) => <li key={label} className={index === shell.focus ? "focused" : ""}>{label}</li>)}

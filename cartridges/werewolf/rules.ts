@@ -8,6 +8,7 @@ import type { Turn } from "../../shared/turn.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control, ControlOption } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
+import { START_PICK_SEPARATOR, type StartPick } from "../../shared/shell.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { WEREWOLF_MANIFEST } from "./manifest.ts";
@@ -16,7 +17,7 @@ import { WEREWOLF_MANIFEST } from "./manifest.ts";
 export type Role = "werewolf" | "villager" | "seer" | "doctor" | "hunter";
 
 /** Game phases, in play order; "end" is terminal. */
-export type Phase = "pick" | "intro" | "roles" | "night" | "dawn" | "discussion" | "vote" | "verdict" | "hunter" | "end";
+export type Phase = "intro" | "roles" | "night" | "dawn" | "discussion" | "vote" | "verdict" | "hunter" | "end";
 
 /** Everything about one seat. */
 export interface Seat {
@@ -48,10 +49,8 @@ export interface WerewolfState {
     round: number;
     seats: Seat[];
     variants: Record<string, boolean>;
-    /** The roles chosen so far on the pick step. */
-    setup: RoleSetup;
-    /** True once someone has changed a role by hand. */
-    setupChanged: boolean;
+    /** The clock chosen before the game, or null when the day waits for people. */
+    pace: Pace | null;
     /** Who has tapped through the current intro or role card. */
     tappedThrough: string[];
     /** Werewolf votes for tonight's victim, keyed by werewolf player id. */
@@ -68,8 +67,6 @@ export interface WerewolfState {
     dayVotes: Record<string, string>;
     /** The tied players in a runoff, or null in a first vote. */
     runoff: string[] | null;
-    /** Who has said they're ready to stop talking and vote. */
-    readyToVote: string[];
     /** The hunter taking a last shot, if any. */
     hunterId: string | null;
     /** The phase to go on to after the hunter's shot. */
@@ -84,25 +81,16 @@ export interface WerewolfState {
     lastVictim: string | null;
     /** Who was voted out last, for narration. */
     lastLynched: string | null;
-    winner: "werewolves" | "villagers" | "nobody" | null;
+    winner: "werewolves" | "villagers" | null;
     /** Pictures drawn for this game, by id; the game plays fine without them. */
     art: Record<string, string>;
 }
 
+/** Starts the id of a call only the controller's holder can make; the rest names the phase. */
+const HOLDER_ACTION: string = "holder:";
+
 /** Group id shared by the werewolves, for group-scoped facts and controls. */
 export const WEREWOLF_GROUP: string = "werewolves";
-
-/** Seconds of discussion when the day timer variant is on. */
-export const DISCUSSION_SECONDS: number = 180;
-
-/** Seconds on the pick step before the host decides; each change restarts it. */
-export const PICK_SECONDS: number = 15;
-
-/** Seconds at most on the rules card. */
-export const INTRO_SECONDS: number = 30;
-
-/** Seconds players get to read their roles before night falls. */
-export const ROLES_SECONDS: number = 25;
 
 /** Seconds the night waits for choices before going on with what it has. */
 export const NIGHT_SECONDS: number = 45;
@@ -116,19 +104,30 @@ export const NIGHT_RECHOOSE_SECONDS: number = 20;
 /** Seconds for the dawn announcement before discussion opens. */
 export const DAWN_SECONDS: number = 12;
 
-/** Seconds the vote stays open before counting what's in. */
-export const VOTE_SECONDS: number = 45;
-
-/** Seconds for a runoff between tied players. */
-export const RUNOFF_SECONDS: number = 30;
-
 /** Seconds the verdict stays on the TV. */
 export const VERDICT_SECONDS: number = 10;
 
-/** Seconds the hunter gets to take a shot. */
-export const HUNTER_SECONDS: number = 20;
+/** How long each untimed moment gets when the table chooses a clock. */
+export interface Pace {
+    intro: number;
+    roles: number;
+    discussion: number;
+    vote: number;
+    runoff: number;
+    hunter: number;
+}
 
-/** Players needed before the role toggles appear; a small table moves too far on one role. */
+/** The clocks a table can choose; with none, the day waits for people and the holder moves it on. */
+export const PACES: Record<string, Pace> = {
+    relaxed: { intro: 45, roles: 35, discussion: 300, vote: 60, runoff: 40, hunter: 30 },
+    normal: { intro: 30, roles: 25, discussion: 180, vote: 45, runoff: 30, hunter: 20 },
+    quick: { intro: 25, roles: 20, discussion: 120, vote: 30, runoff: 20, hunter: 15 },
+};
+
+/** The id of the village the host suggests for the table. */
+const HOST_VILLAGE: string = "host";
+
+/** Players needed before there's a choice of village; a small table moves too far on one role. */
 export const TOGGLES_FROM_PLAYERS: number = 6;
 
 /** Shared look for every picture in a game, so they read as one village. */
@@ -183,6 +182,47 @@ export function werewolfCount(playerCount: number): number {
  */
 export function presetSetup(playerCount: number): RoleSetup {
     return { seer: true, doctor: playerCount >= 7, hunter: playerCount >= 9 };
+}
+
+/**
+ * The village a choice stands for.
+ * @param playerCount seats at the table.
+ * @param village the choice's id: the host's pick, or which of doctor and hunter are in.
+ * @returns the setup.
+ */
+function setupFor(playerCount: number, village: string): RoleSetup {
+    const preset: RoleSetup = presetSetup(playerCount);
+    return village === HOST_VILLAGE ? preset : { ...preset, doctor: village.includes("doctor") === true, hunter: village.includes("hunter") === true };
+}
+
+/**
+ * What a table chooses on the TV before a game: which village at six or more, then whether to have a clock.
+ * @param playerCount seats at the table.
+ * @returns the first question.
+ */
+export function werewolfStartPick(playerCount: number): StartPick {
+    const clock: StartPick = {
+        prompt: "How long for each day?",
+        hostLine: "Ask if they want a clock on each day. There's none unless they choose one.",
+        waits: true,
+        choices: [{ id: "none", label: "No timer" }, { id: "relaxed", label: "Relaxed, 5 minutes" }, { id: "normal", label: "Normal, 3 minutes" }, { id: "quick", label: "Quick, 2 minutes" }],
+    };
+    if (playerCount < TOGGLES_FROM_PLAYERS) {
+        return clock;
+    }
+    const preset: RoleSetup = presetSetup(playerCount);
+    const others: string[] = ["none", "doctor", "hunter", "doctor hunter"].filter((village: string) => {
+        const setup: RoleSetup = setupFor(playerCount, village);
+        return setup.doctor !== preset.doctor || setup.hunter !== preset.hunter;
+    });
+    const describe = (village: string): string => describeRoles(rolesFor(playerCount, setupFor(playerCount, village)));
+    return {
+        prompt: "Which village?",
+        hostLine: "Say in a few words that they can choose the village on the TV, and the first is your pick.",
+        waits: true,
+        then: clock,
+        choices: [{ id: HOST_VILLAGE, label: `${HOST_NAME}'s pick: ${describe(HOST_VILLAGE)}` }, ...others.map((village: string) => ({ id: village, label: describe(village) }))],
+    };
 }
 
 /**
@@ -279,15 +319,19 @@ function rulesLines(roles: readonly Role[]): string[] {
 /**
  * Builds the Werewolf cartridge with an injectable random source.
  * @param random a function returning [0, 1); defaults to Math.random.
+ * @param pick what was chosen before the game: the village if it was asked, then the clock.
  * @returns the cartridge.
  */
-export function createWerewolf(random: () => number = Math.random): Cartridge<WerewolfState> {
+export function createWerewolf(random: () => number = Math.random, pick: string = ""): Cartridge<WerewolfState> {
+    const answers: string[] = pick.split(START_PICK_SEPARATOR);
+    const chosenClock: string = answers.at(-1) ?? "";
+    const chosenVillage: string = answers.length > 1 ? answers[0] ?? HOST_VILLAGE : HOST_VILLAGE;
     const seatOf = (state: WerewolfState, playerId: string): Seat | undefined => state.seats.find((seat) => seat.playerId === playerId);
     const alive = (state: WerewolfState): Seat[] => state.seats.filter((seat) => seat.alive === true);
     const aliveWerewolves = (state: WerewolfState): Seat[] => alive(state).filter((seat) => seat.role === "werewolf");
     const publicFact = (kind: string, text: string, quiet: boolean = false): ScopedFact => ({ scope: { kind: "public" }, kind, text, quiet });
     const nameOf = (state: WerewolfState, playerId: string): string => seatOf(state, playerId)?.name ?? "Someone";
-    const dealt = (state: WerewolfState): boolean => state.phase !== "pick";
+    const paced = (state: WerewolfState, moment: keyof Pace, phase: Phase): { timers?: Record<string, number> } => (state.pace === null ? {} : { timers: { [phase]: state.pace[moment] } });
 
     /**
      * Checks for a winner and moves to the end phase when there is one.
@@ -317,7 +361,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      * @returns the step.
      */
     const startNight = (state: WerewolfState, round: number, facts: ScopedFact[]): Step<WerewolfState> => ({
-        state: { ...state, phase: "night", round, nightChoices: {}, seerTarget: null, doctorTarget: null, nightSettled: false, dayVotes: {}, runoff: null, readyToVote: [], tappedThrough: [], moment: null, hunterId: null },
+        state: { ...state, phase: "night", round, nightChoices: {}, seerTarget: null, doctorTarget: null, nightSettled: false, dayVotes: {}, runoff: null, tappedThrough: [], moment: null, hunterId: null },
         facts: [...facts, publicFact("night", "Night falls on the village.")],
         nextPhaseId: "night",
         timers: { night: NIGHT_SECONDS },
@@ -363,7 +407,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         state: { ...state, phase: "hunter", hunterId: hunter.playerId, afterShot },
         facts: [...facts, publicFact("hunter", `${hunter.name} was the hunter, and takes one last shot.`)],
         nextPhaseId: "hunter",
-        timers: { hunter: HUNTER_SECONDS },
+        ...paced(state, "hunter", "hunter"),
     });
 
     /**
@@ -452,7 +496,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 state: { ...state, dayVotes: {}, runoff: leaders, lastTally: rows },
                 facts: [publicFact("vote-tied", `The vote is tied between ${names}. One more vote, just between them.`)],
                 nextPhaseId: "vote",
-                timers: { vote: RUNOFF_SECONDS },
+                ...paced(state, "runoff", "vote"),
             };
         }
         const lynchedId: string | undefined = leaders.length === 1 ? leaders[0] : undefined;
@@ -471,24 +515,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return openHunter(next, lynched, "verdict", facts);
         }
         return openVerdict(next, facts);
-    };
-
-    /**
-     * Deals the roles once the village is chosen, and opens the rules card.
-     * @param state the pick step.
-     * @returns the step.
-     */
-    const deal = (state: WerewolfState): Step<WerewolfState> => {
-        const roles: Role[] = rolesFor(state.seats.length, state.setup);
-        const shuffled: Role[] = shuffle(roles, random);
-        const seats: Seat[] = state.seats.map((seat, index) => ({ ...seat, role: shuffled[index] ?? "villager" }));
-        const wolves: Seat[] = seats.filter((seat) => seat.role === "werewolf");
-        const packText: string = wolves.length === 1 ? "You hunt alone." : `The pack: ${wolves.map((seat) => seat.name).join(" and ")}.`;
-        const facts: ScopedFact[] = [
-            { scope: { kind: "group", groupId: WEREWOLF_GROUP }, kind: "pack", text: packText },
-            publicFact("setup", `${seats.length} players: ${describeRoles(roles)}.`),
-        ];
-        return { state: { ...state, seats, phase: "intro", tappedThrough: [] }, facts, nextPhaseId: "intro", timers: { intro: INTRO_SECONDS } };
     };
 
     /**
@@ -523,33 +549,26 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     const voteComplete = (state: WerewolfState): boolean => alive(state).every((seat) => state.dayVotes[seat.playerId] !== undefined);
 
     /**
-     * Who must be ready to end the discussion early: more than half of those alive.
-     * @param state the state.
-     * @returns the number.
-     */
-    const readyNeeded = (state: WerewolfState): number => Math.floor(alive(state).length / 2) + 1;
-
-    /**
      * Moves to the next phase on a host request or timer, where the rules allow it.
      * @param state the current state.
      * @returns the step.
      */
     const advance = (state: WerewolfState): Step<WerewolfState> => {
-        if (state.phase === "pick") {
-            return deal(state);
-        }
         if (state.phase === "intro") {
-            return { state: { ...state, phase: "roles", tappedThrough: [] }, facts: [publicFact("roles", "Everyone now has a secret role on their phone.")], nextPhaseId: "roles", timers: { roles: ROLES_SECONDS } };
+            // Only now, or a wolf's phone would look different from everyone else's during the rules.
+            const wolves: Seat[] = state.seats.filter((seat) => seat.role === "werewolf");
+            const packText: string = wolves.length === 1 ? "You hunt alone." : `The pack: ${wolves.map((seat) => seat.name).join(" and ")}.`;
+            const facts: ScopedFact[] = [{ scope: { kind: "group", groupId: WEREWOLF_GROUP }, kind: "pack", text: packText }, publicFact("roles", "Everyone now has a secret role on their phone.")];
+            return { state: { ...state, phase: "roles", tappedThrough: [] }, facts, nextPhaseId: "roles", ...paced(state, "roles", "roles") };
         }
         if (state.phase === "roles") {
             return startNight(state, state.round, []);
         }
         if (state.phase === "dawn") {
-            const timers: Record<string, number> | undefined = state.variants.dayTimer === true ? { discussion: DISCUSSION_SECONDS } : undefined;
-            return { state: { ...state, phase: "discussion", readyToVote: [] }, facts: [publicFact("discussion", "The village may now discuss.")], nextPhaseId: "discussion", ...(timers !== undefined ? { timers } : {}) };
+            return { state: { ...state, phase: "discussion" }, facts: [publicFact("discussion", "The village may now discuss.")], nextPhaseId: "discussion", ...paced(state, "discussion", "discussion") };
         }
         if (state.phase === "discussion") {
-            return { state: { ...state, phase: "vote", dayVotes: {}, runoff: null }, facts: [publicFact("vote", "Time to vote on your phones.")], nextPhaseId: "vote", timers: { vote: VOTE_SECONDS } };
+            return { state: { ...state, phase: "vote", dayVotes: {}, runoff: null }, facts: [publicFact("vote", "Time to vote on your phones.")], nextPhaseId: "vote", ...paced(state, "vote", "vote") };
         }
         if (state.phase === "verdict") {
             return startNight(state, state.round + 1, []);
@@ -582,13 +601,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             return { state, facts: [] };
         }
         const facts: ScopedFact[] = [publicFact("left", `${leaver.name} left the game.`)];
-        if (dealt(state) === false) {
-            const seats: Seat[] = state.seats.filter((seat) => seat.playerId !== playerId);
-            if (seats.length < WEREWOLF_MANIFEST.minPlayers) {
-                return { state: { ...state, seats, phase: "end", winner: "nobody" }, facts: [...facts, publicFact("game-over", "Too few players left for a game.")], nextPhaseId: "end" };
-            }
-            return { state: { ...state, seats, setup: state.setupChanged === true ? state.setup : presetSetup(seats.length) }, facts };
-        }
         const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false, left: true } : seat));
         const kept = (choices: Record<string, string>): Record<string, string> => {
             return Object.fromEntries(Object.entries(choices).filter(([voter, target]) => voter !== playerId && target !== playerId));
@@ -601,7 +613,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             seerTarget: state.seerTarget === playerId ? null : state.seerTarget,
             doctorTarget: state.doctorTarget === playerId ? null : state.doctorTarget,
             runoff: state.runoff === null ? null : state.runoff.filter((candidate: string) => candidate !== playerId),
-            readyToVote: state.readyToVote.filter((voter: string) => voter !== playerId),
             tappedThrough: state.tappedThrough.filter((voter: string) => voter !== playerId),
         };
         // The hunter's shot can still change who wins, and resolving it checks for a winner.
@@ -627,10 +638,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             const moved: Step<WerewolfState> = afterTapThrough(next);
             return { ...moved, facts: [...facts, ...moved.facts] };
         }
-        if (state.phase === "discussion" && next.readyToVote.length >= readyNeeded(next)) {
-            const moved: Step<WerewolfState> = advance(next);
-            return { ...moved, facts: [...facts, ...moved.facts] };
-        }
         return { state: next, facts };
     };
 
@@ -641,7 +648,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      * @returns the scene with its backdrop.
      */
     const withBackdrop = (state: WerewolfState, scene: Scene): Scene => {
-        const artId: string = state.phase === "end" ? state.winner ?? "" : state.phase === "dawn" ? "dawn" : ["pick", "intro", "roles", "night"].includes(state.phase) === true ? "night" : "day";
+        const artId: string = state.phase === "end" ? state.winner ?? "" : state.phase === "dawn" ? "dawn" : ["intro", "roles", "night"].includes(state.phase) === true ? "night" : "day";
         const backdrop: string | undefined = state.art[artId];
         return backdrop === undefined ? scene : { ...scene, backdrop };
     };
@@ -659,24 +666,58 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
     };
 
     /**
+     * The countdown for a moment, if the table chose a clock.
+     * @param state the state.
+     * @param moment which moment.
+     * @param label what it counts down to.
+     * @returns the blocks.
+     */
+    const clockBlocks = (state: WerewolfState, moment: keyof Pace, label: string): SceneBlock[] => (state.pace === null ? [] : [{ type: "timer", seconds: state.pace[moment], label, running: true }]);
+
+    /**
+     * What the holder of the controller can do now, so a table with no clock can always move on.
+     * @param state the state.
+     * @returns the controls.
+     */
+    const holderControls = (state: WerewolfState): Control[] => {
+        const option = (label: string, style: "primary" | "quiet"): Control[] => [{ type: "buttons", options: [{ id: `${HOLDER_ACTION}${state.phase}`, label, holderOnly: true, style }] }];
+        if (state.phase === "intro") {
+            return option("Move on", "quiet");
+        }
+        if (state.phase === "roles") {
+            return option("Start now", "quiet");
+        }
+        if (state.phase === "discussion") {
+            return option("Start the vote", "primary");
+        }
+        if (state.phase === "vote" && Object.keys(state.dayVotes).length > 0) {
+            return option("Reveal now", "quiet");
+        }
+        return state.phase === "hunter" ? option("Move on", "quiet") : [];
+    };
+
+    /**
+     * Makes the holder's call, if it's for the moment the game is in; a stale tap does nothing.
+     * @param state the state.
+     * @param actionId the call, which names the phase it was offered in.
+     * @returns the step.
+     */
+    const holderCall = (state: WerewolfState, actionId: string): Step<WerewolfState> => {
+        if (actionId !== `${HOLDER_ACTION}${state.phase}`) {
+            return { state, facts: [] };
+        }
+        if (state.phase === "vote") {
+            return Object.keys(state.dayVotes).length === 0 ? { state, facts: [] } : resolveVote(state);
+        }
+        return state.phase === "hunter" ? resolveShot(state, null) : advance(state);
+    };
+
+    /**
      * The scene for the current phase, before any picture.
      * @param state the state.
      * @returns the scene.
      */
     const baseScene = (state: WerewolfState): Scene => {
-        if (state.phase === "pick") {
-            const toggles: boolean = state.seats.length >= TOGGLES_FROM_PLAYERS;
-            return {
-                mood: "neutral",
-                transition: "fade",
-                blocks: [
-                    { type: "title", text: "Choose your village", kicker: `${state.seats.length} players` },
-                    { type: "text", text: describeRoles(rolesFor(state.seats.length, state.setup)), emphasis: "large" },
-                    { type: "text", text: toggles === true ? `Tap the roles on your phone, or let ${HOST_NAME} decide.` : `Tap on your phone, or ${HOST_NAME} decides.` },
-                    { type: "timer", seconds: PICK_SECONDS, label: `until ${HOST_NAME} decides`, running: true },
-                ],
-            };
-        }
         if (state.phase === "intro") {
             const roles: Role[] = state.seats.map((seat) => seat.role);
             return {
@@ -685,7 +726,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 blocks: [
                     { type: "title", text: "How it works", kicker: describeRoles(roles) },
                     ...rulesLines(roles).map((text: string): SceneBlock => ({ type: "text", text })),
-                    { type: "timer", seconds: INTRO_SECONDS, label: "or tap Got it", running: true },
+                    ...clockBlocks(state, "intro", "or tap Got it"),
                 ],
             };
         }
@@ -696,7 +737,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 blocks: [
                     { type: "title", text: "Check your phone", kicker: "Your role is secret" },
                     { type: "text", text: "Read it, keep it to yourself, and tap it to hide it.", emphasis: "large" },
-                    { type: "timer", seconds: ROLES_SECONDS, label: "until nightfall", running: true },
+                    ...clockBlocks(state, "roles", "until nightfall"),
                 ],
             };
         }
@@ -716,28 +757,23 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         if (state.phase === "discussion") {
             const blocks: SceneBlock[] = [
                 { type: "title", text: "Who is the werewolf?", kicker: `Day ${state.round}` },
-                { type: "progress", label: "Ready to vote", current: state.readyToVote.length, max: readyNeeded(state), marks: "card" },
+                { type: "text", text: "Argue it out loud. Whoever has the controller starts the vote.", emphasis: "large" },
+                ...clockBlocks(state, "discussion", "to decide"),
             ];
-            if (state.variants.dayTimer === true) {
-                blocks.push({ type: "timer", seconds: DISCUSSION_SECONDS, label: "to decide", running: true });
-            }
             return { mood: "tense", transition: "fade", blocks };
         }
         if (state.phase === "vote") {
             const candidates: Seat[] = state.runoff === null ? alive(state) : alive(state).filter((seat) => state.runoff?.includes(seat.playerId) === true);
             const rows: TallyRow[] = candidates.map((seat) => ({ label: seat.name, count: Object.values(state.dayVotes).filter((vote) => vote === seat.playerId).length }));
-            const seconds: number = state.runoff === null ? VOTE_SECONDS : RUNOFF_SECONDS;
-            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: state.runoff === null ? "The vote" : "The final vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }, { type: "timer", seconds, label: "to vote", running: true }] };
+            const blocks: SceneBlock[] = [{ type: "title", text: state.runoff === null ? "The vote" : "The final vote", kicker: `Day ${state.round}` }, { type: "tally", title: "Votes so far", rows }, ...clockBlocks(state, state.runoff === null ? "vote" : "runoff", "to vote")];
+            return { mood: "tense", transition: "fade", blocks };
         }
         if (state.phase === "verdict") {
             return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The verdict", kicker: `Day ${state.round}` }, ...momentBlocks(state), { type: "tally", title: "The count", rows: state.lastTally }] };
         }
         if (state.phase === "hunter") {
             const name: string = nameOf(state, state.hunterId ?? "");
-            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "One last shot", kicker: `Day ${state.round}` }, { type: "moment", kind: "shot", heading: `${name} was the hunter`, detail: `${name} chooses who goes with them.` }, { type: "timer", seconds: HUNTER_SECONDS, label: "to shoot", running: true }] };
-        }
-        if (state.winner === "nobody") {
-            return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Too few players left" }] };
+            return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "One last shot", kicker: `Day ${state.round}` }, { type: "moment", kind: "shot", heading: `${name} was the hunter`, detail: `${name} chooses who goes with them.` }, ...clockBlocks(state, "hunter", "to shoot")] };
         }
         const revealed = state.seats.map((seat) => ({ playerId: seat.playerId, name: seat.name, speaking: false, muted: false, badge: seat.role }));
         const ghostsRight: string[] = Object.entries(state.ghostGuesses).filter(([, guess]) => seatOf(state, guess)?.role === "werewolf").map(([ghost]) => nameOf(state, ghost));
@@ -767,12 +803,15 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (players.length < WEREWOLF_MANIFEST.minPlayers || players.length > WEREWOLF_MANIFEST.maxPlayers) {
                 throw new Error(`Werewolf needs ${WEREWOLF_MANIFEST.minPlayers} to ${WEREWOLF_MANIFEST.maxPlayers} players, got ${players.length}.`);
             }
-            const seats: Seat[] = players.map((player) => ({ playerId: player.playerId, name: player.name, role: "villager", alive: true }));
+            const roles: Role[] = rolesFor(players.length, setupFor(players.length, chosenVillage));
+            const shuffled: Role[] = shuffle(roles, random);
+            const seats: Seat[] = players.map((player, index) => ({ playerId: player.playerId, name: player.name, role: shuffled[index] ?? "villager", alive: true }));
             const state: WerewolfState = {
-                phase: "pick", round: 1, seats, variants, setup: presetSetup(players.length), setupChanged: false, tappedThrough: [], nightChoices: {}, seerTarget: null, doctorTarget: null, lastProtected: null,
-                nightSettled: false, dayVotes: {}, runoff: null, readyToVote: [], hunterId: null, afterShot: "dawn", moment: null, lastTally: [], ghostGuesses: {}, lastVictim: null, lastLynched: null, winner: null, art: {},
+                phase: "intro", round: 1, seats, variants, pace: PACES[chosenClock] ?? null, tappedThrough: [], nightChoices: {}, seerTarget: null, doctorTarget: null, lastProtected: null,
+                nightSettled: false, dayVotes: {}, runoff: null, hunterId: null, afterShot: "dawn", moment: null, lastTally: [], ghostGuesses: {}, lastVictim: null, lastLynched: null, winner: null, art: {},
             };
-            return { state, facts: [], nextPhaseId: "pick", timers: { pick: PICK_SECONDS }, draws: ART_PROMPTS };
+            const facts: ScopedFact[] = [publicFact("setup", `${seats.length} players: ${describeRoles(roles)}.`)];
+            return { state, facts, nextPhaseId: "intro", ...paced(state, "intro", "intro"), draws: ART_PROMPTS };
         },
 
         phaseOf(state: WerewolfState): string {
@@ -789,7 +828,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
 
         groupsOf(state: WerewolfState, playerId: string): ReadonlySet<string> {
             const seat: Seat | undefined = seatOf(state, playerId);
-            if (dealt(state) === true && seat?.role === "werewolf") {
+            if (seat?.role === "werewolf") {
                 return new Set([WEREWOLF_GROUP]);
             }
             return new Set();
@@ -807,16 +846,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (seat.alive === false) {
                 return state.phase === "end" || seat.role === "werewolf" ? [] : others.map((candidate) => ({ actionId: `ghost:${candidate.playerId}`, label: candidate.name }));
             }
-            if (state.phase === "pick") {
-                const actions: LegalAction[] = [];
-                if (state.seats.length >= TOGGLES_FROM_PLAYERS) {
-                    for (const special of ["seer", "doctor", "hunter"] as const) {
-                        actions.push({ actionId: `setup:${special}`, label: `${special[0]?.toUpperCase() ?? ""}${special.slice(1)}: ${state.setup[special] === true ? "in" : "out"}` });
-                    }
-                }
-                actions.push({ actionId: "setup:go", label: "Start with these" });
-                return state.setupChanged === true ? [...actions, { actionId: "setup:host", label: `Use ${HOST_NAME}'s pick` }] : actions;
-            }
             if (state.phase === "intro" || state.phase === "roles") {
                 return state.tappedThrough.includes(playerId) === true ? [] : [{ actionId: "gotIt", label: state.phase === "intro" ? "Got it" : "I've seen it" }];
             }
@@ -829,9 +858,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (state.phase === "night" && seat.role === "doctor") {
                 return alive(state).filter((candidate) => candidate.playerId !== state.lastProtected).map((candidate) => ({ actionId: `heal:${candidate.playerId}`, label: candidate.playerId === playerId ? "Yourself" : candidate.name }));
             }
-            if (state.phase === "discussion") {
-                return [{ actionId: "ready", label: state.readyToVote.includes(playerId) === true ? "Keep talking" : "Ready to vote" }];
-            }
             if (state.phase === "vote") {
                 const candidates: Seat[] = state.runoff === null ? others : others.filter((candidate) => state.runoff?.includes(candidate.playerId) === true);
                 return candidates.map((candidate) => ({ actionId: `vote:${candidate.playerId}`, label: candidate.name }));
@@ -840,6 +866,10 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         apply(state: WerewolfState, playerId: string, actionId: string): Step<WerewolfState> {
+            // The room lets only the controller's holder make these.
+            if (actionId.startsWith(HOLDER_ACTION) === true) {
+                return holderCall(state, actionId);
+            }
             const legal: boolean = this.legalActions(state, playerId).some((action) => action.actionId === actionId);
             if (legal === false) {
                 return { state, facts: [] };
@@ -847,24 +877,9 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (actionId === "gotIt") {
                 return afterTapThrough({ ...state, tappedThrough: [...state.tappedThrough, playerId] });
             }
-            if (actionId === "ready") {
-                const wasReady: boolean = state.readyToVote.includes(playerId);
-                const next: WerewolfState = { ...state, readyToVote: wasReady === true ? state.readyToVote.filter((voter: string) => voter !== playerId) : [...state.readyToVote, playerId] };
-                return next.readyToVote.length >= readyNeeded(next) ? advance(next) : { state: next, facts: [] };
-            }
             const separator: number = actionId.indexOf(":");
             const verb: string = actionId.slice(0, separator);
             const targetId: string = actionId.slice(separator + 1);
-            if (verb === "setup") {
-                if (targetId === "host") {
-                    return { state: { ...state, setup: presetSetup(state.seats.length), setupChanged: false }, facts: [], timers: { pick: PICK_SECONDS } };
-                }
-                if (targetId === "go") {
-                    return deal(state);
-                }
-                const special = targetId as keyof RoleSetup;
-                return { state: { ...state, setup: { ...state.setup, [special]: state.setup[special] === false }, setupChanged: true }, facts: [], timers: { pick: PICK_SECONDS } };
-            }
             if (verb === "kill") {
                 return afterNightChoice({ ...state, nightChoices: { ...state.nightChoices, [playerId]: targetId } });
             }
@@ -899,7 +914,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (event.type === "hostRuled" && event.ruling === "vote" && state.phase === "discussion") {
                 return advance(state);
             }
-            if (event.type === "timerFired" && event.timerId === state.phase && ["pick", "intro", "roles", "dawn", "discussion", "verdict"].includes(state.phase) === true) {
+            if (event.type === "timerFired" && event.timerId === state.phase && ["intro", "roles", "dawn", "discussion", "verdict"].includes(state.phase) === true) {
                 return advance(state);
             }
             if (event.type === "timerFired" && event.timerId === "night" && state.phase === "night") {
@@ -922,32 +937,30 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         privateControls(state: WerewolfState, playerId: string): Control[] {
+            const held: Control[] = holderControls(state);
             const seat: Seat | undefined = seatOf(state, playerId);
             if (seat === undefined) {
-                return [{ type: "waiting", text: "You are watching this round." }];
+                return [{ type: "waiting", text: "You are watching this round." }, ...held];
             }
             const actions: LegalAction[] = this.legalActions(state, playerId);
             const asOptions = (): ControlOption[] => actions.map((action) => ({ id: action.actionId, label: action.label }));
             const bigAction = (): Control[] => (actions.length === 0 ? [] : [{ type: "buttons", options: actions.map((action) => ({ id: action.actionId, label: action.label, style: "primary" })) }]);
-            if (state.phase === "pick") {
-                return pickControls(state, actions);
-            }
             if (state.phase === "intro") {
                 const rules: string[] = rulesLines(state.seats.map((candidate) => candidate.role));
-                return [{ type: "roleCard", title: "How it works", body: "", secret: false, lines: rules, numbered: true }, ...bigAction()];
+                return [{ type: "roleCard", title: "How it works", body: "", secret: false, lines: rules, numbered: true }, ...bigAction(), ...held];
             }
             if (state.phase === "end") {
                 return endControls(state);
             }
             const card: Control = { type: "roleCard", title: `You are ${withArticle(seat.role)}`, body: roleBlurb(seat.role), secret: true, startHidden: state.phase !== "roles" };
             if (state.phase === "hunter" && state.hunterId === playerId) {
-                return [card, { type: "choice", prompt: "You were the hunter. Who do you take with you?", options: asOptions(), multiple: false }];
+                return [card, { type: "choice", prompt: "You were the hunter. Who do you take with you?", options: asOptions(), multiple: false }, ...held];
             }
             if (seat.alive === false) {
-                return [card, ...ghostControls(state, seat, actions)];
+                return [card, ...ghostControls(state, seat, actions), ...held];
             }
             if (state.phase === "roles") {
-                return [card, ...bigAction()];
+                return [card, ...bigAction(), ...held];
             }
             if (state.phase === "night") {
                 return [card, ...nightControls(state, seat, actions)];
@@ -956,17 +969,15 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
                 return [card, { type: "waiting", text: state.moment?.heading ?? "Watch the TV" }];
             }
             if (state.phase === "discussion") {
-                const ready: boolean = state.readyToVote.includes(playerId);
-                const body: string = `Argue it out loud. ${state.readyToVote.length} of ${readyNeeded(state)} ready to vote${ready === true ? ", you included" : ""}.`;
-                return [card, { type: "roleCard", title: "Who is the werewolf?", body, secret: false }, { type: "buttons", options: actions.map((action) => ({ id: action.actionId, label: action.label, style: ready === true ? "quiet" : "primary" })) }];
+                return [card, { type: "roleCard", title: "Who is the werewolf?", body: "Argue it out loud. Whoever has the controller starts the vote.", secret: false }, ...held];
             }
             if (state.phase === "vote") {
                 const votedFor: string | undefined = state.dayVotes[playerId];
                 const question: string = state.runoff === null ? "Who do you vote out?" : "Final vote. Who do you vote out?";
                 const prompt: string = votedFor === undefined ? question : `You voted for ${nameOf(state, votedFor)}. Tap another to change it.`;
-                return [card, { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label, selected: action.actionId === `vote:${votedFor ?? ""}` })), multiple: false }];
+                return [card, { type: "choice", prompt, options: actions.map((action) => ({ id: action.actionId, label: action.label, selected: action.actionId === `vote:${votedFor ?? ""}` })), multiple: false }, ...held];
             }
-            return [card, { type: "waiting", text: "The hunter is aiming" }];
+            return [card, { type: "waiting", text: "The hunter is aiming" }, ...held];
         },
 
         outOf(state: WerewolfState): string[] {
@@ -974,9 +985,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         },
 
         turn(state: WerewolfState): Turn | null {
-            if (state.phase === "pick") {
-                return { kind: "anyone", label: "Anyone can choose", phoneLine: "" };
-            }
             if (state.phase === "intro" || state.phase === "roles") {
                 return { kind: "everyone", playerIds: alive(state).map((seat) => seat.playerId), doneIds: state.tappedThrough, label: state.phase === "intro" ? "Everyone taps Got it" : "Everyone checks their phone", phoneLine: "" };
             }
@@ -988,7 +996,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             }
             if (state.phase === "vote") {
                 const voters: string[] = alive(state).map((seat) => seat.playerId);
-                return { kind: "everyone", playerIds: voters, doneIds: Object.keys(state.dayVotes), label: state.runoff === null ? "Everyone votes" : "Everyone votes again", phoneLine: "Your vote" };
+                return { kind: "everyone", playerIds: voters, doneIds: Object.keys(state.dayVotes), label: stillVoting(state), phoneLine: "Your vote" };
             }
             if (state.phase === "hunter" && state.hunterId !== null) {
                 return { kind: "one", playerId: state.hunterId, label: "The hunter aims" };
@@ -999,9 +1007,6 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
         hostFacts(state: WerewolfState, scope: Scope): ScopedFact[] {
             if (scope.kind !== "public" && scope.kind !== "host") {
                 return [];
-            }
-            if (dealt(state) === false) {
-                return [publicFact("recap", `${state.seats.length} players at the table.`)];
             }
             const lines: ScopedFact[] = [
                 publicFact("recap", `Day ${state.round}. Still in, ${alive(state).length} players: ${alive(state).map((seat) => seat.name).join(", ")}.`),
@@ -1020,32 +1025,9 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             if (state.winner === null) {
                 return null;
             }
-            if (state.winner === "nobody") {
-                return "Too few players left for a game.";
-            }
             return state.winner === "villagers" ? "The village wins." : "The werewolves win.";
         },
     };
-
-    /**
-     * The pick step on a phone: the question, the village as it stands, any switches, and one big action.
-     * @param state the state.
-     * @param actions what this phone can do.
-     * @returns the controls.
-     */
-    function pickControls(state: WerewolfState, actions: LegalAction[]): Control[] {
-        const lines: string[] = describeRoles(rolesFor(state.seats.length, state.setup)).split(", ");
-        const body: string = state.setupChanged === true ? "It starts by itself in a few seconds." : `${HOST_NAME} picked this for ${state.seats.length} players. It starts by itself in a few seconds.`;
-        const going: string[] = ["setup:go", "setup:host"];
-        const toggles: ControlOption[] = actions.filter((action) => going.includes(action.actionId) === false).map((action) => ({ id: action.actionId, label: action.label, style: "toggle", on: action.label.endsWith(": in") }));
-        const starts: ControlOption[] = actions.filter((action) => going.includes(action.actionId) === true).map((action) => ({ id: action.actionId, label: action.label, style: action.actionId === "setup:go" ? "primary" : "quiet" }));
-        const controls: Control[] = [{ type: "roleCard", title: "Play this village?", body, secret: false, lines }];
-        if (toggles.length > 0) {
-            controls.push({ type: "buttons", prompt: "Change the roles", options: toggles });
-        }
-        controls.push({ type: "buttons", options: starts });
-        return controls;
-    }
 
     /**
      * The end of the game on a phone: who won, and everyone's role now that it can't matter.
@@ -1053,11 +1035,21 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      * @returns the controls.
      */
     function endControls(state: WerewolfState): Control[] {
-        if (state.winner === "nobody") {
-            return [{ type: "roleCard", title: "Too few players left", body: "", secret: false }];
-        }
         const title: string = state.winner === "villagers" ? "The village wins" : "The werewolves win";
         return [{ type: "roleCard", title, body: "", secret: false, lines: state.seats.map((seat) => `${seat.name}: ${seat.role}`) }];
+    }
+
+    /**
+     * What the TV says while a vote is open: who's still to vote, once anyone has.
+     * @param state the vote.
+     * @returns the line.
+     */
+    function stillVoting(state: WerewolfState): string {
+        const left: string[] = alive(state).filter((seat) => state.dayVotes[seat.playerId] === undefined).map((seat) => seat.name);
+        if (Object.keys(state.dayVotes).length === 0) {
+            return state.runoff === null ? "Everyone votes" : "Everyone votes again";
+        }
+        return `Still voting: ${left.join(", ")}`;
     }
 
     /**

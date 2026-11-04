@@ -11,7 +11,7 @@ import { createQuizmaster, QUIZMASTER_PICK } from "./quizmaster/rules.ts";
 import { TWENTY_DOORS_MANIFEST } from "./twenty-doors/manifest.ts";
 import { createTwentyDoors, TWENTY_DOORS_PICK } from "./twenty-doors/rules.ts";
 import { WEREWOLF_MANIFEST } from "./werewolf/manifest.ts";
-import { createWerewolf } from "./werewolf/rules.ts";
+import { createWerewolf, werewolfStartPick } from "./werewolf/rules.ts";
 
 /** False when the server is started with QUIZ_OPEN_ANSWERS=1: Quizmaster goes back to answers out loud only. */
 const QUIZ_MULTIPLE_CHOICE: boolean = process.env.QUIZ_OPEN_ANSWERS !== "1";
@@ -37,6 +37,8 @@ export interface InstalledGame {
     agentsTalk?: boolean;
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
+    /** What to choose before it begins, when that depends on how many are at the table. */
+    startPickFor?: (playerCount: number) => StartPick;
     /** A few short lines shown before the first round in a room, if anything. */
     startCard?: string[];
     /**
@@ -84,6 +86,7 @@ export const GAMES: InstalledGame[] = [
         art: "art/werewolf.webp",
         pauseActions: [],
         remarks: ["I like this one. Everyone lies.", "You'll want more friends for this.", "Don't look at me. I don't know either."],
-        create: (stage: GameStage) => new GameSession(createWerewolf(), stage),
+        startPickFor: werewolfStartPick,
+        create: (stage: GameStage, pick?: string) => new GameSession(createWerewolf(Math.random, pick), stage),
     },
 ];

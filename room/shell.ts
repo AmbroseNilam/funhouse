@@ -2,7 +2,7 @@
 // offers. It decides nothing about any game. Starting and leaving go back to the room through
 // its stage, so the same paths work from a phone or from the host.
 
-import type { NavAction, NavAxis, PadView, Seat, ShelfGame, ShellScreen, ShellView } from "../shared/shell.ts";
+import { START_PICK_SEPARATOR, startPickAt, type NavAction, type NavAxis, type PadView, type Seat, type ShelfGame, type ShellScreen, type ShellView, type StartPick } from "../shared/shell.ts";
 
 /** How long a driver may sit idle before anyone else's swipe takes over. */
 const DRIVER_IDLE_MILLISECONDS: number = 10000;
@@ -82,6 +82,8 @@ export class Shell {
     private shelfFocus: number = 0;
     private gameId: string | null = null;
     private driverId: string | null = null;
+    private pickStep: number = 0;
+    private pickAnswers: string[] = [];
     private lastDriveAt: number = 0;
     private freeTimer: NodeJS.Timeout | null = null;
     private pickTimer: NodeJS.Timeout | null = null;
@@ -195,6 +197,26 @@ export class Shell {
     }
 
     /**
+     * Whether this person may make the holder's calls in a game. When the holder has dropped or put
+     * their phone down, the next person here may, so nobody who's gone can hold up the room.
+     * @param playerId who.
+     * @returns true when they may.
+     */
+    public holdsControl(playerId: string): boolean {
+        if (this.driverId === playerId) {
+            return true;
+        }
+        const seats: Omit<Seat, "driving">[] = this.stage.seats().filter((seat) => seat.guest === false);
+        const present = (seat: Omit<Seat, "driving">): boolean => seat.connected === true && seat.phoneDown === false;
+        if (seats.some((seat) => seat.playerId === this.driverId && present(seat)) === true) {
+            return false;
+        }
+        const here: Omit<Seat, "driving">[] = seats.filter(present);
+        const next: Omit<Seat, "driving"> | undefined = here.find((seat) => seat.watching === false && seat.out === false) ?? here.find((seat) => seat.watching === false) ?? here[0];
+        return next?.playerId === playerId;
+    }
+
+    /**
      * The whole console, for the TV.
      * @returns the view.
      */
@@ -209,6 +231,7 @@ export class Shell {
             menu: this.menu(),
             seats,
             gameOver: this.isDecided(),
+            pickStep: this.pickStep,
             steppedOut: this.stage.steppedOut(),
             pausedBy: this.pausedBy,
         };
@@ -337,7 +360,7 @@ export class Shell {
             return [BACK_TO_SHELF];
         }
         if (this.screen === "pick") {
-            return (this.currentGame()?.startPick?.choices ?? []).map((choice) => choice.label);
+            return (startPickAt(this.currentGame()?.startPick, this.pickStep)?.choices ?? []).map((choice) => choice.label);
         }
         if (this.screen === "startCard") {
             return [START_NOW];
@@ -516,6 +539,8 @@ export class Shell {
         this.gameId = game.id;
         this.screen = "pick";
         this.focus = 0;
+        this.pickStep = 0;
+        this.pickAnswers = [];
         this.restartPickTimer();
         this.stage.pickOpened(game.startPick?.hostLine ?? "");
         this.stage.changed();
@@ -525,11 +550,22 @@ export class Shell {
     private takePick(): void {
         this.stopPickTimer();
         const game: ShelfGame | undefined = this.currentGame();
-        const choice: { id: string; label: string } | undefined = game?.startPick?.choices[this.focus];
+        const question: StartPick | null = startPickAt(game?.startPick, this.pickStep);
+        const choice: { id: string; label: string } | undefined = question?.choices[this.focus];
         if (game === undefined || choice === undefined) {
             return;
         }
-        this.chosen = choice.id;
+        // Coming back to a question from further on answers it again, not as well.
+        this.pickAnswers = [...this.pickAnswers.slice(0, this.pickStep), choice.id];
+        if (question?.then !== undefined) {
+            this.pickStep += 1;
+            this.focus = 0;
+            this.restartPickTimer();
+            this.stage.pickOpened(question.then.hostLine);
+            this.stage.changed();
+            return;
+        }
+        this.chosen = this.pickAnswers.join(START_PICK_SEPARATOR);
         this.showCardOrBegin(game);
     }
 
@@ -569,6 +605,9 @@ export class Shell {
     /** Gives a choice its full time again, so it isn't taken from under someone's thumb. */
     private restartPickTimer(): void {
         this.stopPickTimer();
+        if (startPickAt(this.currentGame()?.startPick, this.pickStep)?.waits === true) {
+            return;
+        }
         this.pickTimer = setTimeout(() => { this.takePick(); }, PICK_MILLISECONDS);
         this.pickTimer.unref();
     }

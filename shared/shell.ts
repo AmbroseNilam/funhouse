@@ -10,7 +10,9 @@ export type NavAxis = "x" | "y" | null;
 
 /**
  * A choice to make before a game begins. Any game can have one: the TV shows the choices as boxes, a
- * phone moves through them like the shelf, and the first is ready if nobody chooses in time.
+ * phone moves through them like the shelf, and the first is ready if nobody chooses in time, unless
+ * it waits. A follow-up asks another question on the same screen, and the answers reach the game
+ * joined with START_PICK_SEPARATOR.
  */
 export interface StartPick {
     /** The heading on the TV. */
@@ -18,6 +20,26 @@ export interface StartPick {
     /** What the host is asked to say as it opens. */
     hostLine: string;
     choices: { id: string; label: string }[];
+    /** True when it waits as long as it takes for someone to choose. */
+    waits?: boolean;
+    /** The next question, if there's another. */
+    then?: StartPick;
+}
+
+/** Joins the answers of a choice with follow-ups, in order. */
+export const START_PICK_SEPARATOR: string = "|";
+
+/**
+ * Finds a question in a choice with follow-ups.
+ * @param pick the first question.
+ * @param step how many questions along.
+ * @returns the question, or null past the last.
+ */
+export function startPickAt(pick: StartPick | null | undefined, step: number): StartPick | null {
+    if (pick === null || pick === undefined) {
+        return null;
+    }
+    return step <= 0 ? pick : startPickAt(pick.then, step - 1);
 }
 
 /** One game box on the shelf. */
@@ -77,6 +99,8 @@ export interface ShellView {
     seats: Seat[];
     /** True once a game has been decided and is showing its result. */
     gameOver: boolean;
+    /** How many questions along the choice before a game is. */
+    pickStep: number;
     /** True when every seat in a running game has dropped, so the game waits for them. */
     steppedOut: boolean;
     /** Who paused the game, or an empty string when it isn't paused. */
