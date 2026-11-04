@@ -71,7 +71,6 @@
     .note.warning { background: var(--wine); color: var(--paper); }
 
     .surface { --level: 0; --thumb-x: 50%; --thumb-y: 50%; position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; display: flex; align-items: center; justify-content: center; padding: 24px 24px calc(24px + env(safe-area-inset-bottom)); box-sizing: border-box; }
-    .pad-screen { transition: background 120ms ease-out; }
     .turn-line { flex: none; margin: 0 16px 4px; text-align: center; font-size: 26px; font-weight: 600; line-height: 1.15; color: var(--paper); overflow-wrap: anywhere; }
     .my-turn .turn-line { align-self: center; padding: 4px 18px; background: var(--lamp); color: #241a02; box-shadow: 3px 3px 0 #000; }
     .pad-screen.not-my-turn { background: color-mix(in srgb, var(--seat) 35%, var(--ink)); }
@@ -85,18 +84,19 @@
     .bands i:nth-child(1) { background: color-mix(in srgb, var(--lamp) 28%, transparent); transform: scale(calc(0.16 + var(--level) * 0.3)); }
     .bands i:nth-child(2) { background: color-mix(in srgb, var(--lamp) 55%, transparent); transform: scale(calc(0.1 + var(--level) * 0.186)); }
     .bands i:nth-child(3) { background: var(--lamp); transform: scale(calc(0.05 + var(--level) * 0.096)); }
-    .pad-screen.dictating { background: color-mix(in srgb, var(--seat) 12%, var(--ink)); }
     .dictating .thumb, .dictating .bands { display: none; }
-    .dictating .line strong { font-size: 22px; font-weight: 500; opacity: 0.75; }
+    .dictating .surface { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
+    .dictating .line strong { font-size: 26px; font-weight: 500; text-shadow: none; }
+    .dictating .line small { opacity: 0.8; }
     .dictating .hearing { font-size: 24px; line-height: 1.3; }
-    .dictation { position: absolute; left: 24px; right: 24px; bottom: 44px; display: flex; align-items: center; gap: 16px; pointer-events: none; }
-    .dictation canvas { flex: 1; min-width: 0; height: 40px; color: var(--lamp); }
-    .dictation button { flex: none; padding: 9px 16px; pointer-events: auto; border-radius: 6px; background: var(--paper); color: var(--paper-ink); font-size: 18px; font-weight: 600; }
-    .dictation button:active { transform: translate(1px, 1px); }
+    .dictation { position: absolute; left: 24px; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 16px; pointer-events: none; }
+    .dictation canvas { flex: 1; min-width: 0; height: 64px; color: var(--paper); }
+    .dictation button { flex: none; width: 72px; height: 72px; pointer-events: auto; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 20px; font-weight: 600; box-shadow: 3px 3px 0 #000; }
+    .dictation button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
     .tap-talk:disabled { opacity: 0.45; }
     .tap-talk { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
     .tap-talk:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
-    .tap-talk { left: 50%; bottom: 48px; width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
+    .tap-talk { left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }
@@ -105,6 +105,7 @@
     .line small { font-size: 18px; color: color-mix(in srgb, var(--paper) 75%, transparent); }
     .hearing { margin: 0; padding: 0 12px; font-size: 26px; line-height: 1.2; color: var(--paper); text-shadow: 2px 2px 0 #000; overflow-wrap: anywhere; }
     .talking .line strong { color: var(--paper); text-shadow: 2px 2px 0 #000; }
+    .pad-screen.dictating .line strong, .pad-screen.dictating .hearing { text-shadow: none; }
     .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
 
     .sheet-backdrop { position: fixed; inset: 0; display: flex; align-items: flex-end; background: rgba(10, 7, 4, 0.72); animation: fade-in 120ms ease-out; }

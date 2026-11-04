@@ -401,6 +401,38 @@ function SecretCard(props: { title: string; lines: string[] }): ReactElement {
     );
 }
 
+/** The page colour on any screen but the controller, as in phone/index.html. */
+const RESTING_PAGE_COLOUR: string = "#17110c";
+
+/**
+ * Turns any CSS colour into the #rrggbb that a theme-color tag is sure to read.
+ * @param colour any CSS colour.
+ * @returns the hex colour.
+ */
+function plainColour(colour: string): string {
+    const context: CanvasRenderingContext2D | null = document.createElement("canvas").getContext("2d");
+    if (context === null) {
+        return RESTING_PAGE_COLOUR;
+    }
+    context.fillStyle = colour;
+    context.fillRect(0, 0, 1, 1);
+    const [red = 0, green = 0, blue = 0] = context.getImageData(0, 0, 1, 1).data;
+    return `#${[red, green, blue].map((part: number) => part.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * Gives the page and the browser's bars the colour of the screen.
+ * @param colour any CSS colour.
+ */
+function matchPageColour(colour: string): void {
+    if (document.documentElement.style.backgroundColor === colour) {
+        return;
+    }
+    document.documentElement.style.backgroundColor = colour;
+    document.body.style.backgroundColor = colour;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", plainColour(colour));
+}
+
 /**
  * A slider with its value in big type, answered once.
  * @param props the control, and how to send the answer.
@@ -679,6 +711,14 @@ export function App(): ReactElement {
     }, [sent]);
 
     const waveShown: boolean = state.holding === true && state.view?.tapToTalk === true;
+    const padScreenRef = useRef<HTMLElement>(null);
+    // Browsers tint their own bars from the page, some only now and then; every colour they could read should agree.
+    useEffect(() => {
+        if (padScreenRef.current !== null) {
+            matchPageColour(getComputedStyle(padScreenRef.current).backgroundColor);
+        }
+        return (): void => { matchPageColour(RESTING_PAGE_COLOUR); };
+    });
     useEffect(() => {
         const canvas: HTMLCanvasElement | null = waveRef.current;
         if (waveShown === false || canvas === null) {
@@ -1085,7 +1125,7 @@ export function App(): ReactElement {
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -1107,7 +1147,7 @@ export function App(): ReactElement {
                                 ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
-                                : <strong>Listening</strong>
+                                : <><strong>Listening</strong>{tapping === true ? <small>Tap Stop when you're done</small> : null}</>
                         : sent === true
                             ? <strong>Got it</strong>
                             : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}
