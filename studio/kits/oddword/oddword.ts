@@ -11,7 +11,7 @@ import type { Scene, SceneBlock } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { Turn } from "../../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../../shared/visibility.ts";
-import { boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
+import { HOST_LINE_RULES, SAY_IT_ALOUD, boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
 import { because, dealOne, frozenCopy, pick, tally, type Tally } from "../../kit/primitives.ts";
 import { guessMatches, singleWord, titleCase, tooClose } from "../../kit/words.ts";
 
@@ -197,20 +197,21 @@ export function oddWordManifest(box: Box): CartridgeManifest {
             "You know the word and you never know who the Stray is, so never guess, hint or joke about who it might be.",
             "Never say the word, spell it, rhyme it or hint at its letters until you're told the round is over.",
             "The order of words, the clocks and the vote are the game's, never yours to change. You say what you're told, briefly, and you judge the Stray's last guess.",
+            HOST_LINE_RULES,
         ].join(" "),
         keywords: box.keywords,
         variants: [],
         phases: [
             {
                 id: "dealing",
-                hostBrief: "Everyone is reading a card on their phone. When you're told the word is ready, explain in two short sentences: everyone has the same secret word except one of them, and each person says one word about it. Then stop.",
+                hostBrief: "Everyone is reading a card on their phone. Until you're told the word is ready, say one short line that you're choosing them a word. Don't explain the game yet. When you're told it's ready, explain in two short sentences: everyone has the same secret word except one of them, and each person says one word about it. Then stop.",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
             },
             {
                 id: "clues",
-                hostBrief: "Players are saying one word each, in turn. You say nothing unless you're told to; reply exactly (quiet) to anything you hear. Never comment on a word, never say whose word sounds suspicious.",
+                hostBrief: "Players are saying one word each, in turn. Say what you're told to say about a new round; otherwise reply exactly (quiet) to anything you hear. Never comment on a word, never say whose word sounds suspicious.",
                 listening: { up: "holdToTalk", "*": "muted" },
                 hostMayInterject: false,
                 hostMostlyQuiet: true,
@@ -218,7 +219,7 @@ export function oddWordManifest(box: Box): CartridgeManifest {
             },
             {
                 id: "vote",
-                hostBrief: "The room is voting on its phones for who the Stray is. When you're told to, call the vote in one line. Then reply exactly (quiet).",
+                hostBrief: "The room is voting on its phones for who the Stray is. When you're told to, call the vote in one dry line, with a little theatre. Then reply exactly (quiet).",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
@@ -226,7 +227,8 @@ export function oddWordManifest(box: Box): CartridgeManifest {
             {
                 id: "guess",
                 hostBrief: [
-                    "The Stray is naming the word, out loud or typed. If they speak, rule right or wrong against the real word you know, in one go, and nothing else.",
+                    "When you're told who the vote pinned, say it in one line with some relish, and tell them they get one guess.",
+                    "Then the Stray names the word, out loud or typed. If they speak, rule right or wrong against the real word you know, in one go, and nothing else.",
                     "A near miss is wrong unless it's a plain synonym. Never hint how close they were.",
                 ].join(" "),
                 listening: { up: "holdToTalk", "*": "muted" },
@@ -236,7 +238,7 @@ export function oddWordManifest(box: Box): CartridgeManifest {
             },
             {
                 id: "end",
-                hostBrief: "You'll be told the word, who the Stray was and how it ended. Two or three sentences: the word, who the Stray was, and one dry word on how they did. Make the Stray look good whether they were caught or not. Then ask if they want another round.",
+                hostBrief: "You'll be told the word, who the Stray was and how it ended. In about 25 words: the word, who the Stray was, and one dry remark that makes the Stray look good whether they were caught or not. Then ask if they want another round. Always speak here, never reply (quiet).",
                 listening: { "*": "holdToTalk" },
                 hostMayInterject: true,
                 silenceSeconds: 0,
@@ -272,7 +274,7 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
      */
     const finish = (state: OddWordState, result: OddWordResult, text: string, decision: string): Step<OddWordState> => {
         const ended: OddWordState = { ...state, phase: "end", word: secretOf(state), category: state.category === "" ? state.fallback.category : state.category, result, strayName: nameOf(state, state.strayId) };
-        return { state: ended, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
+        return { state: ended, facts: because(publicFact("game-over", `${text} ${SAY_IT_ALOUD}`), decision), nextPhaseId: "end" };
     };
 
     /**
@@ -282,7 +284,7 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
      */
     const openVote = (state: OddWordState): Step<OddWordState> => {
         const next: OddWordState = { ...state, phase: "vote", voters: idsOf(state), votes: {}, refusal: "" };
-        const text: string = "Every word is in. Call the vote in one line: everyone votes on their phone for who the Stray is.";
+        const text: string = `Every word is in. Call the vote in one line: everyone votes on their phone for who the Stray is. ${SAY_IT_ALOUD}`;
         return { state: next, facts: because(publicFact("vote", text), ODD_DECISIONS.rounds), nextPhaseId: "vote", timers: { vote: decisions.voteSeconds } };
     };
 
@@ -302,7 +304,7 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
             return openVote({ ...moved, cursor });
         }
         const round: number = state.round + 1;
-        const text: string = `Round ${round} of ${decisions.rounds}. Say so in a few words, and that ${nameOf(state, state.order[0] ?? null)} goes first again.`;
+        const text: string = `Round ${round} of ${decisions.rounds}. Say so in a few words, and that ${nameOf(state, state.order[0] ?? null)} goes first again. ${SAY_IT_ALOUD}`;
         return { state: { ...moved, round, cursor: 0 }, facts: because(publicFact("round", text), ODD_DECISIONS.rounds), timers: { turn: decisions.clueSeconds } };
     };
 
@@ -339,7 +341,7 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
         const stray: string = nameOf(state, state.strayId);
         if (accusedId === state.strayId) {
             const next: OddWordState = { ...state, phase: "guess", accusedName: stray, guessHeard: false };
-            const text: string = `The vote pinned ${stray}, who was the Stray. They get one guess at the word. Tell them so in a line; never hint at it.`;
+            const text: string = `The vote pinned ${stray}, who was the Stray. They get one guess at the word. Tell them so in a line; never hint at it. ${SAY_IT_ALOUD}`;
             return { state: next, facts: because(publicFact("guess", text), ODD_DECISIONS.vote), nextPhaseId: "guess", timers: { guess: decisions.guessSeconds } };
         }
         const accused: string = accusedId === undefined ? "" : nameOf(state, accusedId);
