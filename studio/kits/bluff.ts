@@ -10,6 +10,7 @@ import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step }
 import type { Control, ControlOption } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow as SceneTallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
+import { sourceName } from "../../shared/sources.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { boxProblems, isWholeIn, squash, type Box, type HiddenValue, type KitGame } from "../kit/kit.ts";
@@ -22,6 +23,8 @@ export interface BluffFact {
     statement: string;
     /** What goes in the blank: one to four short words. */
     answer: string;
+    /** The site it was checked against, when web search found one. */
+    source?: string;
 }
 
 /** Everything a creator may choose for a bluff game. */
@@ -157,15 +160,17 @@ export function isUsableFact(fact: BluffFact): boolean {
 }
 
 /**
- * Reads facts the model wrote, one per line as "statement | answer".
+ * Reads facts the model wrote, one per line as "statement | answer", or with "| page address" after.
  * @param raw the model's reply.
+ * @param sources the pages web search really found, if it was used.
  * @returns the usable facts, without repeats.
  */
-export function readFacts(raw: string): BluffFact[] {
+export function readFacts(raw: string, sources: string[] = []): BluffFact[] {
     const facts: BluffFact[] = [];
     for (const line of linesOf(raw)) {
-        const [statement, answer, ...extra] = line.split("|").map((part: string) => part.trim());
-        const fact: BluffFact = { statement: (statement ?? "").replace(/_{3,}/g, BLANK), answer: answer ?? "" };
+        const [statement, answer, cited, ...extra] = line.split("|").map((part: string) => part.trim());
+        const source: string = sourceName(cited ?? "", sources);
+        const fact: BluffFact = { statement: (statement ?? "").replace(/_{3,}/g, BLANK), answer: answer ?? "", ...(source === "" ? {} : { source }) };
         if (extra.length === 0 && isUsableFact(fact) === true && facts.some((known: BluffFact) => squash(known.statement) === squash(fact.statement)) === false) {
             facts.push(fact);
         }
@@ -584,9 +589,9 @@ export function createBluffGame(givenBox: Box, givenDecisions: BluffDecisions, r
                 "The missing answer must be a single clear thing with no equally correct alternative, and not a figure that sources disagree on, and not anything that changes",
                 "over time.",
                 "Vary the subjects: animals, history, science, food, places, language. Nothing about real living people, politics, religion or anything sexual.",
-                `One fact per line in exactly this form: statement with ${BLANK} | answer. No numbering, no quotation marks, nothing else.`,
+                `One fact per line in exactly this form: statement with ${BLANK} | answer. If you looked it up, add | and the address of the page after the answer. No numbering, no quotation marks, nothing else.`,
             ].join(" ");
-            return { state, facts: [], nextPhaseId: "choosing", contentRequest: request };
+            return { state, facts: [], nextPhaseId: "choosing", contentRequest: request, contentGrounding: { usable: (text: string) => readFacts(text).length >= decisions.rounds, cacheable: false } };
         },
 
         phaseOf(state: BluffState): string {
@@ -641,7 +646,7 @@ export function createBluffGame(givenBox: Box, givenDecisions: BluffDecisions, r
                     return { state, facts: [] };
                 }
                 if (state.proposed.length === 0) {
-                    const written: BluffFact[] = readFacts(event.text).slice(0, decisions.rounds);
+                    const written: BluffFact[] = readFacts(event.text, event.sources).slice(0, decisions.rounds);
                     if (written.length === 0) {
                         return openFrom({ ...state, facts: shuffled(decisions.facts, random).slice(0, decisions.rounds) }, 0);
                     }
@@ -735,7 +740,7 @@ export function createBluffGame(givenBox: Box, givenDecisions: BluffDecisions, r
                     const picked: number = Object.values(last.picks).filter((choice: number) => choice === index).length;
                     return { type: "text", text: `${owners}: ${option.text} · ${picked} ${picked === 1 ? "pick" : "picks"}`, emphasis: option.truth === true ? "large" : "normal" };
                 });
-                return { mood: "dawn", transition: "fade", blocks: [{ type: "title", text: filledIn(fact), kicker: state.roundResult === "silent" ? "Nobody wrote a fake" : "The true answer" }, ...lines] };
+                return { mood: "dawn", transition: "fade", blocks: [{ type: "title", text: filledIn(fact), kicker: state.roundResult === "silent" ? "Nobody wrote a fake" : "The true answer" }, ...lines, ...(fact.source === undefined ? [] : [{ type: "text" as const, text: `Source: ${fact.source}`, emphasis: "whisper" as const }])] };
             }
             const rows: SceneTallyRow[] = scoreRows(state);
             const top: number = Math.max(0, ...rows.map((row: SceneTallyRow) => row.count));
