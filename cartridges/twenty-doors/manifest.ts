@@ -14,7 +14,7 @@ export const TWENTY_DOORS_MANIFEST: CartridgeManifest = {
     phases: [
         {
             id: "topic",
-            hostBrief: "Ask what the secret should be about, in one short line. When anyone names a subject, rule it straight away; only leave it unruled if it isn't fit for a family table, and then make a dry joke of it and say you'll choose instead.",
+            hostBrief: "Ask what the secret should be about, in one short line. When anyone names a subject, rule it straight away; only leave it unruled if it isn't fit for a family table, and then make a dry joke of it and ask for another. There's no rush: they can take their time, and a button on their phones lets you choose instead.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,
             silenceSeconds: 0,

@@ -382,6 +382,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 }
                 return score({ ...state, heard: [...state.heard.filter((candidate: string) => candidate !== playerId), playerId] }, tapped === question?.answer ? "right" : "wrong", playerId);
             }
+            if (state.phase === "topic" && actionId === SURPRISE) {
+                return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
+            }
             if (state.phase === "question" && actionId === "changeTopic") {
                 const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
                 return { state: fresh, facts: [publicFact("ask-topic", "They want a new topic. Scores stay. Ask what topic they would like next.")], nextPhaseId: "topic" };
@@ -453,7 +456,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         publicScene(state: QuizmasterState): Scene {
             if (state.phase === "topic") {
-                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Choose a topic…", emphasis: "whisper" }] };
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Say or type a topic.", emphasis: "whisper" }] };
             }
             if (state.phase === "preparing") {
                 const waiting: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: state.topic }, { type: "text", text: "Writing the questions…", emphasis: "whisper" }];
@@ -499,7 +502,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         privateControls(state: QuizmasterState, playerId: string): Control[] {
             if (state.phase === "topic") {
-                return [{ type: "waiting", text: "Say or type a topic." }];
+                return [{ type: "buttons", prompt: "Say or type a topic.", options: [{ id: SURPRISE, label: "Surprise me instead" }] }];
             }
             if (state.phase === "preparing") {
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];

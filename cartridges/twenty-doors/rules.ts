@@ -91,14 +91,11 @@ function shownQuestion(question: string): string {
     return capital.length > SHOWN_QUESTION_CHARACTERS ? `${capital.slice(0, SHOWN_QUESTION_CHARACTERS).trimEnd()}…` : `${capital}?`;
 }
 
+/** The button that lets a room waiting on its own topic change its mind. */
+const SURPRISE_INSTEAD: string = "surprise";
+
 /** The id of the choice that has the room name its own topic. */
 const OWN_TOPIC: string = "own";
-
-/** How long the room gets to name a topic before the host chooses instead. */
-const TOPIC_SECONDS: number = 20;
-
-/** How long after someone speaks the host gets to rule it a topic. */
-const TOPIC_HEARD_SECONDS: number = 9;
 
 /** How long the model gets to choose a secret on the topic. The game mustn't wait on it for long. */
 const CHOOSING_SECONDS: number = 8;
@@ -226,16 +223,6 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
      */
     const onTopicEvent = (state: TwentyDoorsState, event: RoomEvent): Step<TwentyDoorsState> => {
         const fallBack: string = "That topic didn't work out, so make one short dry joke about it and say you're picking something yourself. ";
-        // Someone spoke and the host hasn't ruled a topic soon after: it was refused or it wasn't one, so nobody waits long.
-        if (state.phase === "topic" && event.type === "speechEnded") {
-            return { state, facts: [], timers: { "topic-heard": TOPIC_HEARD_SECONDS } };
-        }
-        if (state.phase === "topic" && event.type === "timerFired" && event.timerId === "topic-heard") {
-            return surprise(state, "That topic didn't work out, so make one short dry joke about it if you haven't, and say you're picking something yourself. ");
-        }
-        if (state.phase === "topic" && event.type === "timerFired" && event.timerId === "topic-time") {
-            return surprise(state, "Nobody named a topic, so make one short dry joke about it and say you're picking something yourself. ");
-        }
         if (state.phase === "topic" && event.type === "hostRuled" && event.ruling === "topic") {
             const topic: string = event.detail.replace(/[\r\n"\\]+/g, " ").trim().slice(0, TOPIC_CHARACTER_LIMIT);
             if (isHostSafe(topic, TOPIC_CHARACTER_LIMIT) === false) {
@@ -267,7 +254,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
         init(players: CartridgePlayer[]): Step<TwentyDoorsState> {
             if (chosen === OWN_TOPIC) {
                 const asking: TwentyDoorsState = { phase: "topic", stoppedWaitingForPicture: false, players, category: "", secret: "", doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
-                return { state: asking, facts: [publicFact("ask-topic", "Ask what the secret should be about, in one short line.")], nextPhaseId: "topic", timers: { "topic-time": TOPIC_SECONDS } };
+                return { state: asking, facts: [publicFact("ask-topic", "Ask what the secret should be about, in one short line.")], nextPhaseId: "topic" };
             }
             const asking: TwentyDoorsState = { phase: "topic", stoppedWaitingForPicture: false, players, category: "", secret: "", doorsOpened: 0, asked: [], unruled: [], won: false, finder: null, revealPicture: null };
             const category: { name: string; secrets: string[] } | undefined = CATEGORIES.find((candidate) => candidate.name === chosen);
@@ -291,6 +278,9 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
         },
 
         apply(state: TwentyDoorsState, _playerId: string, actionId: string): Step<TwentyDoorsState> {
+            if (state.phase === "topic" && actionId === SURPRISE_INSTEAD) {
+                return surprise(state, "They've asked you to choose, so say so in a few words. ");
+            }
             if (state.phase !== "asking" || actionId !== "giveup") {
                 return { state, facts: [] };
             }
@@ -354,8 +344,11 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
         },
 
         privateControls(state: TwentyDoorsState): Control[] {
-            if (state.phase === "topic" || state.phase === "choosing") {
-                return [{ type: "waiting", text: state.phase === "topic" ? "Say or type a topic." : `${HOST_NAME} is choosing.` }];
+            if (state.phase === "topic") {
+                return [{ type: "buttons", prompt: "Say or type a topic.", options: [{ id: SURPRISE_INSTEAD, label: "Surprise me instead" }] }];
+            }
+            if (state.phase === "choosing") {
+                return [{ type: "waiting", text: `${HOST_NAME} is choosing.` }];
             }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: `It was ${state.secret}. ${endLine(state)}` }];
