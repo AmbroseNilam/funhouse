@@ -1424,6 +1424,7 @@ export function App(): ReactElement {
                                         </li>
                                     ))}
                                 </ul>
+                                {(view?.guests.agents?.link ?? "") !== "" ? <button className="sheet-text" onClick={() => { setMenu("agentLink"); }}>Your agent's link is open</button> : null}
                                 {view?.guests.canAdd === true || view?.guests.agents?.canInvite === true ? <button className="primary" onClick={() => { setMenu("add"); }}>Add a player</button> : null}
                                 {view?.guests.canRemove === false && view.guests.seated.length > 0 ? <p className="sheet-small">Guests come and go between games.</p> : null}
                             </>

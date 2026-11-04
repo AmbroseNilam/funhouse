@@ -90,6 +90,12 @@ test("cancelling ends the link, and the next one is new", () => {
     assert.notEqual(phone.agents().link, "");
 });
 
+test("someone holding a link nobody has taken up sees nothing of the room", () => {
+    const { room, phone } = table();
+    phone.say({ type: "guest", action: "inviteAgent" });
+    assert.deepEqual(room.agentTable("p1", null).tv, []);
+});
+
 test("the phone is told when the agent sits, and the link is used up", () => {
     const { room, phone } = table();
     phone.say({ type: "guest", action: "inviteAgent" });

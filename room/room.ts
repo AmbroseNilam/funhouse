@@ -1375,7 +1375,8 @@ export class Room implements HostStage, AgentHost {
             gameName: this.game?.manifest.name ?? null,
             watching: seat !== null && this.game !== null && this.gamePlayerIds.has(seat.playerId) === false,
             // Between games the TV shows how to join, which is no business of a seat already invited.
-            tv: sceneLines(this.currentScene()).filter((line: string) => line.includes(this.joinUrl) === false && line.startsWith("Room ") === false),
+            // Someone holding a link nobody has taken up sees nothing of the room until they sit down.
+            tv: seat === null ? [] : sceneLines(this.currentScene()).filter((line: string) => line.includes(this.joinUrl) === false && line.startsWith("Room ") === false),
             games: this.agentGames(),
             name: player?.name ?? this.agentNameFor(ownerId),
             mayTalk: player !== undefined && this.agentMayTalk(player),
