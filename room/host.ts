@@ -229,6 +229,15 @@ export class Host {
         this.remember(`${this.persona.name}: ${text}`);
     }
 
+    /** Drops anything waiting for the host's next turn, because the moment it was about has gone. */
+    public forgetPending(): void {
+        this.pending.splice(0, this.pending.length);
+        if (this.wakeTimer !== null) {
+            clearTimeout(this.wakeTimer);
+            this.wakeTimer = null;
+        }
+    }
+
     /**
      * Stops whatever the host is doing, mid-word if need be.
      * @param wasSpeaking true when the host was audible, so the cut-in is worth remembering.

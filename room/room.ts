@@ -637,6 +637,10 @@ export class Room implements HostStage {
             if (message.type === "presence") {
                 if (player.socket === socket) {
                     this.onPresence(player, message.away);
+                    // The answer tells a phone back in the foreground that its line works, and what it missed.
+                    if (message.away === false) {
+                        this.sendToPhone(player, { type: "view", view: this.phoneView(player) });
+                    }
                 }
                 return;
             }
@@ -714,7 +718,7 @@ export class Room implements HostStage {
      */
     public brief(): string {
         if (this.game !== null) {
-            return [this.game.brief(), this.turnBrief(), "If the group clearly wants to stop playing, write [[quit]] first."].filter((part: string) => part !== "").join("\n\n");
+            return [this.game.brief(), this.turnBrief()].filter((part: string) => part !== "").join("\n\n");
         }
         const games: string[] = this.games.map((game: InstalledGame) => {
             const { id, name, minPlayers, maxPlayers }: CartridgeManifest = game.manifest;
@@ -742,7 +746,10 @@ export class Room implements HostStage {
             return;
         }
         if (ruling === "quit") {
-            this.endGame();
+            const speaker: Player | undefined = speakerId === null ? undefined : this.players.get(speakerId);
+            if (speaker !== undefined) {
+                this.runCommand(speaker, "end");
+            }
             return;
         }
         if (this.game.allowsRuling(ruling) === false) {
@@ -1427,6 +1434,10 @@ export class Room implements HostStage {
         this.checking.clear();
         this.refused.clear();
         this.caption = null;
+        this.pendingCommand = null;
+        this.cancelAcknowledgement();
+        this.host.forgetPending();
+        this.host.interrupt(this.hostSpeaking);
         this.shell.gameEnded();
         const waiting: InstalledGame | null = this.waitingInstall;
         this.waitingInstall = null;
