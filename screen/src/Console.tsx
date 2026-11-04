@@ -14,6 +14,38 @@ const BOX_SHAPES: { height: number; tilt: number; width: number }[] = [
     { height: 76, tilt: 1.4, width: 0.75 },
 ];
 
+/** Width of a box with a shape of width 1, in the TV's units. Four boxes just fill the shelf. */
+const BOX_WIDTH_UNITS: number = 318;
+
+/** Gap between boxes, in the TV's units; the same as .shelf-rail in the styles. */
+const BOX_GAP_UNITS: number = 44;
+
+/** How much shelf is on show, in the TV's units; the same as .shelf in the styles. */
+const SHELF_WIDTH_UNITS: number = 1340;
+
+/**
+ * The shape of the box at a place on the shelf; shapes repeat, so any number of games can have one.
+ * @param index the place.
+ * @returns the shape.
+ */
+function boxShape(index: number): { height: number; tilt: number; width: number } {
+    return BOX_SHAPES[index % BOX_SHAPES.length] ?? { height: 100, tilt: 0, width: 1 };
+}
+
+/**
+ * How far to slide the shelf so the focused box stays in view, centred when there's room to be.
+ * @param boxes how many boxes.
+ * @param focus the focused box.
+ * @returns the distance in the TV's units; 0 when everything fits.
+ */
+function shelfShift(boxes: number, focus: number): number {
+    const widths: number[] = Array.from({ length: boxes }, (_unused: unknown, index: number) => boxShape(index).width * BOX_WIDTH_UNITS);
+    const total: number = widths.reduce((sum: number, width: number) => sum + width, 0) + (boxes - 1) * BOX_GAP_UNITS;
+    const before: number = widths.slice(0, focus).reduce((sum: number, width: number) => sum + width + BOX_GAP_UNITS, 0);
+    const centre: number = before + (widths[focus] ?? 0) / 2;
+    return Math.max(0, Math.min(total - SHELF_WIDTH_UNITS, centre - SHELF_WIDTH_UNITS / 2));
+}
+
 /** Names that fit in the table box above its label. */
 const TABLE_BOX_NAMES: number = 4;
 
@@ -73,6 +105,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
     const { shell, driver } = props;
     const focused: ShelfGame | undefined = shell.games[shell.focus];
     const empty: boolean = shell.seats.length === 0;
+    const boxCount: number = shell.games.length + (empty === true ? 0 : 1);
     return (
         <section className="screen shelf-screen">
             <img className="room-art" src="art/hero.webp" alt="" />
@@ -82,14 +115,15 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                     : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here."}</p></>}
             </header>
             <div className={`shelf ${empty === true ? "dimmed" : ""}`}>
+                <div className="shelf-rail" style={{ transform: `translateX(calc(${-shelfShift(boxCount, shell.focus)} * var(--u)))` }}>
                 {shell.games.map((game: ShelfGame, index: number) => (
-                    <div key={game.id} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${BOX_SHAPES[index]?.height ?? 90}%`, rotate: `${BOX_SHAPES[index]?.tilt ?? 0}deg`, flexGrow: BOX_SHAPES[index]?.width ?? 1, viewTransitionName: `box-${game.id}` }}>
+                    <div key={game.id} className={`box ${index === shell.focus && empty === false ? "focused leaning" : ""}`} style={{ height: `${boxShape(index).height}%`, rotate: `${boxShape(index).tilt}deg`, width: `calc(${boxShape(index).width * BOX_WIDTH_UNITS} * var(--u))`, viewTransitionName: `box-${game.id}` }}>
                         <img src={game.art} alt="" />
                         <span className="box-name">{game.name}</span>
                         {index === shell.focus && empty === false ? <DriverFlag seat={driver} /> : null}
                     </div>
                 ))}
-                {empty === true ? null : <div className={`box table-box ${shell.focus === shell.games.length ? "focused leaning" : ""}`} style={{ height: `${BOX_SHAPES[3]?.height ?? 80}%`, rotate: `${BOX_SHAPES[3]?.tilt ?? 0}deg`, flexGrow: BOX_SHAPES[3]?.width ?? 1 }}>
+                {empty === true ? null : <div className={`box table-box ${shell.focus === shell.games.length ? "focused leaning" : ""}`} style={{ height: `${boxShape(shell.games.length).height}%`, rotate: `${boxShape(shell.games.length).tilt}deg`, width: `calc(${boxShape(shell.games.length).width * BOX_WIDTH_UNITS} * var(--u))` }}>
                     <ul className="table-names">
                         {shell.seats.slice(0, TABLE_BOX_NAMES).map((seat: Seat) => <li key={seat.playerId} style={{ background: seat.colour }}>{seat.name}</li>)}
                         {shell.seats.length > TABLE_BOX_NAMES ? <li className="more">and {shell.seats.length - TABLE_BOX_NAMES} more</li> : null}
@@ -97,6 +131,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
                     <span className="box-name">At the table</span>
                     {shell.focus === shell.games.length ? <DriverFlag seat={driver} /> : null}
                 </div>}
+                </div>
             </div>
             <div className="plank" />
             <JoinTag qr={props.qr} code={props.code} big={empty} joinHost={props.joinHost} />

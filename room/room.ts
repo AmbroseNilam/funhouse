@@ -1975,6 +1975,7 @@ export class Room implements HostStage {
      * @returns false when it doesn't apply, so the words are ordinary talk.
      */
     private runCommand(player: Player, command: VoiceCommand): boolean {
+        log(this.scope(), `${player.playerId} voice command: ${command}`);
         const game: RunningGame | null = this.game;
         const decided: boolean = game?.outcome() !== null && game?.outcome() !== undefined;
         if (command === "repeat") {
@@ -2145,6 +2146,7 @@ export class Room implements HostStage {
             ? utteranceKind(said).then((decision) => decision.value)
             : Promise.resolve(kindByRule(said));
         void kind.then((value: UtteranceKind) => {
+            this.logMoment(`kind ${value}`);
             if (turn !== this.fillerTurn || value === "noise" || value === "command") {
                 return;
             }
