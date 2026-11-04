@@ -363,7 +363,6 @@ function CodeScreen(): ReactElement {
             <form className="place-card" onSubmit={(event) => { event.preventDefault(); openRoom(code); }}>
                 <label htmlFor="code-field">What's the code on the TV?</label>
                 {search.has("resting") === true ? <p className="place-warning" role="alert">Marlowe needs rest. Come back tomorrow.</p> : null}
-                <JudgeCode />
                 {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
                 {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
                 {closed !== null ? <p className="place-warning" role="alert">Room {closed} has closed. Enter the new code to rejoin.</p> : null}
@@ -384,6 +383,7 @@ function CodeScreen(): ReactElement {
                 <button className="primary" type="submit" disabled={code.length !== ROOM_CODE_LENGTH}>Sit down</button>
                 {"mediaDevices" in navigator === false ? null : <button className="plain" type="button" onClick={() => { setScanNote(""); setScanning(true); }}>Scan the code</button>}
             </form>
+            <JudgeCode />
             <p className="fine">Hosting? Open this site on a TV or laptop.</p>
         </main>
     );

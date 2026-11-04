@@ -94,7 +94,8 @@ export class RoomDirectory {
                 this.outSince.set(code, this.outSince.get(code) ?? now);
             }
             const rested: boolean = now - (this.outSince.get(code) ?? now) >= REST_GRACE_MILLISECONDS;
-            const idle: boolean = process.env.COST_LIMITS === "1" && room.idleMilliseconds() >= IDLE_MILLISECONDS;
+            // A room with no players spends nothing and has its own rule, so a TV showing its code gets longer.
+            const idle: boolean = process.env.COST_LIMITS === "1" && room.hasPlayers() === true && room.idleMilliseconds() >= IDLE_MILLISECONDS;
             if (rested === false && idle === false) {
                 continue;
             }
