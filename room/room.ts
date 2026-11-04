@@ -142,6 +142,9 @@ const COMMAND_CONFIRM_MILLISECONDS: number = 20000;
 /** Longest typed answer a game can ask for. */
 const TEXT_ANSWER_LIMIT: number = 80;
 
+/** Longest line typed in place of talking. */
+const TYPED_LIMIT: number = 200;
+
 /** Least time between one phone's typed answers, as each costs a check. */
 const TEXT_ANSWER_GAP_MILLISECONDS: number = 1000;
 
@@ -668,6 +671,10 @@ export class Room implements HostStage {
                     lastRenameAt = Date.now();
                     this.rename(player, message.name);
                 }
+                return;
+            }
+            if (message.type === "typed") {
+                void this.onTyped(player, message.text);
                 return;
             }
             if (message.type === "textOnlySay") {
@@ -1829,9 +1836,33 @@ export class Room implements HostStage {
     }
 
     /**
-     * Treats text from a test phone as a finished utterance. Ignored outside the test mode, so
-     * no phone can put words in the room without speaking them.
-     * @param player the player.
+     * Takes a typed line for someone not using the mic. Past the filter, it goes the way speech goes.
+     * @param player who.
+     * @param text what they typed.
+     */
+    private async onTyped(player: Player, text: string): Promise<void> {
+        if (this.canTalk(player) === false || Date.now() - player.lastTextAnswerAt < TEXT_ANSWER_GAP_MILLISECONDS) {
+            return;
+        }
+        player.lastTextAnswerAt = Date.now();
+        const classify = async (line: string): Promise<boolean> => BUDGET.spend("spark") === true && await isFitForRoom(line);
+        const result: FilterResult = await filterText(text.slice(0, TYPED_LIMIT * 2), TYPED_LIMIT, classify);
+        if (result.allowed === false) {
+            log(this.scope(), `${player.playerId} typed line filtered: ${result.category}`);
+            this.setHint(player, "That didn't go through. Try saying it another way.");
+            return;
+        }
+        if (this.canTalk(player) === false) {
+            return;
+        }
+        this.host.interrupt(this.hostSpeaking);
+        this.game?.event({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
+        this.onHeard(player, result.text);
+    }
+
+    /**
+     * Treats text from a test phone as a finished utterance. Ignored outside the test mode.
+     * @param player who.
      * @param text the words.
      */
     private onTextOnlySay(player: Player, text: string): void {

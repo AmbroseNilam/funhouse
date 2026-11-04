@@ -20,6 +20,7 @@ export type PhoneMessage =
     | { type: "rename"; name: string }
     | { type: "leave" }
     | { type: "textOnlySay"; text: string }
+    | { type: "typed"; text: string }
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
     | { type: "touched" }
@@ -109,6 +110,9 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
     }
     if (message.type === "lean") {
         return typeof message.x === "number" && typeof message.y === "number";
+    }
+    if (message.type === "typed") {
+        return typeof message.text === "string";
     }
     if (message.type === "textOnlySay") {
         return typeof message.text === "string";
