@@ -52,12 +52,30 @@ export function fitAboveKeyboard(): () => void {
         settleTimer = window.setTimeout(fit, SETTLE_MILLISECONDS);
     };
 
+    // Pressing a button would take focus from the box, and the keyboard closing then moves the button
+    // from under the finger, so the tap only closes the keyboard. Focus stays until the button has
+    // answered, and a box still on screen after that lets the keyboard go.
+    const holdFocus = (event: MouseEvent): void => {
+        if (typingBox() !== null && event.target instanceof Element && event.target.closest("button") !== null) {
+            event.preventDefault();
+        }
+    };
+    const letGo = (event: MouseEvent): void => {
+        if (event.target instanceof Element && event.target.closest("button") !== null) {
+            window.setTimeout(() => { typingBox()?.blur(); }, 0);
+        }
+    };
+
+    document.addEventListener("mousedown", holdFocus);
+    document.addEventListener("click", letGo);
     document.addEventListener("focusin", fit);
     document.addEventListener("focusout", focusOut);
     viewport.addEventListener("resize", fit);
     viewport.addEventListener("scroll", fit);
     return (): void => {
         window.clearTimeout(settleTimer);
+        document.removeEventListener("mousedown", holdFocus);
+        document.removeEventListener("click", letGo);
         document.removeEventListener("focusin", fit);
         document.removeEventListener("focusout", focusOut);
         viewport.removeEventListener("resize", fit);
