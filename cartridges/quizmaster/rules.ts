@@ -19,6 +19,15 @@ export const QUESTION_COUNT: number = 6;
 /** Seconds a question stays open before the game moves on. */
 export const QUESTION_SECONDS: number = 30;
 
+/** How long the room holds its breath once the answers are locked in. */
+export const REVEAL_BUILD_SECONDS: number = 4;
+
+/** How long the lit answer, who got it and the points have the screen before the host reacts. */
+export const REVEAL_REACT_SECONDS: number = 2;
+
+/** How long a reveal stays up in all, reaction included, before the next question. */
+export const REVEAL_HOLD_SECONDS: number = 8;
+
 /** Asked for beyond the game's length, since any that give their answer away are dropped. */
 const QUESTIONS_REQUESTED: number = QUESTION_COUNT + 2;
 
@@ -73,7 +82,7 @@ export const FALLBACK_QUESTIONS: QuizQuestion[] = [
 
 /** The whole game, immutable between steps. */
 export interface QuizmasterState {
-    phase: "topic" | "preparing" | "question" | "end";
+    phase: "topic" | "preparing" | "question" | "lockedIn" | "reveal" | "end";
     players: CartridgePlayer[];
     topic: string;
     questions: QuizQuestion[];
@@ -97,6 +106,10 @@ export interface QuizmasterState {
     staleSpeakers: string[];
     /** Points from the current question, held back until the reveal so the scores can't give the answer away. */
     pending: Record<string, number>;
+    /** Points from the question being revealed, for counting up on the TV. */
+    gained: Record<string, number>;
+    /** What ended the question being revealed, for the host. */
+    revealWhy: string;
 }
 
 /**
@@ -281,9 +294,10 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      * Reveals the current answer and moves to the next question, or ends the game after the last.
      * @param unsettled the state, with this question's points not yet added.
      * @param why what just happened, for the host.
+     * @param announced true when the host has already been told the answer, in a reveal.
      * @returns the step.
      */
-    const advance = (unsettled: QuizmasterState, why: string): Step<QuizmasterState> => {
+    const advance = (unsettled: QuizmasterState, why: string, announced: boolean = false): Step<QuizmasterState> => {
         const scores: Record<string, number> = { ...unsettled.scores };
         for (const [playerId, points] of Object.entries(unsettled.pending)) {
             scores[playerId] = (scores[playerId] ?? 0) + points;
@@ -292,22 +306,50 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         const answer: string = state.questions[state.index]?.answer ?? "";
         const source: string = state.questions[state.index]?.source ?? "";
         const credit: string = state.questions[state.index]?.choices === undefined ? "" : state.rightNow.length === 0 ? " Nobody got it." : ` ${state.rightNow.join(" and ")} got it right.`;
-        const reveal: string = `${why}${credit} The answer to that question was: ${answer}. Tell them the answer.`;
+        const reveal: string = announced === true ? "" : `${why}${credit} The answer to that question was: ${answer}. Tell them the answer. `;
         const nextIndex: number = state.index + 1;
         if (nextIndex >= state.questions.length || state.players.length === 0) {
             const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source, rightNow: [], pending: {}, staleSpeakers: [] };
             const board: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
             const winners: string = leaders(finished).map((player) => player.name).join(" and ");
             const verdict: string = winners === "" ? "Nobody scored." : `Winner: ${winners}.`;
-            const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
+            const text: string = `${reveal}That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source, rightNow: [], pending: {}, staleSpeakers: state.speaking };
+        const next: QuizmasterState = { ...state, phase: "question", index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source, rightNow: [], pending: {}, staleSpeakers: state.speaking };
         return {
             state: next,
-            facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
+            facts: [publicFact("question", announced === true ? readInstruction(next) : `${reveal}Then ${readInstruction(next)}`)],
             timers: { [`question-${nextIndex}`]: QUESTION_SECONDS },
+            ...(announced === true ? { nextPhaseId: "question" } : {}),
         };
+    };
+
+    /**
+     * Ends a question. Four answers get the drumroll and a reveal; an answer out loud moves straight on.
+     * @param unsettled the state, with this question's points not yet added.
+     * @param why what just happened, for the host.
+     * @returns the step.
+     */
+    const finishQuestion = (unsettled: QuizmasterState, why: string): Step<QuizmasterState> => {
+        if (unsettled.questions[unsettled.index]?.choices === undefined || unsettled.players.length === 0) {
+            return advance(unsettled, why);
+        }
+        return { state: { ...unsettled, phase: "lockedIn", revealWhy: why }, facts: [], nextPhaseId: "lockedIn", timers: { "reveal-build": REVEAL_BUILD_SECONDS } };
+    };
+
+    /**
+     * Lights the answer: the points land here, so the scores and the answer arrive together.
+     * @param locked the state with the answers locked in.
+     * @returns the step.
+     */
+    const lightAnswer = (locked: QuizmasterState): Step<QuizmasterState> => {
+        const scores: Record<string, number> = { ...locked.scores };
+        for (const [playerId, points] of Object.entries(locked.pending)) {
+            scores[playerId] = (scores[playerId] ?? 0) + points;
+        }
+        const state: QuizmasterState = { ...locked, phase: "reveal", scores, gained: locked.pending, pending: {} };
+        return { state, facts: [], nextPhaseId: "reveal", timers: { "reveal-react": REVEAL_REACT_SECONDS, "reveal-next": REVEAL_HOLD_SECONDS } };
     };
 
     /**
@@ -337,7 +379,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         }
         const counted: QuizmasterState = ruling === "right" ? { ...next, rightNow: [...next.rightNow, name] } : next;
         if (state.players.every((player) => counted.answered.includes(player.playerId)) === true) {
-            return advance(counted, "Everyone has answered.");
+            return finishQuestion(counted, "Everyone has answered.");
         }
         return { state: counted, facts: [] };
     };
@@ -346,7 +388,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
+            const state: QuizmasterState = { phase: "topic", gained: {}, revealWhy: "", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
@@ -403,16 +445,26 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                     return { state: remaining, facts: [] };
                 }
                 const settled: boolean = players.length === 0 || players.every((player) => state.answered.includes(player.playerId));
-                return settled === true ? advance(remaining, "Everyone left has answered.") : { state: remaining, facts: [] };
+                return settled === true ? finishQuestion(remaining, "Everyone left has answered.") : { state: remaining, facts: [] };
             }
             if (event.type === "timerFired") {
+                if (state.phase === "lockedIn" && event.timerId === "reveal-build") {
+                    return lightAnswer(state);
+                }
+                if (state.phase === "reveal" && event.timerId === "reveal-react") {
+                    const credit: string = state.rightNow.length === 0 ? "Nobody got it." : `${state.rightNow.join(" and ")} got it right.`;
+                    return { state, facts: [publicFact("reveal", `${state.revealWhy} ${credit} The answer was: ${state.questions[state.index]?.answer ?? ""}. React in one short line that includes the answer. Don't ask anything; the next question comes on its own.`)] };
+                }
+                if (state.phase === "reveal" && event.timerId === "reveal-next") {
+                    return advance({ ...state, gained: {} }, "", true);
+                }
                 if (state.phase !== "question" || event.timerId !== `question-${state.index}`) {
                     return { state, facts: [] };
                 }
                 if (state.gotGrace === false && state.speaking.length + state.heard.length > 0) {
                     return { state: { ...state, gotGrace: true }, facts: [], timers: { [event.timerId]: ANSWER_GRACE_SECONDS } };
                 }
-                return advance(state, "Time is up.");
+                return finishQuestion(state, "Time is up.");
             }
             if (event.type === "speechStarted") {
                 return { state: { ...state, speaking: [...state.speaking, event.playerId] }, facts: [] };
@@ -474,6 +526,31 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return { mood: winners.length > 0 ? "victory" : "neutral", transition: "fade", blocks: board };
             }
             const onScreen: string[] = state.questions[state.index]?.choices ?? [];
+            const lettered: string[] = onScreen.map((option: string, index: number) => `${LETTERS[index] ?? ""}. ${option}`);
+            if (state.phase === "lockedIn") {
+                return {
+                    mood: "neutral",
+                    transition: "cut",
+                    blocks: [
+                        { type: "title", text: state.questions[state.index]?.question ?? "", kicker: state.topic },
+                        { type: "choices", options: lettered, locked: true },
+                        { type: "text", text: "Answers are in.", emphasis: "large" },
+                    ],
+                };
+            }
+            if (state.phase === "reveal") {
+                const gotIt: string = state.rightNow.length === 0 ? "Nobody got it." : `${state.rightNow.join(" and ")} got it!`;
+                return {
+                    mood: "neutral",
+                    transition: "cut",
+                    blocks: [
+                        { type: "title", text: state.questions[state.index]?.question ?? "", kicker: state.topic },
+                        { type: "choices", options: lettered, right: onScreen.indexOf(state.questions[state.index]?.answer ?? "") },
+                        { type: "text", text: gotIt, emphasis: "large" },
+                        { type: "tally", title: "Scores", rows: state.players.map((player) => ({ label: player.name, count: scoreOf(state, player.playerId), gained: state.gained[player.playerId] ?? 0 })) },
+                    ],
+                };
+            }
             if (onScreen.length > 0) {
                 // Four answers need the room, so the scores move up beside the topic.
                 const standings: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
@@ -482,8 +559,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                     transition: "fade",
                     blocks: [
                         { type: "title", text: state.questions[state.index]?.question ?? "", kicker: `${state.topic} · ${standings}` },
-                        { type: "choices", options: onScreen.map((option: string, index: number) => `${LETTERS[index] ?? ""}. ${option}`) },
-                        ...last,
+                        { type: "choices", options: lettered },
                         { type: "progress", label: "Question", current: state.index + 1, max: state.questions.length },
                     ],
                 };
@@ -510,8 +586,15 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             if (state.phase === "end") {
                 return [{ type: "waiting", text: `${endHeadline(state)}. ${endLine(state)}` }];
             }
-            const onScreen: string[] = state.questions[state.index]?.choices ?? [];
             const seated: boolean = state.players.some((player) => player.playerId === playerId);
+            if (state.phase === "lockedIn") {
+                return [{ type: "waiting", text: "Answers are in. Watch the TV." }];
+            }
+            if (state.phase === "reveal") {
+                const gained: number = state.gained[playerId] ?? 0;
+                return [{ type: "waiting", text: seated === false ? "Watch the TV." : gained > 0 ? `You got it! +${gained}` : "Not this time." }];
+            }
+            const onScreen: string[] = state.questions[state.index]?.choices ?? [];
             if (onScreen.length > 0 && seated === true && state.answered.includes(playerId) === false) {
                 return [{ type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${state.index}:${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }];
             }

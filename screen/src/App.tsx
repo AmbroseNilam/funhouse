@@ -19,6 +19,15 @@ import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
 
+/** How long a reveal waits before its scores start counting: the answer, then who got it, then the points. */
+const COUNT_UP_DELAY_MILLISECONDS: number = 900;
+
+/** How long a score takes to count up. */
+const COUNT_UP_MILLISECONDS: number = 700;
+
+/** How long the TV's drumroll lasts: the same as the game's build. */
+const DRUMROLL_SECONDS: number = 4;
+
 /** Local state reduced from room messages. */
 interface ScreenState {
     scene: Scene | null;
@@ -132,6 +141,38 @@ function Countdown(props: { seconds: number; running: boolean; label?: string })
 }
 
 /**
+ * A score counting up to where it landed, after a beat, so it lands after the answer lights.
+ * @param props where it counts from and to.
+ * @returns the number.
+ */
+function CountUp({ from, to }: { from: number; to: number }): ReactElement {
+    const [shown, setShown] = useState<number>(from);
+    useEffect(() => {
+        if (from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches === true) {
+            setShown(to);
+            return undefined;
+        }
+        let frame: number = 0;
+        const delay: number = window.setTimeout(() => {
+            const began: number = performance.now();
+            const step = (now: number): void => {
+                const progress: number = Math.min(1, (now - began) / COUNT_UP_MILLISECONDS);
+                setShown(Math.round(from + (to - from) * progress));
+                if (progress < 1) {
+                    frame = requestAnimationFrame(step);
+                }
+            };
+            frame = requestAnimationFrame(step);
+        }, COUNT_UP_DELAY_MILLISECONDS);
+        return () => {
+            window.clearTimeout(delay);
+            cancelAnimationFrame(frame);
+        };
+    }, [from, to]);
+    return <>{shown}</>;
+}
+
+/**
  * Renders one scene block.
  * @param block the block.
  * @param index its position, used as the key.
@@ -161,7 +202,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <Countdown key={`${index}-${block.label ?? ""}`} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
     }
     if (block.type === "tally") {
-        return <table key={index} className={`tally ${block.rows.length > 6 ? "many" : ""}`}><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true ? "highlight" : ""}><td>{row.label}</td><td>{row.count}</td></tr>)}</tbody></table>;
+        return <table key={index} className={`tally ${block.rows.length > 6 ? "many" : ""}`}><caption>{block.title}</caption><tbody>{block.rows.map((row) => <tr key={row.label} className={row.highlight === true || (row.gained ?? 0) > 0 ? "highlight" : ""}><td>{row.label}</td><td>{row.gained === undefined ? row.count : <CountUp to={row.count} from={row.count - row.gained} />}</td></tr>)}</tbody></table>;
     }
     if (block.type === "progress") {
         const marks: number[] = Array.from({ length: block.max }, (_unused: unknown, position: number) => position);
@@ -174,7 +215,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         );
     }
     if (block.type === "choices") {
-        return <ol key={index} className="answer-choices">{block.options.map((option: string) => <li key={option}>{option}</li>)}</ol>;
+        return <ol key={index} className={`answer-choices ${block.locked === true ? "locked" : ""} ${block.right === undefined ? "" : "revealed"}`}>{block.options.map((option: string, place: number) => <li key={option} className={place === block.right ? "right" : ""}>{option}</li>)}</ol>;
     }
     if (block.type === "board") {
         return (
@@ -402,6 +443,18 @@ export function App(): ReactElement {
         }
         // Only the moment it connects matters; start reads everything else when it runs.
     }, [connected, started]);
+
+    // The reveal's sounds follow the scene, so a TV that comes back mid-reveal joins in without a false start.
+    const choicesBlock = state.scene?.blocks.find((block: SceneBlock) => block.type === "choices");
+    const revealStage: string = choicesBlock?.type !== "choices" ? "" : choicesBlock.locked === true ? "locked" : choicesBlock.right !== undefined ? "right" : "";
+    useEffect(() => {
+        if (revealStage === "locked") {
+            soundsRef.current?.drumroll(DRUMROLL_SECONDS);
+        }
+        if (revealStage === "right") {
+            soundsRef.current?.reveal();
+        }
+    }, [revealStage]);
 
     useEffect(() => {
         const previous: ShellView | null = previousShellRef.current;

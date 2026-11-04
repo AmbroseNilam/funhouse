@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createQuizmaster, QUESTION_COUNT } from "./quizmaster/rules.ts";
+import { createQuizmaster, QUESTION_COUNT, REVEAL_BUILD_SECONDS } from "./quizmaster/rules.ts";
 import { createTwentyDoors } from "./twenty-doors/rules.ts";
 
 /**
@@ -35,8 +35,9 @@ describe("end screens", () => {
         state = game.onEvent(state, { type: "speechEnded", at: 0, playerId: "a", text: "A0" }).state;
         state = game.onEvent(state, { type: "hostRuled", at: 0, ruling: "right", detail: "", playerId: "a" }).state;
         state = game.onEvent(state, { type: "hostRuled", at: 0, ruling: "wrong", detail: "", playerId: "b" }).state;
-        for (let index = 0; index < QUESTION_COUNT * 2 && game.phaseOf(state) !== "end"; index += 1) {
-            state = game.onEvent(state, { type: "timerFired", at: 0, timerId: `question-${state.index}` }).state;
+        for (let index = 0; index < QUESTION_COUNT * 4 && game.phaseOf(state) !== "end"; index += 1) {
+            const timerId: string = state.phase === "lockedIn" ? "reveal-build" : state.phase === "reveal" ? "reveal-next" : `question-${state.index}`;
+            state = game.onEvent(state, { type: "timerFired", at: 0, timerId }).state;
         }
         assert.equal(game.phaseOf(state), "end");
         const words: string[] = wordsOn(game.publicScene(state));
@@ -140,11 +141,28 @@ describe("Quizmaster's four answers", () => {
         assert.deepEqual(again.state.scores, first.state.scores, "one try");
         const wrong: number = state.questions[0]?.choices?.indexOf("Bad0a") ?? -1;
         const second = game.apply(first.state, "b", `answer:0:${wrong}`);
-        assert.equal(second.state.index, 1);
-        assert.equal(second.state.scores.a, 2);
-        const stale = game.apply(second.state, "a", `answer:0:${right}`);
-        assert.deepEqual(stale.state.answered, [], "a late tap from the last question doesn't count on this one");
-        assert.match(JSON.stringify(second.facts), /Sam got it right/);
+        assert.equal(game.phaseOf(second.state), "lockedIn");
+        assert.equal(second.state.scores.a, undefined, "the drumroll gives nothing away");
+        assert.deepEqual(second.facts, [], "and the host stays quiet through it");
+        assert.equal(JSON.stringify(game.publicScene(second.state)).includes('"right"'), false);
+        assert.equal(second.timers?.["reveal-build"], REVEAL_BUILD_SECONDS);
+        const lit = game.onEvent(second.state, { type: "timerFired", at: 0, timerId: "reveal-build" });
+        assert.equal(game.phaseOf(lit.state), "reveal");
+        assert.equal(lit.state.scores.a, 2);
+        assert.deepEqual(lit.facts, [], "the screen goes first");
+        assert.match(JSON.stringify(game.publicScene(lit.state)), new RegExp(`"right":${right}`));
+        assert.match(JSON.stringify(game.privateControls(lit.state, "a")), /You got it! \+2/);
+        assert.match(JSON.stringify(game.privateControls(lit.state, "b")), /Not this time/);
+        const stale = game.apply(lit.state, "a", `answer:0:${right}`);
+        assert.equal(stale.state, lit.state, "a tap during the reveal does nothing");
+        const reaction = game.onEvent(lit.state, { type: "timerFired", at: 0, timerId: "reveal-react" });
+        assert.match(JSON.stringify(reaction.facts), /Sam got it right/);
+        assert.match(JSON.stringify(reaction.facts), /Right0/);
+        const moved = game.onEvent(reaction.state, { type: "timerFired", at: 0, timerId: "reveal-next" });
+        assert.equal(moved.state.index, 1);
+        assert.equal(game.phaseOf(moved.state), "question");
+        assert.equal(JSON.stringify(moved.facts).includes("Right0"), false, "the answer isn't told twice");
+        assert.deepEqual(moved.state.answered, []);
     });
 
     it("ignores a tap off the list, and shuffles the right answer's place", () => {
@@ -164,7 +182,9 @@ describe("Quizmaster's four answers", () => {
         const talking = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
         const right: number = state.questions[0]?.choices?.indexOf("Right0") ?? -1;
         const tapped = game.apply(talking, "a", `answer:0:${right}`).state;
-        const moved = game.apply(tapped, "b", `answer:0:${right}`).state;
+        const locked = game.apply(tapped, "b", `answer:0:${right}`).state;
+        const lit = game.onEvent(locked, { type: "timerFired", at: 0, timerId: "reveal-build" }).state;
+        const moved = game.onEvent(lit, { type: "timerFired", at: 0, timerId: "reveal-next" }).state;
         assert.equal(moved.index, 1);
         const heardLate = game.onEvent(moved, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
         assert.deepEqual(heardLate.state.heard, []);

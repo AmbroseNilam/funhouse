@@ -21,6 +21,18 @@ const TICK_CENTRE_HERTZ: number = 1800;
 /** How long a tick lasts. */
 const TICK_SECONDS: number = 0.025;
 
+/** Where the drumroll's noise is centred. */
+const DRUM_CENTRE_HERTZ: number = 260;
+
+/** How long one drum tap rings. */
+const DRUM_TAP_SECONDS: number = 0.05;
+
+/** The gap between taps at the start of a drumroll. */
+const DRUM_SLOWEST_GAP_SECONDS: number = 0.14;
+
+/** The gap between taps at the end of a drumroll. */
+const DRUM_FASTEST_GAP_SECONDS: number = 0.045;
+
 /** Plays the console's sounds on one screen. */
 export class ConsoleSounds {
     private readonly context: AudioContext = new AudioContext({ sampleRate: 48000 });
@@ -113,7 +125,37 @@ export class ConsoleSounds {
         [392, 330, 262].forEach((note: number, index: number) => { this.tone(note, note * 0.97, 0.26, 0.7, "triangle", index * 0.14); });
     }
 
-    /** The match being struck when the lantern lights. */
+    /**
+     * A soft roll of low noise taps, closing up and swelling as it goes.
+     * @param seconds how long it lasts.
+     */
+    public drumroll(seconds: number): void {
+        const filter: BiquadFilterNode = this.context.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = DRUM_CENTRE_HERTZ;
+        filter.connect(this.master);
+        const start: number = this.context.currentTime;
+        let at: number = 0;
+        while (at < seconds) {
+            const progress: number = at / seconds;
+            const source: AudioBufferSourceNode = this.context.createBufferSource();
+            const gain: GainNode = this.context.createGain();
+            source.buffer = this.noise;
+            gain.gain.setValueAtTime(0.3 + progress * 0.7, start + at);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + at + DRUM_TAP_SECONDS);
+            source.connect(gain).connect(filter);
+            source.start(start + at, 0, DRUM_TAP_SECONDS);
+            at += DRUM_SLOWEST_GAP_SECONDS - (DRUM_SLOWEST_GAP_SECONDS - DRUM_FASTEST_GAP_SECONDS) * progress;
+        }
+    }
+
+    /** The answer lighting up: two bright notes. */
+    public reveal(): void {
+        this.tone(784, 784, 0.16, 0.8, "triangle");
+        this.tone(1175, 1175, 0.4, 0.8, "triangle", 0.12);
+    }
+
+        /** The match being struck when the lantern lights. */
     public light(): void {
         this.tone(330, 660, 0.25, 0.5, "sine");
         this.tone(990, 1320, 0.3, 0.25, "triangle", 0.08);
