@@ -5,6 +5,7 @@
 // ruling used was allowed and did something; every fact names its decision; the rules never
 // change state in place and never throw. It never says a game is good.
 
+import type { Control } from "../shared/controls.ts";
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { Turn } from "../shared/turn.ts";
@@ -28,6 +29,7 @@ export type Move =
     | { kind: "say"; playerId: string; text: string; ruling: string | null }
     | { kind: "press"; playerId: string; actionId: string }
     | { kind: "leave"; playerId: string }
+    | { kind: "answer"; playerId: string; controlId: string; text: string }
     | { kind: "wait"; seconds: number };
 
 /** What a persona sees before it moves. A persona also scripts the judge, so it may see the state. */
@@ -42,6 +44,8 @@ export interface Glimpse<State> {
     players: readonly CartridgePlayer[];
     /** What a player may press right now. */
     legal(playerId: string): LegalAction[];
+    /** The controls on a player's phone right now, such as a text box and its id. */
+    controls(playerId: string): Control[];
     /** Rulings the phase allows right now. */
     rulings: string[];
 }
@@ -348,6 +352,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             now: run.now,
             players: run.players,
             legal: (playerId: string) => cartridge.legalActions(current, playerId),
+            controls: (playerId: string) => cartridge.privateControls(current, playerId),
             rulings: Object.keys(phase?.hostRulings ?? {}),
         });
         if (move.kind === "wait") {
@@ -364,6 +369,16 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             run.players = run.players.filter((player: CartridgePlayer) => player.playerId !== move.playerId);
             const event: RoomEvent = { type: "playerLeft", at: run.now, playerId: move.playerId };
             take(event, () => cartridge.onEvent(current, event));
+            fireDue();
+            continue;
+        }
+        if (move.kind === "answer") {
+            const offered: boolean = cartridge.privateControls(current, move.playerId).some((control: Control) => "id" in control && control.id === move.controlId);
+            if (offered === false) {
+                problems.push(`${persona.name} answered "${move.controlId}" when it was not on that phone.`);
+            }
+            const answered: RoomEvent = { type: "answered", at: run.now, playerId: move.playerId, controlId: move.controlId, value: move.text };
+            take(answered, () => cartridge.onEvent(current, answered));
             fireDue();
             continue;
         }
