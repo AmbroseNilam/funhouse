@@ -22,6 +22,7 @@ import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup.ts";
 import { NAME_TAG_BLUEPRINT } from "./games/name-tag.ts";
 import { COLD_READ_BLUEPRINT } from "./games/cold-read.ts";
 import { BLANK_VERDICT_BLUEPRINT } from "./games/blank-verdict.ts";
+import { LONELY_CLUES_BLUEPRINT } from "./games/lonely-clues.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
@@ -42,6 +43,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
     TIN_CAN_TELEPHONE_BLUEPRINT,
     WRONG_ROOM_BLUEPRINT,
     STRAY_WORD_BLUEPRINT,
+    LONELY_CLUES_BLUEPRINT,
     BLANK_VERDICT_BLUEPRINT,
     COLD_READ_BLUEPRINT,
     NAME_TAG_BLUEPRINT,
@@ -55,6 +57,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
  * scripted runs that prove them.
  */
 export const HELD_BACK: Readonly<Record<string, string>> = {
+    lonelyClues: "no run with the real host yet",
     blankVerdict: "no run with the real host yet",
     coldRead: "no run with the real host yet",
     nameTag: "no run with the real host yet",

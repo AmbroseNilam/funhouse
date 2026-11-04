@@ -2,7 +2,7 @@
 // its pause menu. A new kit adds an import line, a type in blueprint.ts and one entry here, and
 // nothing else changes; Blueprint's keys and this table must agree, which the compiler checks.
 
-import type { Blueprint, AnyKitGame, HandBlueprint, HostGuessBlueprint, IdentityBlueprint, ChainBlueprint, ClueBoardBlueprint, EstimateBlueprint, GalleryBlueprint, GateBlueprint, GuessingBlueprint, LineBlueprint, OddWordBlueprint, PlantBlueprint, StrangerBlueprint, TapBlueprint, WitBlueprint } from "./blueprint.ts";
+import type { Blueprint, AnyKitGame, ClueBlueprint, HandBlueprint, HostGuessBlueprint, IdentityBlueprint, ChainBlueprint, ClueBoardBlueprint, EstimateBlueprint, GalleryBlueprint, GateBlueprint, GuessingBlueprint, LineBlueprint, OddWordBlueprint, PlantBlueprint, StrangerBlueprint, TapBlueprint, WitBlueprint } from "./blueprint.ts";
 import { CHECK_SEEDS, rehearsePictureGame, SEED_SPREAD } from "./check-support.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
@@ -23,8 +23,9 @@ import { createGalleryGame, galleryBlueprintProblems, type GalleryState } from "
 import { createIdentityGame, identityBlueprintProblems, type IdentityState } from "./kits/identity.ts";
 import { createHostGuessGame, hostGuessBlueprintProblems, type HostGuessState } from "./kits/host-guess.ts";
 import { createHandGame, handBlueprintProblems, type HandState } from "./kits/hand.ts";
+import { createClueGame, clueBlueprintProblems, type ClueState } from "./kits/clue.ts";
 import { PLANT_GIVE_UP_ACTION } from "./kits/plant.ts";
-import { chainPersonas, dicePersonas, diceSecrecyCheck, pushChoiceCheck, pushPersonas, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck, identityNameCheck, identityPersonas, hostGuessPersonas, handPersonas } from "./personas.ts";
+import { chainPersonas, dicePersonas, diceSecrecyCheck, pushChoiceCheck, pushPersonas, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck, identityNameCheck, identityPersonas, hostGuessPersonas, handPersonas, cluePersonas } from "./personas.ts";
 import { witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
@@ -215,5 +216,14 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             return rehearseMany(make, handPersonas(), CHECK_SEEDS, options);
         },
         pauseActions: NO_PAUSE,
+    },
+    clue: {
+        problems: (blueprint: ClueBlueprint): string[] => clueBlueprintProblems(blueprint.box, blueprint.decisions),
+        create: (blueprint: ClueBlueprint, random: () => number): AnyKitGame => erase(createClueGame(blueprint.box, blueprint.decisions, random)),
+        check(blueprint: ClueBlueprint, options: RehearsalOptions): Tally {
+            const make = (seed: number): KitGame<ClueState> => createClueGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+            return rehearseMany(make, cluePersonas(), CHECK_SEEDS, options);
+        },
+        pauseActions: giveUpRow,
     },
 };

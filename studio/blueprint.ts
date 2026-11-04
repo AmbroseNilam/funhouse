@@ -22,6 +22,7 @@ import type { WitDecisions } from "./kits/wit.ts";
 import type { IdentityDecisions } from "./kits/identity.ts";
 import type { HostGuessDecisions } from "./kits/host-guess.ts";
 import type { HandDecisions } from "./kits/hand.ts";
+import type { ClueDecisions } from "./kits/clue.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -132,6 +133,13 @@ export interface HandBlueprint {
     decisions: HandDecisions;
 }
 
+/** A clue game: a secret word, one-word clues that cancel when they match, one guess. */
+export interface ClueBlueprint {
+    kit: "clue";
+    box: Box;
+    decisions: ClueDecisions;
+}
+
 /** Any game as data. */
 export type Blueprint =
     | GuessingBlueprint
@@ -148,7 +156,8 @@ export type Blueprint =
     | GalleryBlueprint
     | IdentityBlueprint
     | HostGuessBlueprint
-    | HandBlueprint;
+    | HandBlueprint
+    | ClueBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
