@@ -4,10 +4,10 @@
 // at play time the host's model writes its own. Notes are in who-fits.md beside this file.
 
 import { HOST_NAME } from "../../shared/brand.ts";
-import type { TapBlueprint } from "../blueprint.ts";
+import type { FitsBlueprint } from "../blueprint.ts";
 
 /** Who Fits, written as decisions on the tap kit. */
-export const WHO_FITS_BLUEPRINT: TapBlueprint = {
+export const WHO_FITS_BLUEPRINT: FitsBlueprint = {
     kit: "tap",
     box: {
         id: "whoFits",

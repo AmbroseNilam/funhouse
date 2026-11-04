@@ -8,6 +8,7 @@ import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
+import { createPushGame, pushBlueprintProblems, type PushDecisions } from "./kits/tap-push.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
 export interface GuessingBlueprint {
@@ -23,15 +24,22 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
-/** The tap games, each its own style on the tap kit. */
-export type TapDecisions = FitsDecisions;
-
-/** A tap game: people play by tapping their phones, and the host only talks. */
-export interface TapBlueprint {
+/** A nomination game on the tap kit: everyone secretly taps who a prompt fits. */
+export interface FitsBlueprint {
     kit: "tap";
     box: Box;
-    decisions: TapDecisions;
+    decisions: FitsDecisions;
 }
+
+/** A push-your-luck game on the tap kit: everyone secretly draws or stays, a repeat busts. */
+export interface PushBlueprint {
+    kit: "tap";
+    box: Box;
+    decisions: PushDecisions;
+}
+
+/** A tap game: people play by tapping their phones, and the host only talks. Its decisions say which style. */
+export type TapBlueprint = FitsBlueprint | PushBlueprint;
 
 /** Any game as data. */
 export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint;
@@ -55,6 +63,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "plant") {
         return plantBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.decisions.style === "push") {
+        return pushBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -71,6 +82,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "plant") {
         return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.decisions.style === "push") {
+        return erase(createPushGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createFitsGame(blueprint.box, blueprint.decisions));
 }

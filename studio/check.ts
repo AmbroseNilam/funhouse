@@ -2,13 +2,14 @@
 // the model failing and succeeding, and, for a kit with a hidden role, check that who holds the
 // role changes nothing anyone else sees. This is what "it passes rehearsal" means.
 
-import type { Blueprint, TapBlueprint } from "./blueprint.ts";
+import type { Blueprint, FitsBlueprint, PushBlueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { createFitsGame, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
-import { fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { createFitsGame, type FitsState } from "./kits/tap-fits.ts";
+import { createPushGame, type PushState } from "./kits/tap-push.ts";
+import { fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck, pushChoiceCheck, pushPersonas } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -29,7 +30,12 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
         const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
     }
-    const fits: TapBlueprint & { decisions: FitsDecisions } = { ...blueprint, decisions: blueprint.decisions };
+    if (blueprint.decisions.style === "push") {
+        const push: PushBlueprint = { ...blueprint, decisions: blueprint.decisions };
+        const makePush = (seed: number): KitGame<PushState> => createPushGame(push.box, push.decisions, seededRandom(seed));
+        return rehearseMany(makePush, pushPersonas(), CHECK_SEEDS, { ...options, roleCheck: pushChoiceCheck(push) });
+    }
+    const fits: FitsBlueprint = { ...blueprint, decisions: blueprint.decisions };
     const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);
     return rehearseMany(makeFits, fitsPersonas(), CHECK_SEEDS, { ...options, roleCheck: fitsTapCheck(fits) });
 }
