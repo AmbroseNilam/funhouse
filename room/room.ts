@@ -370,6 +370,9 @@ const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
 /** How long every seat must be gone before the game waits, so one person's reload isn't a pause. */
 const STEP_OUT_AFTER_MILLISECONDS: number = 10000;
 
+/** What the host says when the day's budget runs out mid-game: the reason for the quiet, and what's left to do. */
+const OUT_OF_WORDS_LINE: string = "That's all the talking I've got in me today. Pause to end the game, and come back tomorrow.";
+
 /** How long after the host's voice ends the TV may still be heard: its last word, and what the phone kept from just before a press. */
 const HOST_AUDIO_GUARD_MILLISECONDS: number = 300;
 
@@ -464,6 +467,8 @@ export class Room implements HostStage, AgentHost {
     private paused: boolean = false;
     /** Paused from the phone menu; only someone at the menu undoes this. */
     private menuPaused: boolean = false;
+    /** The day's model budget ran out and the room has been told, so it says so only once. */
+    private toldOutOfWords: boolean = false;
     /** Every seat in the running game has dropped, and the game waits for them. */
     private steppedOut: boolean = false;
     private stepOutTimer: NodeJS.Timeout | null = null;
@@ -985,12 +990,23 @@ export class Room implements HostStage, AgentHost {
         this.broadcastHostState();
     }
 
+    /** Tells the table once why the host has gone quiet, in words that cost nothing to write. */
+    public outOfWords(): void {
+        if (this.toldOutOfWords === true) {
+            return;
+        }
+        this.say(OUT_OF_WORDS_LINE, this.host.persona.style);
+        this.toldOutOfWords = true;
+        this.refreshPhones();
+    }
+
     /**
      * Queues one host sentence for the voice and adds it to the caption.
      * @param text the sentence.
      * @param style delivery direction.
      */
     public say(text: string, style: string): void {
+        this.toldOutOfWords = false;
         this.lastSpoken = { text, style };
         if (this.replyClockAt !== 0) {
             log(this.scope(), `reply ready ${Date.now() - this.replyClockAt} ms after release`);
@@ -3372,6 +3388,9 @@ export class Room implements HostStage, AgentHost {
         }
         if (player.hint !== "") {
             status = player.hint;
+        }
+        if (this.toldOutOfWords === true && player.hint === "") {
+            status = `${hostName} is out of words for today`;
         }
         player.listening = this.game?.listening(player.playerId) ?? "holdToTalk";
         if (this.canTalk(player) === false) {

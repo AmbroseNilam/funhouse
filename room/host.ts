@@ -70,6 +70,8 @@ export const PLACEHOLDER_PERSONA: HostPersona = {
 
 /** What the host can do in the room. The room implements it. */
 export interface HostStage {
+    /** A reply couldn't be paid for, so the room says why the host has gone quiet. */
+    outOfWords(): void;
     /** Names of the players present right now. */
     playerNames(): string[];
     /** What is going on right now and what the host may do about it. */
@@ -262,8 +264,13 @@ export class Host {
             const lines: string[] = this.pending.splice(0, this.pending.length);
             const earlier: string[] = [...this.history];
             this.remember(...lines);
-            if (this.replies.allow() === false || BUDGET.spend("spark") === false) {
+            if (this.replies.allow() === false) {
                 log("host", "skipped a reply: over the limit");
+                continue;
+            }
+            if (BUDGET.spend("spark") === false) {
+                log("host", "skipped a reply: out of budget");
+                this.stage.outOfWords();
                 continue;
             }
             const turn: AbortController = new AbortController();
