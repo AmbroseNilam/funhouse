@@ -36,6 +36,15 @@ import { assertNeverSeen, everythingOnPhone, everythingOnScreen, pause, phoneStr
 /** True when the room has the real host, whose words the script can't know. */
 const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1";
 
+/** How many times the first claimant holds and says a sound with CLAIMS_SPAM=1. */
+const SPAM_PRESSES: number = 30;
+
+/** The most a turn can take on its clocks alone. */
+const SPAM_TURN_LIMIT_MILLISECONDS: number = 120000;
+
+/** The gap between those presses. */
+const SPAM_GAP_MILLISECONDS: number = 400;
+
 /** How long the fake players take over a step against the real host, so it can speak as a real table would let it. */
 const REAL_STEP_MILLISECONDS: number = 5000;
 
@@ -319,35 +328,54 @@ for (let turn = 0; turn < count; turn += 1) {
     }
     console.warn("  ok: a bystander was not heard during the interview");
 
-    // The claimant answers twice; the host asks one question each time.
-    const heardBefore: number = screen.hostLines.length;
-    claimant.phone.say("It was a few years back, by the harbour in March");
-    await hostSpeaks(heardBefore, "the host to speak");
-    const heardAfter: number = screen.hostLines.length;
-    claimant.phone.say("There were four of us and it rained all day");
-    await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) ?? claimant).some((line: string) => line.startsWith("Hold your phone and ask") === true), "the named player");
-    if (screen.hostLines.length <= heardAfter) {
-        await hostSpeaks(heardAfter, "the host to speak");
+    // With CLAIMS_SPAM=1 the first claimant keeps holding and saying a sound, trying to burn the host's replies.
+    if (turn === 0 && process.env.CLAIMS_SPAM === "1") {
+        for (let press = 0; press < SPAM_PRESSES; press += 1) {
+            claimant.phone.say("hm");
+            await pause(SPAM_GAP_MILLISECONDS);
+        }
+        console.warn(`  held ${SPAM_PRESSES} times; the host has now said ${screen.hostLines.length - gameStart} lines`);
     }
-    const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) as Seat;
-    if (asker === claimant) {
-        throw new Error("The claimant was named to ask themselves.");
-    }
-    console.warn(`  ${asker.name} is named to ask.`);
 
-    // The claimant cannot talk over the question; the named player is heard.
-    const beforeTalkOver: number = (await requests()).length;
-    claimant.phone.say("talkovermarker let me answer before the question");
-    await pause(900);
-    if ((await requests()).slice(beforeTalkOver).some((seen: Seen) => seen.user.includes("talkovermarker") === true) === true) {
-        throw new Error("The claimant was heard during the named player's question.");
+    // The claimant answers twice; the host asks one question each time.
+    const spamming: boolean = turn === 0 && process.env.CLAIMS_SPAM === "1";
+    if (spamming === false) {
+        const heardBefore: number = screen.hostLines.length;
+        claimant.phone.say("It was a few years back, by the harbour in March");
+        await hostSpeaks(heardBefore, "the host to speak");
+        const heardAfter: number = screen.hostLines.length;
+        claimant.phone.say("There were four of us and it rained all day");
+        await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) ?? claimant).some((line: string) => line.startsWith("Hold your phone and ask") === true), "the named player");
+        if (screen.hostLines.length <= heardAfter) {
+            await hostSpeaks(heardAfter, "the host to speak");
+        }
+        const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) as Seat;
+        if (asker === claimant) {
+            throw new Error("The claimant was named to ask themselves.");
+        }
+        console.warn(`  ${asker.name} is named to ask.`);
+
+        // The claimant cannot talk over the question; the named player is heard.
+        const beforeTalkOver: number = (await requests()).length;
+        claimant.phone.say("talkovermarker let me answer before the question");
+        await pause(900);
+        if ((await requests()).slice(beforeTalkOver).some((seen: Seen) => seen.user.includes("talkovermarker") === true) === true) {
+            throw new Error("The claimant was heard during the named player's question.");
+        }
+        asker.phone.say("Which street was that on exactly");
+        await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Hold your phone to answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Hold your phone and ask") === true) === false, "the claimant to answer the question");
+        if (REAL_HOST === true) {
+            await pause(REAL_STEP_MILLISECONDS);
+        }
+        claimant.phone.say("It was on the corner by the old bakery");
     }
-    asker.phone.say("Which street was that on exactly");
-    await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Hold your phone to answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Hold your phone and ask") === true) === false, "the claimant to answer the question");
-    if (REAL_HOST === true) {
-        await pause(REAL_STEP_MILLISECONDS);
+    if (spamming === true) {
+        // The clocks carry a turn along with nobody answering, however long that takes.
+        const until: number = Date.now() + SPAM_TURN_LIMIT_MILLISECONDS;
+        while (seats.filter((seat: Seat) => seat !== claimant).every((seat: Seat) => seat.phone.options().length === 3) === false && Date.now() < until) {
+            await pause(200);
+        }
     }
-    claimant.phone.say("It was on the corner by the old bakery");
     await waitFor(() => seats.filter((seat: Seat) => seat !== claimant).every((seat: Seat) => seat.phone.options().length === 3), "a ballot on each voter's phone");
 
     // The vote. Turn 1: everyone is fooled. Turn 2: the first voter catches it. Turn 3: everyone catches it. After that, a split.
@@ -437,6 +465,8 @@ for (let turn = 0; turn < count; turn += 1) {
 
 // The final scores add up, the host closes, and no request woke the host more than 20 times in a minute.
 await waitFor(() => screen.shell?.gameOver === true, "the final scores");
+const gameOverAt: number = Date.now();
+const linesAtEnd: number = screen.hostLines.length;
 if (screen.title() !== "Final scores") {
     throw new Error(`Expected the final scores, saw "${screen.title()}".`);
 }
@@ -448,7 +478,8 @@ console.warn(`  ok: the final scores are ${JSON.stringify(rows)}`);
 const all: Seen[] = await requests();
 for (const seen of all) {
     const wakes: number = all.filter((other: Seen) => other.at >= seen.at && other.at < seen.at + 60000).length;
-    if (wakes > WAKES_PER_MINUTE) {
+    // The room's cap is a fixed window, so holding at a window's edge can reach twice it in a sliding minute.
+    if (wakes > (process.env.CLAIMS_SPAM === "1" ? WAKES_PER_MINUTE * 2 : WAKES_PER_MINUTE)) {
         throw new Error(`The host was asked for ${wakes} replies inside a minute.`);
     }
 }
@@ -461,6 +492,8 @@ if (afterHostLines.some((line: string) => /\b(?:doctor|salary|mortgage|boss|husb
     report("A host line touched a forbidden subject.");
 }
 console.warn(`  ok: ${afterHostLines.length} host lines, none with two questions or a forbidden subject`);
+await waitFor(() => screen.hostLines.length > linesAtEnd, "the host's last line");
+console.warn(`  ok: the last line came ${Date.now() - gameOverAt} ms after the game ended`);
 await pause(800);
 await firstSeat.phone.chooseRow(screen, "Back to the shelf");
 await waitFor(() => screen.shell?.screen === "home", "the shelf");
