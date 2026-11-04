@@ -220,7 +220,19 @@ export function App(): ReactElement {
         /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
         const heardFromServer = (socket: WebSocket): void => {
             window.clearTimeout(silenceTimer);
-            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+            silenceTimer = window.setTimeout(() => { giveUpOn(socket); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+        };
+
+        /** Moves on from a socket that has gone silent at once, as a browser can take a long while to close a dead one. */
+        const giveUpOn = (socket: WebSocket): void => {
+            if (socketRef.current !== socket) {
+                return;
+            }
+            socket.close();
+            dispatch({ type: "connection", connected: false });
+            window.clearTimeout(retryTimer);
+            retryDelay = 500;
+            connect();
         };
 
         /** Opens the socket; on close, retries with backoff so a network blip heals itself. */
@@ -238,8 +250,11 @@ export function App(): ReactElement {
                 }
             };
             socket.onclose = (): void => {
+                if (socketRef.current !== socket) {
+                    return;
+                }
                 dispatch({ type: "connection", connected: false });
-                if (stopped === true || socketRef.current !== socket) {
+                if (stopped === true) {
                     return;
                 }
                 retryTimer = window.setTimeout(connect, retryDelay);

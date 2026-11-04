@@ -6,7 +6,7 @@
 import type { PhoneTurn } from "../../shared/turn.ts";
 import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import { listeningAllowsTalk, type Control, type PhoneView } from "../../shared/controls.ts";
-import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
+import { FOREGROUND_ANSWER_LIMIT_MILLISECONDS, parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
@@ -578,9 +578,23 @@ export function App(): ReactElement {
         let silenceTimer: number = 0;
 
         /** Restarts the wait for the server; a dead network sends no close, so this notices it. */
-        const heardFromServer = (socket: WebSocket): void => {
+        const heardFromServer = (socket: WebSocket, limit: number = SERVER_SILENCE_LIMIT_MILLISECONDS): void => {
             window.clearTimeout(silenceTimer);
-            silenceTimer = window.setTimeout(() => { socket.close(); }, SERVER_SILENCE_LIMIT_MILLISECONDS);
+            silenceTimer = window.setTimeout(() => { giveUpOn(socket); }, limit);
+        };
+
+        /** Moves on from a socket that has gone silent at once, as a browser can take a long while to close a dead one. */
+        const giveUpOn = (socket: WebSocket): void => {
+            if (socketRef.current !== socket) {
+                return;
+            }
+            socket.close();
+            dispatch({ type: "connection", connected: false });
+            holdingRef.current = false;
+            dispatch({ type: "holding", holding: false });
+            window.clearTimeout(retryTimer);
+            retryDelay = 500;
+            connect();
         };
 
         /** Opens the socket and, once open, reclaims the saved seat if there is one. */
@@ -634,9 +648,12 @@ export function App(): ReactElement {
                 dispatch({ type: "message", message });
             };
             socket.onclose = (event: CloseEvent): void => {
+                if (socketRef.current !== socket) {
+                    return;
+                }
                 dispatch({ type: "connection", connected: false });
                 window.clearTimeout(silenceTimer);
-                if (stopped === true || socketRef.current !== socket) {
+                if (stopped === true) {
                     return;
                 }
                 holdingRef.current = false;
@@ -653,7 +670,13 @@ export function App(): ReactElement {
 
         /** Reconnects at once when the phone comes back to the foreground. */
         const onVisible = (): void => {
-            if (document.visibilityState !== "visible" || socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) {
+            const current: WebSocket | null = socketRef.current;
+            if (document.visibilityState !== "visible" || current?.readyState === WebSocket.CONNECTING) {
+                return;
+            }
+            // A phone that slept can hold a socket that looks open and is dead, so the room's answer to reportPresence decides.
+            if (current?.readyState === WebSocket.OPEN) {
+                heardFromServer(current, FOREGROUND_ANSWER_LIMIT_MILLISECONDS);
                 return;
             }
             window.clearTimeout(retryTimer);
