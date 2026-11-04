@@ -160,6 +160,7 @@ export function App(): ReactElement {
                     </p>
                 ) : null}
                 <p className="fine">You don't need an account. Players enter a name and allow the mic. Built with Meta's Muse Spark, Muse Voice Transcribe and Muse Image.</p>
+                <p className="fine"><strong>Quiz topics and web search.</strong> When you say a topic for Quizmaster, that topic goes to Meta's AI model, which searches the web to help write the questions. Meta runs the search, and we don't know which search services it uses, so your words may reach them. We ask Meta not to save the request as a stored response, but its usual terms still apply. The topic and its questions stay in our server's memory for up to an hour, even after your room closes, and another room choosing the same topic can get the same questions. So please don't say anything private as a topic.</p>
                 <p className="fine"><strong>Quick judgments.</strong> Some typed answers, and some of what you say in rooms trying this, go to TypeSafe AI, whose Jev model judges things like whether two answers mean the same. We haven't been able to confirm how long TypeSafe keeps that text or whether it trains on it.</p>
             </footer>
         </main>
