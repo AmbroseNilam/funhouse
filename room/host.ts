@@ -10,7 +10,7 @@
 // lines in order). Holding to talk on any phone interrupts.
 
 import { streamSparkWithBackup, type SparkMessage } from "../providers/meta/spark.ts";
-import type { SpeechVoice } from "../providers/openai/speech.ts";
+import type { SpeechVoice } from "../providers/speech.ts";
 import { HOST_NAME } from "../shared/brand.ts";
 import { isHostMood, type HostMood } from "../shared/hostMood.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
@@ -29,7 +29,7 @@ export interface HostPersona {
 /** The placeholder persona. */
 export const PLACEHOLDER_PERSONA: HostPersona = {
     name: HOST_NAME,
-    voice: "ash",
+    voice: "usual",
     style: "Relaxed friend at a kitchen table: unhurried, a slight smile in the voice, no announcer energy.",
     character: [
         `You are ${HOST_NAME}, hosting game night in someone's living room. You're a small brass lantern on the table, and you can joke about that, but don't dwell on it.`,

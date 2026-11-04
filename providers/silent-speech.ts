@@ -1,8 +1,9 @@
-// A voice that makes no sound and no provider calls, for the text-only test mode. It streams a
-// short burst of silence for each line, so everything downstream runs as it would for speech.
+// A voice that makes no sound and no provider calls: what a room has with no ElevenLabs key or when a
+// line can't start, and the text-only test mode. It streams a short burst of silence for each line,
+// so everything downstream runs as it would for speech, and the captions carry the words.
 
 import { charge, PRICES } from "./meter.ts";
-import type { SpeechRequest, TextToSpeech } from "./openai/speech.ts";
+import type { SpeechRequest, TextToSpeech } from "./speech.ts";
 
 /** One 100 ms chunk of 24 kHz 16-bit mono silence. */
 const SILENCE: Uint8Array = new Uint8Array(4800);

@@ -22,8 +22,7 @@ import { kindByRule, mergeAnswers, utteranceKind, voiceCommand, type UtteranceKi
 import { commandByKeywords, DESTRUCTIVE_COMMANDS, type VoiceCommand } from "./voice-commands.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech, WARM_SPEECH_VOICE } from "../providers/elevenlabs/speech.ts";
-import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
-import { OpenAiSpeech, type SpeechVoice } from "../providers/openai/speech.ts";
+import type { SpeechVoice } from "../providers/speech.ts";
 import { SilentSpeech } from "../providers/silent-speech.ts";
 import type { InstalledGame } from "../cartridges/index.ts";
 import { groundedContent } from "./grounded-content.ts";
@@ -198,14 +197,14 @@ async function nicknameIsFit(name: string): Promise<boolean> {
 const NAME_CHARACTER_LIMIT: number = 24;
 
 /**
- * Picks the host's voice: silent in the test mode, ElevenLabs where its key is set, otherwise OpenAI's.
+ * Picks the host's voice: ElevenLabs where its key is set, otherwise silence, with captions carrying the words.
  * @returns the voice.
  */
-function chooseVoice(): OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech {
-    if (TEXT_ONLY === true) {
+function chooseVoice(): SilentSpeech | ElevenLabsSpeech {
+    if (TEXT_ONLY === true || (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() === "") {
         return new SilentSpeech();
     }
-    return (process.env[ELEVENLABS_KEY_VARIABLE] ?? "").trim() !== "" ? new ElevenLabsSpeech(new OpenAiSpeech()) : new OpenAiRealtimeSpeech();
+    return new ElevenLabsSpeech(new SilentSpeech());
 }
 
 /** Every filler, rendered once per room. */
@@ -452,7 +451,7 @@ export class Room implements HostStage, AgentHost {
     private readonly voice: HostVoice;
     private hostVoiceChoice: HostVoiceChoice = "current";
     private lastGamePick: string = "";
-    private readonly speech: OpenAiRealtimeSpeech | SilentSpeech | ElevenLabsSpeech = chooseVoice();
+    private readonly speech: SilentSpeech | ElevenLabsSpeech = chooseVoice();
     private woken: boolean = false;
     private game: RunningGame | null = null;
     private readonly shell: Shell;

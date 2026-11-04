@@ -4,7 +4,7 @@
 // join the same queue with no fetch at all. Stopping drops everything queued and in flight.
 // Owned by the room; single-threaded like the rest of the room.
 
-import type { SpeechVoice, TextToSpeech } from "../providers/openai/speech.ts";
+import type { SpeechVoice, TextToSpeech } from "../providers/speech.ts";
 import { log } from "./log.ts";
 
 /** Where the voice sends audio. The room fans it out to its screens. */

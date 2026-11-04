@@ -1,10 +1,10 @@
 // The host's voice from ElevenLabs, as raw 24 kHz PCM so the screen can play it as it arrives. If a
 // line can't start, for example when the account is busy or out of credit, that line falls back to
-// another voice so the game never goes quiet. This model takes no delivery direction, so a line's
+// silence: its caption still shows and the game goes on. This model takes no delivery direction, so a line's
 // style isn't used here; moods still show on the lantern.
 
 import { charge, PRICES } from "../meter.ts";
-import type { SpeechRequest, SpeechVoice, TextToSpeech } from "../openai/speech.ts";
+import type { SpeechRequest, SpeechVoice, TextToSpeech } from "../speech.ts";
 
 /** Environment variable holding the ElevenLabs key. */
 export const ELEVENLABS_KEY_VARIABLE: string = "ELEVENLABS_API_KEY";
@@ -18,8 +18,8 @@ const VOICE_ID: string = "JBFqnCBsd6RMkjVDRZzb";
 /** Lily, the warm British female stock voice a room can choose instead, close to the usual voice in accent. */
 const WARM_VOICE_ID: string = "pFZP5JQG7iQjIQuC4Bku";
 
-/** The OpenAI voice that asks for the warm one, and that stands in for it if a line falls back. */
-export const WARM_SPEECH_VOICE: SpeechVoice = "coral";
+/** The name a room uses to ask for the warm voice. */
+export const WARM_SPEECH_VOICE: SpeechVoice = "warm";
 
 /** Longest wait for a line to finish. */
 const LINE_TIME_LIMIT_MILLISECONDS: number = 30000;
@@ -31,7 +31,7 @@ export class ElevenLabsSpeech implements TextToSpeech {
 
     /**
      * Creates the voice.
-     * @param fallback speaks any line this one can't start.
+     * @param fallback takes any line this one can't start.
      */
     public constructor(fallback: TextToSpeech) {
         this.fallback = fallback;
@@ -78,7 +78,6 @@ export class ElevenLabsSpeech implements TextToSpeech {
      */
     private async open(request: SpeechRequest): Promise<ReadableStream<Uint8Array> | null> {
         const limit: AbortSignal = AbortSignal.timeout(LINE_TIME_LIMIT_MILLISECONDS);
-        charge("voice", request.text.length * PRICES.voicePerCharacter);
         try {
             const response: Response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${request.voice === WARM_SPEECH_VOICE ? WARM_VOICE_ID : VOICE_ID}/stream?output_format=pcm_24000`, {
                 method: "POST",
@@ -90,6 +89,7 @@ export class ElevenLabsSpeech implements TextToSpeech {
                 console.warn(`elevenlabs voice refused a line: ${response.status}`);
                 return null;
             }
+            charge("voice", request.text.length * PRICES.voicePerCharacter);
             return response.body;
         } catch {
             return null;
