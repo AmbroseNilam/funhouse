@@ -21,6 +21,7 @@ export type SceneBlock =
     | { type: "tally"; title: string; rows: TallyRow[] }
     | { type: "progress"; label: string; current: number; max: number; marks?: "door" | "card" }
     | { type: "board"; columns: number; cells: BoardCell[] }
+    | { type: "choices"; options: string[] }
     | { type: "moment"; kind: "night" | "dawn" | "out" | "shot" | "calm"; heading: string; detail?: string }
     | { type: "caption"; speaker: string; text: string; final: boolean };
 

@@ -10,7 +10,7 @@ import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
-import { isHostSafe } from "../../studio/kit/text.ts";
+import { isHostSafe, shuffled } from "../../studio/kit/text.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 
 /** Questions in one game. */
@@ -27,6 +27,15 @@ const ANSWER_GRACE_SECONDS: number = 6;
 
 /** Words that don't count when checking whether a question holds its own answer. */
 const ANSWER_FILLER_WORDS: string[] = ["a", "an", "the", "of"];
+
+/** What a tapped answer's action starts with; the rest is its place on screen, which says nothing about which is right. */
+const ANSWER_ACTION: string = "answer:";
+
+/** How the answers are labelled, on the TV and the phones. */
+const LETTERS: string[] = ["A", "B", "C", "D"];
+
+/** Wrong answers shown beside the right one. */
+const WRONG_ANSWERS: number = 3;
 
 /** Points for a right answer. */
 const RIGHT_POINTS: number = 2;
@@ -46,16 +55,20 @@ export interface QuizQuestion {
     answer: string;
     /** The site it was checked against, when web search found one. */
     source?: string;
+    /** Three wrong answers of the same kind, before they're mixed in. */
+    wrong?: string[];
+    /** The answer and the wrong ones in the order they're shown. Without them it's answered out loud only. */
+    choices?: string[];
 }
 
 /** Original general-knowledge questions used when the model can't supply any. */
 export const FALLBACK_QUESTIONS: QuizQuestion[] = [
-    { question: "Which planet in our solar system is known for its bright rings?", answer: "Saturn" },
-    { question: "What is the largest ocean on Earth?", answer: "The Pacific Ocean" },
-    { question: "How many sides does a hexagon have?", answer: "Six" },
-    { question: "Which animal is the tallest in the world?", answer: "The giraffe" },
-    { question: "What do bees collect from flowers to make honey?", answer: "Nectar" },
-    { question: "In which country would you find the city of Kyoto?", answer: "Japan" },
+    { question: "Which planet in our solar system is known for its bright rings?", answer: "Saturn", wrong: ["Jupiter", "Neptune", "Uranus"] },
+    { question: "What is the largest ocean on Earth?", answer: "The Pacific Ocean", wrong: ["The Atlantic Ocean", "The Indian Ocean", "The Arctic Ocean"] },
+    { question: "How many sides does a hexagon have?", answer: "Six", wrong: ["Five", "Seven", "Eight"] },
+    { question: "Which animal is the tallest in the world?", answer: "The giraffe", wrong: ["The elephant", "The ostrich", "The moose"] },
+    { question: "What do bees collect from flowers to make honey?", answer: "Nectar", wrong: ["Pollen", "Sap", "Dew"] },
+    { question: "In which country would you find the city of Kyoto?", answer: "Japan", wrong: ["China", "South Korea", "Vietnam"] },
 ];
 
 /** The whole game, immutable between steps. */
@@ -78,6 +91,8 @@ export interface QuizmasterState {
     /** The answer to the question before the current one, shown once it has been revealed. */
     lastAnswer: string;
     lastSource: string;
+    /** Who has got the current question right, when it's multiple choice and waits for everyone. */
+    rightNow: string[];
 }
 
 /**
@@ -85,7 +100,7 @@ export interface QuizmasterState {
  * @param text whatever the model wrote, ideally a JSON array.
  * @returns the usable questions found, possibly none.
  */
-export function parseQuestions(text: string, sources: string[] = []): QuizQuestion[] {
+export function parseQuestions(text: string, sources: string[] = [], random?: () => number): QuizQuestion[] {
     const start: number = text.indexOf("[");
     const end: number = text.lastIndexOf("]");
     if (start === -1 || end <= start) {
@@ -102,15 +117,35 @@ export function parseQuestions(text: string, sources: string[] = []): QuizQuesti
     }
     const found: QuizQuestion[] = [];
     for (const item of parsed as unknown[]) {
-        const entry: { question?: unknown; answer?: unknown; source?: unknown } = typeof item === "object" && item !== null ? item : {};
+        const entry: { question?: unknown; answer?: unknown; source?: unknown; wrong?: unknown } = typeof item === "object" && item !== null ? item : {};
         const question: string = typeof entry.question === "string" ? entry.question.trim() : "";
         const answer: string = typeof entry.answer === "string" ? entry.answer.trim() : "";
         if (isHostSafe(question, TEXT_CHARACTER_LIMIT) === true && isHostSafe(answer, TEXT_CHARACTER_LIMIT) === true) {
             const source: string = typeof entry.source === "string" ? sourceName(entry.source, sources) : "";
-            found.push({ question, answer, ...(source === "" ? {} : { source }) });
+            const wrong: string[] = Array.isArray(entry.wrong) === true ? (entry.wrong as unknown[]).flatMap((option: unknown) => (typeof option === "string" ? [option.trim()] : [])) : [];
+            if (random !== undefined && fairChoices(answer, wrong) === false) {
+                continue;
+            }
+            found.push({ question, answer, ...(source === "" ? {} : { source }), ...(random === undefined ? {} : { wrong, choices: shuffled([answer, ...wrong], random) }) });
         }
     }
     return found.filter((question: QuizQuestion) => givesItAway(question) === false).slice(0, QUESTION_COUNT);
+}
+
+/**
+ * Whether a question's wrong answers can stand beside the right one: three of them, all different,
+ * fit to show, and the right answer not given away by being far longer than the rest.
+ * @param answer the right answer.
+ * @param wrong the wrong answers.
+ * @returns true when they'll do.
+ */
+export function fairChoices(answer: string, wrong: string[]): boolean {
+    const plain: string[] = [answer, ...wrong].map((option: string) => option.toLowerCase().replace(/^the\s+/, "").trim());
+    const longestWrong: number = Math.max(0, ...wrong.map((option: string) => option.length));
+    return wrong.length === WRONG_ANSWERS
+        && new Set(plain).size === plain.length
+        && wrong.every((option: string) => isHostSafe(option, TEXT_CHARACTER_LIMIT) === true)
+        && answer.length <= longestWrong * 2 + 4;
 }
 
 /**
@@ -129,10 +164,12 @@ export function givesItAway(question: QuizQuestion): boolean {
 /**
  * Fills a short list of questions up to a full game from the built-in bank.
  * @param questions the questions the model supplied.
+ * @param random for mixing answers, when the questions are multiple choice.
  * @returns exactly QUESTION_COUNT questions.
  */
-function completeQuestions(questions: QuizQuestion[]): QuizQuestion[] {
-    return [...questions, ...FALLBACK_QUESTIONS].slice(0, QUESTION_COUNT);
+function completeQuestions(questions: QuizQuestion[], random?: () => number): QuizQuestion[] {
+    const bank: QuizQuestion[] = FALLBACK_QUESTIONS.map((entry: QuizQuestion) => (random === undefined ? { question: entry.question, answer: entry.answer } : { ...entry, choices: shuffled([entry.answer, ...(entry.wrong ?? [])], random) }));
+    return [...questions, ...bank].slice(0, QUESTION_COUNT);
 }
 
 /** Topics offered before a game. Nothing here needs a specialist or starts an argument. */
@@ -157,10 +194,12 @@ export const QUIZMASTER_PICK: StartPick = {
 /**
  * Builds the Quizmaster cartridge.
  * @param chosen what was chosen before the game, if anything; without it the room is asked for a topic.
- * @param random a function returning [0, 1), for a surprise topic.
+ * @param random a function returning [0, 1), for a surprise topic and for mixing answers.
+ * @param multipleChoice false for answers out loud only, as the game was first.
  * @returns the cartridge.
  */
-export function createQuizmaster(chosen?: string, random: () => number = Math.random): Cartridge<QuizmasterState> {
+export function createQuizmaster(chosen?: string, random: () => number = Math.random, multipleChoice: boolean = true): Cartridge<QuizmasterState> {
+    const mixing: (() => number) | undefined = multipleChoice === true ? random : undefined;
     const publicFact = (kind: string, text: string): ScopedFact => ({ scope: { kind: "public" }, kind, text });
     const nameOf = (state: QuizmasterState, playerId: string): string => state.players.find((player) => player.playerId === playerId)?.name ?? "Someone";
     const scoreOf = (state: QuizmasterState, playerId: string): number => state.scores[playerId] ?? 0;
@@ -176,11 +215,16 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
             "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
             "Only use facts you are sure of, and don't put the answer in the question.",
-            "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field, plus a \"source\" field with the address of the page it came from if you looked it up.",
+            ...(multipleChoice === true ? [
+                "Four answers will be on screen, so aim for two easy, three medium and one hard, none so easy the wrong answers look silly, and no clue in the question that points straight at the answer.",
+                "Avoid claims like \"the only\" or \"the first\" unless they're beyond doubt.",
+                "Give three wrong answers of the same kind and about the same length as the right one, each believable to someone who isn't sure. No jokes, no \"all of the above\".",
+            ] : []),
+            `Reply with only a JSON array of objects, each with a "question" field and an "answer" field,${multipleChoice === true ? ' a "wrong" field with an array of the three wrong answers,' : ""} plus a "source" field with the address of the page it came from if you looked it up.`,
         ].join(" ");
         const next: QuizmasterState = { ...state, phase: "preparing", topic };
         const fact: ScopedFact = publicFact("preparing", `The topic is ${topic}. Say you are writing the questions now, in one short line.`);
-        return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text).length >= QUESTION_COUNT, cacheable: true } };
+        return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text, [], mixing).length >= QUESTION_COUNT, cacheable: true } };
     };
 
     /**
@@ -190,7 +234,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      */
     const readInstruction = (state: QuizmasterState): string => {
         const total: number = state.questions.length;
-        return `Read question ${state.index + 1} of ${total} exactly as written, word for word: "${state.questions[state.index]?.question ?? ""}"`;
+        const on: string[] = state.questions[state.index]?.choices ?? [];
+        const listed: string = on.length === 0 ? "" : ` Don't read the answers out; they're on screen as ${on.map((option: string, index: number) => `${LETTERS[index] ?? ""} ${option}`).join(", ")}, in no special order. People may tap one or say it, so "B" means that answer.`;
+        return `Read question ${state.index + 1} of ${total} exactly as written, word for word: "${state.questions[state.index]?.question ?? ""}"${listed}`;
     };
 
     /**
@@ -224,7 +270,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
     const endLine = (state: QuizmasterState): string => {
         const top: number = Math.max(0, ...state.players.map((player: CartridgePlayer) => scoreOf(state, player.playerId)));
         const scored: string = top === 0 ? "" : `${top} out of ${state.questions.length * RIGHT_POINTS}. `;
-        return `${scored}${RIGHT_POINTS} points for a right answer, ${CLOSE_POINTS} for a close one.`;
+        return multipleChoice === true ? `${scored}${RIGHT_POINTS} points for each right answer.` : `${scored}${RIGHT_POINTS} points for a right answer, ${CLOSE_POINTS} for a close one.`;
     };
 
     /**
@@ -236,17 +282,18 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
     const advance = (state: QuizmasterState, why: string): Step<QuizmasterState> => {
         const answer: string = state.questions[state.index]?.answer ?? "";
         const source: string = state.questions[state.index]?.source ?? "";
-        const reveal: string = `${why} The answer to that question was: ${answer}. Tell them the answer.`;
+        const credit: string = state.questions[state.index]?.choices === undefined ? "" : state.rightNow.length === 0 ? " Nobody got it." : ` ${state.rightNow.join(" and ")} got it right.`;
+        const reveal: string = `${why}${credit} The answer to that question was: ${answer}. Tell them the answer.`;
         const nextIndex: number = state.index + 1;
         if (nextIndex >= state.questions.length || state.players.length === 0) {
-            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source };
+            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source, rightNow: [] };
             const board: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
             const winners: string = leaders(finished).map((player) => player.name).join(" and ");
             const verdict: string = winners === "" ? "Nobody scored." : `Winner: ${winners}.`;
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source, rightNow: [] };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
@@ -274,20 +321,21 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             scores: points === 0 ? state.scores : { ...state.scores, [playerId]: scoreOf(state, playerId) + points },
         };
         const name: string = nameOf(state, playerId);
-        if (ruling === "right") {
+        if (ruling === "right" && state.questions[state.index]?.choices === undefined) {
             return advance(next, `${name} got it right.`);
         }
-        if (state.players.every((player) => next.answered.includes(player.playerId)) === true) {
-            return advance(next, "Everyone has answered.");
+        const counted: QuizmasterState = ruling === "right" ? { ...next, rightNow: [...next.rightNow, name] } : next;
+        if (state.players.every((player) => counted.answered.includes(player.playerId)) === true) {
+            return advance(counted, "Everyone has answered.");
         }
-        return { state: next, facts: [] };
+        return { state: counted, facts: [] };
     };
 
     return {
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "" };
+            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
@@ -313,9 +361,17 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             return state.phase === "question" ? [{ actionId: "skip", label: "Skip this question" }, { actionId: "changeTopic", label: "Change the topic" }] : [];
         },
 
-        apply(state: QuizmasterState, _playerId: string, actionId: string): Step<QuizmasterState> {
+        apply(state: QuizmasterState, playerId: string, actionId: string): Step<QuizmasterState> {
+            if (state.phase === "question" && actionId.startsWith(ANSWER_ACTION) === true) {
+                const question: QuizQuestion | undefined = state.questions[state.index];
+                const tapped: string | undefined = question?.choices?.[Number(actionId.slice(ANSWER_ACTION.length))];
+                if (tapped === undefined || state.answered.includes(playerId) === true) {
+                    return { state, facts: [] };
+                }
+                return score({ ...state, heard: [...state.heard.filter((candidate: string) => candidate !== playerId), playerId] }, tapped === question?.answer ? "right" : "wrong", playerId);
+            }
             if (state.phase === "question" && actionId === "changeTopic") {
-                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "" };
+                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "", rightNow: [] };
                 return { state: fresh, facts: [publicFact("ask-topic", "They want a new topic. Scores stay. Ask what topic they would like next.")], nextPhaseId: "topic" };
             }
             if (state.phase !== "question" || actionId !== "skip") {
@@ -355,11 +411,11 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: reminder };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
-                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources));
+                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources, mixing), mixing);
                 const next: QuizmasterState = { ...state, phase: "question", questions, index: 0, answered: [], heard: [] };
                 return {
                     state: next,
-                    facts: [publicFact("question", `The questions are ready. Say the quiz is starting, answers are out loud, one try each. Then ${readInstruction(next)}`)],
+                    facts: [publicFact("question", `The questions are ready. Say the quiz is starting, ${multipleChoice === true ? "tap an answer or say it" : "answers are out loud"}, one try each. Then ${readInstruction(next)}`)],
                     nextPhaseId: "question",
                     timers: { "question-0": QUESTION_SECONDS },
                 };
@@ -399,6 +455,21 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 const board: SceneBlock[] = [{ type: "title", text: endHeadline(state), kicker: "Final scores" }, { type: "text", text: endLine(state), emphasis: "large" }, { type: "tally", title: "Scores", rows }, ...last];
                 return { mood: winners.length > 0 ? "victory" : "neutral", transition: "fade", blocks: board };
             }
+            const onScreen: string[] = state.questions[state.index]?.choices ?? [];
+            if (onScreen.length > 0) {
+                // Four answers need the room, so the scores move up beside the topic.
+                const standings: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
+                return {
+                    mood: "neutral",
+                    transition: "fade",
+                    blocks: [
+                        { type: "title", text: state.questions[state.index]?.question ?? "", kicker: `${state.topic} · ${standings}` },
+                        { type: "choices", options: onScreen.map((option: string, index: number) => `${LETTERS[index] ?? ""}. ${option}`) },
+                        ...last,
+                        { type: "progress", label: "Question", current: state.index + 1, max: state.questions.length },
+                    ],
+                };
+            }
             return {
                 mood: "neutral",
                 transition: "fade",
@@ -420,6 +491,11 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             }
             if (state.phase === "end") {
                 return [{ type: "waiting", text: `${endHeadline(state)}. ${endLine(state)}` }];
+            }
+            const onScreen: string[] = state.questions[state.index]?.choices ?? [];
+            const seated: boolean = state.players.some((player) => player.playerId === playerId);
+            if (onScreen.length > 0 && seated === true && state.answered.includes(playerId) === false) {
+                return [{ type: "choice", prompt: "Tap your answer, or say it", multiple: false, options: onScreen.map((option: string, index: number) => ({ id: `${ANSWER_ACTION}${index}`, label: `${LETTERS[index] ?? ""}. ${option}` })) }];
             }
             const line: string = state.answered.includes(playerId) === true ? "Your answer's in" : "Answer out loud. One try.";
             return [{ type: "waiting", text: line }];

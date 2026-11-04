@@ -221,6 +221,8 @@
     .pick-boxes li.focused { background: var(--paper); color: var(--paper-ink); transform: translateY(calc(-8 * var(--u))) rotate(-1deg); }
     .start-card { position: absolute; left: calc(80 * var(--u)); right: calc(80 * var(--u)); top: calc(250 * var(--u)); margin: 0; font-size: calc(56 * var(--u)); line-height: 1.3; }
     .start-note { position: absolute; left: calc(80 * var(--u)); top: calc(660 * var(--u)); margin: 0; color: var(--paper); font-size: calc(36 * var(--u)); }
+    .answer-choices { display: grid; grid-template-columns: 1fr 1fr; gap: calc(14 * var(--u)); width: calc(1300 * var(--u)); margin: calc(14 * var(--u)) 0; padding: 0; list-style: none; }
+    .answer-choices li { padding: calc(10 * var(--u)) calc(20 * var(--u)); background: var(--paper); color: var(--paper-ink); font-size: calc(38 * var(--u)); font-weight: 600; line-height: 1.15; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .corner-tag { position: absolute; right: calc(80 * var(--u)); top: calc(50 * var(--u)); text-align: right; }
     .corner-tag strong { display: block; font-size: calc(44 * var(--u)); font-weight: 600; letter-spacing: 0.08em; line-height: 1.1; }
     .corner-tag small { color: var(--paper); font-size: calc(28 * var(--u)); }

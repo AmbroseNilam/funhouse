@@ -166,6 +166,9 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
             </div>
         );
     }
+    if (block.type === "choices") {
+        return <ol key={index} className="answer-choices">{block.options.map((option: string) => <li key={option}>{option}</li>)}</ol>;
+    }
     if (block.type === "board") {
         return (
             <ul key={index} className="board" style={{ gridTemplateColumns: `repeat(${block.columns}, 1fr)` }}>

@@ -12,6 +12,9 @@ import { createTwentyDoors, TWENTY_DOORS_PICK } from "./twenty-doors/rules.ts";
 import { WEREWOLF_MANIFEST } from "./werewolf/manifest.ts";
 import { createWerewolf } from "./werewolf/rules.ts";
 
+/** False when the server is started with QUIZ_OPEN_ANSWERS=1: Quizmaster goes back to answers out loud only. */
+const QUIZ_MULTIPLE_CHOICE: boolean = process.env.QUIZ_OPEN_ANSWERS !== "1";
+
 /** One installed game. */
 export interface InstalledGame {
     manifest: CartridgeManifest;
@@ -58,8 +61,10 @@ export const GAMES: InstalledGame[] = [
         pauseActions: [{ id: "skip", label: "Skip this question" }],
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],
         startPick: QUIZMASTER_PICK,
-        startCard: ["Six questions, read out loud.", "Everyone answers out loud. One try each.", "Two points if you're right, one if you're close."],
-        create: (stage: GameStage, pick?: string) => new GameSession(createQuizmaster(pick), stage),
+        startCard: QUIZ_MULTIPLE_CHOICE === true
+            ? ["Six questions, with four answers on screen.", "Tap your answer on your phone, or say it. One try each.", "Two points for a right answer."]
+            : ["Six questions, read out loud.", "Everyone answers out loud. One try each.", "Two points if you're right, one if you're close."],
+        create: (stage: GameStage, pick?: string) => new GameSession(createQuizmaster(pick, Math.random, QUIZ_MULTIPLE_CHOICE), stage),
     },
     {
         manifest: WEREWOLF_MANIFEST,
