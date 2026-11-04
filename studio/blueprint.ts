@@ -7,6 +7,7 @@ import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createEstimateGame, estimateBlueprintProblems, type EstimateDecisions } from "./kits/estimate.ts";
 import { createGateGame, gateBlueprintProblems, type GateDecisions } from "./kits/gate.ts";
+import { createLineGame, lineBlueprintProblems, type LineDecisions } from "./kits/line.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -38,8 +39,15 @@ export interface EstimateBlueprint {
     decisions: EstimateDecisions;
 }
 
+/** A line game: a row of dated cards, a new card each round, and a pick of which gap it goes in. */
+export interface LineBlueprint {
+    kit: "line";
+    box: Box;
+    decisions: LineDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | GateBlueprint | EstimateBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -63,6 +71,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "estimate") {
         return estimateBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "line") {
+        return lineBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -82,6 +93,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "estimate") {
         return erase(createEstimateGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "line") {
+        return erase(createLineGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }

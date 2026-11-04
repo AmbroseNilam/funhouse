@@ -7,9 +7,10 @@ import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createEstimateGame, type EstimateState } from "./kits/estimate.ts";
 import { createGateGame, type GateState } from "./kits/gate.ts";
+import { createLineGame, type LineState } from "./kits/line.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { estimatePersonas, gatePersonas, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { estimatePersonas, gatePersonas, guessingPersonas, linePersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -33,6 +34,10 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "estimate") {
         const makeEstimate = (seed: number): KitGame<EstimateState> => createEstimateGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makeEstimate, estimatePersonas(blueprint.decisions), CHECK_SEEDS, options);
+    }
+    if (blueprint.kit === "line") {
+        const makeLine = (seed: number): KitGame<LineState> => createLineGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearseMany(makeLine, linePersonas(blueprint.decisions), CHECK_SEEDS, options);
     }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
