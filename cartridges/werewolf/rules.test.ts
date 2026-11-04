@@ -53,7 +53,7 @@ function toFirstNight(game: Cartridge<WerewolfState>, count: number, setup: stri
     for (const special of setup) {
         state = game.apply(state, "p1", `setup:${special}`).state;
     }
-    state = game.apply(state, "p1", setup.length > 0 ? "setup:go" : "setup:host").state;
+    state = game.apply(state, "p1", "setup:go").state;
     assert.equal(state.phase, "intro");
     for (const seat of state.seats) {
         state = game.apply(state, seat.playerId, "gotIt").state;
@@ -150,7 +150,7 @@ describe("werewolf pick step", () => {
         const start: Step<WerewolfState> = game.init(TABLE.slice(0, 5), VARIANTS);
         assert.equal(start.state.phase, "pick");
         assert.equal(start.timers?.pick, 15);
-        assert.deepEqual(game.legalActions(start.state, "p1").map((action) => action.label), ["Let Marlowe decide"]);
+        assert.deepEqual(game.legalActions(start.state, "p1").map((action) => action.label), ["Start with these"]);
         const dealt: Step<WerewolfState> = fire(game, start.state, "pick");
         assert.equal(dealt.state.phase, "intro");
         assert.equal(dealt.state.seats.filter((seat) => seat.role === "werewolf").length, 1);
@@ -164,6 +164,9 @@ describe("werewolf pick step", () => {
         const toggled: Step<WerewolfState> = game.apply(start, "p2", "setup:doctor");
         assert.equal(toggled.timers?.pick, 15);
         assert.ok(game.legalActions(toggled.state, "p2").some((action) => action.label === "Doctor: in"));
+        const undone: Step<WerewolfState> = game.apply(toggled.state, "p2", "setup:host");
+        assert.equal(undone.state.phase, "pick", "going back to the host's pick doesn't start the game");
+        assert.equal(undone.state.setup.doctor, false);
         const dealt: WerewolfState = game.apply(toggled.state, "p3", "setup:go").state;
         assert.equal(dealt.seats.filter((seat) => seat.role === "doctor").length, 1);
         assert.equal(dealt.seats.filter((seat) => seat.role === "hunter").length, 0);
@@ -181,7 +184,7 @@ describe("werewolf pick step", () => {
 describe("werewolf intro and role card", () => {
     it("shows the rules and Got it on every phone, then each player's own role, face up then hidden", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        let state: WerewolfState = game.apply(game.init(TABLE.slice(0, 5), VARIANTS).state, "p1", "setup:host").state;
+        let state: WerewolfState = game.apply(game.init(TABLE.slice(0, 5), VARIANTS).state, "p1", "setup:go").state;
         for (const seat of state.seats) {
             const controls = game.privateControls(state, seat.playerId);
             assert.ok(controls.some((control) => control.type === "roleCard" && control.title === "How it works" && control.secret === false));
@@ -339,6 +342,44 @@ describe("werewolf for the eliminated", () => {
     });
 });
 
+describe("werewolf phone screens", () => {
+    it("asks one question on the pick step, with one big action and no leftover hint", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const start: WerewolfState = game.init(TABLE.slice(0, 4), VARIANTS).state;
+        const controls = game.privateControls(start, "p1");
+        assert.equal(controls.some((control) => control.type === "waiting"), false);
+        const card = controls[0];
+        assert.ok(card?.type === "roleCard" && card.title === "Play this village?");
+        assert.deepEqual(card.lines, ["1 werewolf", "1 seer", "2 villagers"]);
+        const last = controls.at(-1);
+        assert.ok(last?.type === "buttons" && last.options.length === 1 && last.options[0]?.style === "primary");
+        assert.equal(game.turn?.(start)?.kind, "anyone");
+    });
+
+    it("marks what a player chose, and only on their own phone", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 6);
+        const wolf: string = holder(night, "werewolf");
+        const villager: string = holder(night, "villager");
+        const chosen: WerewolfState = game.apply(night, wolf, `kill:${villager}`).state;
+        const choice = game.privateControls(chosen, wolf).find((control) => control.type === "choice");
+        assert.ok(choice?.type === "choice" && choice.options.some((option) => option.selected === true && option.id === `kill:${villager}`));
+        assert.equal(JSON.stringify(game.privateControls(chosen, villager)).includes("You chose"), false);
+    });
+
+    it("tells every phone who won and every role at the end, but not before", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 5);
+        const wolf: string = holder(night, "werewolf");
+        const seer: string = holder(night, "seer");
+        const vote: WerewolfState = toVote(game, playNight(game, night, holder(night, "villager")).state);
+        assert.equal(JSON.stringify(game.privateControls(vote, seer)).includes(": werewolf"), false);
+        const voted: WerewolfState = playVote(game, vote, (voter) => (voter === wolf ? seer : wolf)).state;
+        const card = game.privateControls(voted, seer)[0];
+        assert.ok(card?.type === "roleCard" && card.title === "The village wins" && card.lines?.some((line) => line.endsWith(": werewolf")) === true);
+    });
+});
+
 describe("werewolf when someone leaves", () => {
     it("waits for the hunter's shot before calling a winner", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
@@ -424,7 +465,7 @@ describe("werewolf leak checks", () => {
 
     it("gives the pack's fact to the pack and nobody else", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
-        const dealt: Step<WerewolfState> = game.apply(game.init(TABLE.slice(0, 7), VARIANTS).state, "p1", "setup:host");
+        const dealt: Step<WerewolfState> = game.apply(game.init(TABLE.slice(0, 7), VARIANTS).state, "p1", "setup:go");
         const pack = dealt.facts.find((fact) => fact.kind === "pack");
         assert.ok(pack !== undefined);
         for (const seat of dealt.state.seats) {

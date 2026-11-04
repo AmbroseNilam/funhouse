@@ -298,7 +298,7 @@ interface AgentState {
 function phoneLines(view: PhoneView | null): string[] {
     return (view?.controls ?? []).flatMap((control): string[] => {
         if (control.type === "roleCard") {
-            return [`${control.title}: ${control.body}`];
+            return [`${control.title}: ${control.body}`, ...(control.lines ?? [])];
         }
         return control.type === "notice" || control.type === "waiting" ? [control.text] : [];
     });
