@@ -6,6 +6,7 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
+import { createHandGame, handBlueprintProblems, type HandDecisions } from "./kits/hand.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -22,8 +23,15 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** A hand game: dealt cards on phones, a rotating judge, a prompt with a gap. */
+export interface HandBlueprint {
+    kit: "hand";
+    box: Box;
+    decisions: HandDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | HandBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -41,6 +49,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "guessing") {
         return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "hand") {
+        return handBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -54,6 +65,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
 export function createKitGame(blueprint: Blueprint, random: () => number = Math.random): AnyKitGame {
     if (blueprint.kit === "guessing") {
         return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "hand") {
+        return erase(createHandGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
