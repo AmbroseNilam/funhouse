@@ -280,7 +280,9 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 const seated: boolean = state.players.some((player) => player.playerId === event.playerId);
                 const eligible: boolean = state.phase === "question" && seated === true && state.answered.includes(event.playerId) === false;
                 const speaking: string[] = state.speaking.filter((playerId: string) => playerId !== event.playerId);
-                return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: [] };
+                const secondTry: boolean = state.phase === "question" && seated === true && state.answered.includes(event.playerId) === true;
+                const reminder: ScopedFact[] = secondTry === true ? [publicFact("second-try", "That player has already answered this question, so anything more from them doesn't count. If they just gave another answer, say in a few words that it's one try each, and don't say whether it's right. If it was only chat, treat it as chat.")] : [];
+                return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: reminder };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
                 const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources));

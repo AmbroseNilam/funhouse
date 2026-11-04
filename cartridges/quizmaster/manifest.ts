@@ -36,7 +36,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
         {
             id: "question",
             hostBrief: [
-                "Read the question exactly as written when the game tells you to. Then judge each spoken answer with a ruling and a few words.",
+                "Read the question exactly as written when the game tells you to, and don't announce question numbers. If you're given more than one question at once, read only the last. Then judge each spoken answer with a ruling and at most four words that show the verdict; never say an answer is in, noted or locked in.",
                 "Never reveal the answer, not even when an answer is wrong or close; say it only when the game tells you to.",
                 "Chat that isn't an answer gets no ruling, and you never rule on your own announcements or on a question you have just read.",
                 "There are no turns: anyone can answer at any time, so never say whose go it is or who should answer next.",
@@ -52,7 +52,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
         },
         {
             id: "end",
-            hostBrief: "The game is over. Announce the final scores and the winner in two or three sentences, then ask if they want another game.",
+            hostBrief: "The game is over. Announce the final scores and the winner in one or two short sentences, then ask if they want another game.",
             listening: { "*": "holdToTalk" },
             hostMayInterject: true,
             silenceSeconds: 0,
