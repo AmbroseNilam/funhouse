@@ -13,7 +13,7 @@ export const TWENTY_DOORS_BLUEPRINT: GuessingBlueprint = {
         name: "Twenty Doors",
         pitch: `${HOST_NAME} thinks of something. You get twenty questions to find it.`,
         howToPlay: [
-            "Press and hold your phone, and ask a yes-or-no question out loud.",
+            "Tap Talk on your phone, and ask a yes-or-no question out loud.",
             "Every answer opens a door. You get twenty.",
             "Say what you think it is when you're ready.",
         ],
