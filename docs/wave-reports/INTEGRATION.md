@@ -74,3 +74,12 @@ not confirmed.
 until a run against the real picture model (cost and latency) and the real classifier clears them; delete the
 game's line to put it on. Start the room with `STUDIO_SHOW_HELD=1` to see them anyway (the scenarios need it).
 Any new game that passes goes here until a human or real-host run clears it, except tap-only games.
+
+## Real-key runs (Application, at 22fe2ec)
+
+- Painted Whispers: passed; 4 pictures, 8.8 to 21.7 s each, about $0.04 a game.
+- Clue Gallery: passed; 20 pictures, 7.6 to 24.4 s (median about 17 s), about $0.20 a game (listed $0.01 per
+  image; bill not checked). The room's cap of 40 pictures covers only two Clue Gallery games. A failed picture
+  was not exercised (none failed).
+- Two Takes: did not pass at 22fe2ec because of two scenario faults (a race in the refused-line step and a
+  literal "Answer A:" the real host does not say). Both fixed at 299a97e; one more real-key run pending.
