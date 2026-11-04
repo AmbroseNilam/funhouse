@@ -20,6 +20,7 @@
 
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
+import { tooClose } from "../../studio/kit/words.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** One fake player. */
@@ -31,8 +32,8 @@ interface Seat {
 /** The names the fake players use. */
 const NAMES: string[] = ["Teacup", "Spoon", "Candle", "Saucer", "Matchbox"];
 
-/** Words the table says about a kettle, none of them close to it. */
-const WORDS: string[] = ["steam", "whistle", "handle", "boil", "spout", "copper", "tea", "hot", "lid", "stove"];
+/** Words the table says. The secret isn't known in advance, so any too close to it are dropped once it is. */
+const WORDS: string[] = ["steam", "whistle", "handle", "boil", "spout", "copper", "tea", "hot", "lid", "stove", "meadow", "button", "ribbon", "lantern", "pepper", "violin", "marble", "anchor"];
 
 /** Milliseconds to let things settle between steps. */
 const SETTLE_MILLISECONDS: number = 900;
@@ -125,6 +126,9 @@ function checkNoLeaks(ended: boolean): void {
 await waitFor(() => headline().text.endsWith("says a word"), "words to open");
 checkNoLeaks(false);
 const seatNamed: Map<string, Seat> = new Map(seats.map((seat: Seat) => [seat.name, seat]));
+const words: string[] = WORDS.filter((candidate: string) => tooClose(candidate, word) === false);
+const nearWord: string = `${(word.toLowerCase().split(" ").at(-1) ?? word).trim()}s`;
+let triedNearWord: boolean = false;
 for (let said = 0; said < 10; said += 1) {
     await waitFor(() => headline().text.endsWith("says a word"), "a turn");
     const upName: string = headline().text.replace(" says a word", "");
@@ -136,10 +140,11 @@ for (let said = 0; said < 10; said += 1) {
     if (headline().text !== `${upName} says a word`) {
         throw new Error("Someone out of turn moved the words on.");
     }
-    if (said === 1 && up !== stray) {
-        up.phone.say("kettles");
+    if (triedNearWord === false && up !== stray) {
+        triedNearWord = true;
+        up.phone.say(nearWord);
         await pause(SETTLE_MILLISECONDS);
-        if (headline().text !== `${upName} says a word` || tvText().toLowerCase().includes("kettles") === true) {
+        if (headline().text !== `${upName} says a word` || tvText().toLowerCase().includes(nearWord) === true) {
             throw new Error(`A word too close to the secret was taken, or shown. Headline: ${headline().text}; TV: ${tvText().slice(0, 400)}`);
         }
         if (JSON.stringify(up.phone.view?.controls ?? []).includes("Too close to the secret") === false) {
@@ -153,7 +158,7 @@ for (let said = 0; said < 10; said += 1) {
             throw new Error("Several words were taken as one.");
         }
     }
-    const next: string = WORDS[said] ?? "";
+    const next: string = words[said] ?? "";
     if (said === 3) {
         const box: Control | undefined = up.phone.view?.controls.find((control: Control) => control.type === "textInput");
         if (box?.type !== "textInput") {

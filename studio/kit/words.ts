@@ -118,12 +118,17 @@ export function singleWord(text: string, keepNumbers: boolean = false): string |
 
 /**
  * Whether a clue is the same as a word, or hides one: contains it, is inside it, or shares a long
- * start with it, so "apples" and "applesauce" are both taken for "apple".
+ * start with it, so "apples" and "applesauce" are both taken for "apple". Each part of a word of
+ * several parts counts too, so "curtains" is taken for "shower curtain".
  * @param clue the clue.
  * @param word the word.
  * @returns true when they are too close.
  */
 export function tooClose(clue: string, word: string): boolean {
+    const parts: string[] = word.split(/[\s-]+/);
+    if (parts.length > 1 && parts.some((part: string) => tooClose(clue, part) === true) === true) {
+        return true;
+    }
     const first: string = squash(clue);
     const second: string = squash(word);
     if (first === "" || second === "") {
