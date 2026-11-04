@@ -101,7 +101,7 @@ function sizeOf(cell: BoardCell): number {
  * @returns the sizes the TV showed.
  */
 async function playRound(screen: FakeScreen, seats: Seat[], round: number, script: Round, startedAt: { scenes: number; lines: number; views: number[] }): Promise<void> {
-    await waitFor(() => screen.scene?.blocks.some((block: SceneBlock) => block.type === "progress") === true && (screen.scene?.blocks.find((block: SceneBlock) => block.type === "title")?.type === "title"), `prompt ${round} to open`);
+    await waitFor(() => screen.scene?.blocks.some((block: SceneBlock) => block.type === "progress") === true, `prompt ${round} to open`);
     await waitFor(() => seats.every((seat: Seat) => boxIn(seat.phone.view) !== null), "every phone to show its box");
     for (const [place, card] of script.cards.entries()) {
         const seat: Seat | undefined = seats[place];
