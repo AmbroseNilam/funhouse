@@ -17,6 +17,7 @@ import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessag
 import { isFitForRoom } from "../providers/meta/moderation.ts";
 import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
 import { filterText, type FilterResult } from "./content-filter.ts";
+import { kindByRule, mergeAnswers, utteranceKind, type UtteranceKind } from "./decide.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -100,9 +101,6 @@ const NEUTRAL_REACTIONS: string[] = ["Hm.", "Let's see.", "Okay."];
 
 /** After a question, only thinking sounds; anything else sounds like an answer. */
 const QUESTION_REACTIONS: string[] = ["Hm.", "Let's see."];
-
-/** How a spoken question usually starts, for when the transcript has no question mark. */
-const QUESTION_START: RegExp = /^(who|what|when|where|why|how|which|is|are|am|was|were|do|does|did|can|could|will|would|should|has|have|had)\b/i;
 
 /**
 /** The one game the livelier host is tried in, in rooms opened for it: moods, callbacks, quicker reactions and now and then speaking up. */
@@ -384,6 +382,8 @@ export class Room implements HostStage {
     private readonly acknowledgements: Uint8Array[] = [];
     /** Indexes of the latest acknowledgements played, newest last. */
     private readonly recentAcknowledgements: number[] = [];
+    /** Counts filler plans, so one still waiting on a decision can tell it has been called off. */
+    private fillerTurn: number = 0;
     /** Waits to play a filler. */
     private acknowledgeTimer: NodeJS.Timeout | null = null;
     /** What is on this room's shelf; a room may gain games while it is open. */
@@ -1338,6 +1338,7 @@ export class Room implements HostStage {
                 this.refreshPhones();
             },
             requestContent: (prompt: string): void => { this.writeContent(prompt); },
+            requestMerge: (id: string, question: string, answers: string[]): void => { void this.mergeForGame(id, question, answers); },
             requestDrawing: (id: string, prompt: string): void => { this.draw(id, prompt); },
             record: (event: RoomEvent): void => {
                 this.record(event);
@@ -1346,6 +1347,20 @@ export class Room implements HostStage {
                 }
             },
         };
+    }
+
+    /**
+     * Merges answers for the running game. Merging can't fail: an outage only means fewer merges.
+     * @param id the game's id for this request.
+     * @param question what was asked.
+     * @param answers the answers.
+     */
+    private async mergeForGame(id: string, question: string, answers: string[]): Promise<void> {
+        const game: RunningGame | null = this.game;
+        const groups = await mergeAnswers(question, answers);
+        if (this.game === game) {
+            game?.event({ type: "answersMerged", at: Date.now(), id, groups });
+        }
     }
 
     /**
@@ -1900,12 +1915,20 @@ export class Room implements HostStage {
         if (eligible === false) {
             return;
         }
-        const question: boolean = said.endsWith("?") === true || QUESTION_START.test(said) === true;
         this.cancelAcknowledgement();
-        this.acknowledgeTimer = setTimeout(() => {
-            this.acknowledgeTimer = null;
-            this.playReaction(question);
-        }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
+        const turn: number = this.fillerTurn;
+        const kind: Promise<UtteranceKind> = this.livelyRoom === true || this.tapToTalk === true
+            ? utteranceKind(said).then((decision) => decision.value)
+            : Promise.resolve(kindByRule(said));
+        void kind.then((value: UtteranceKind) => {
+            if (turn !== this.fillerTurn || value === "noise" || value === "command") {
+                return;
+            }
+            this.acknowledgeTimer = setTimeout(() => {
+                this.acknowledgeTimer = null;
+                this.playReaction(value === "question");
+            }, Math.max(0, this.lastLiftAt + FILLER_AFTER_RELEASE_MILLISECONDS - Date.now()));
+        });
     }
 
     /**
@@ -1984,6 +2007,7 @@ export class Room implements HostStage {
 
     /** Cancels a pending acknowledgement. */
     private cancelAcknowledgement(): void {
+        this.fillerTurn += 1;
         if (this.acknowledgeTimer === null) {
             return;
         }
