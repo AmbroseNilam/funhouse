@@ -19,6 +19,7 @@ import type { DiceDecisions } from "./kits/tap-dice.ts";
 import type { FitsDecisions } from "./kits/tap-fits.ts";
 import type { PushDecisions } from "./kits/tap-push.ts";
 import type { WitDecisions } from "./kits/wit.ts";
+import type { IdentityDecisions } from "./kits/identity.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -108,6 +109,13 @@ export interface GalleryBlueprint {
     decisions: GalleryDecisions;
 }
 
+/** An identity game: every player wears a name tag the others can see, and works out who they are by asking. */
+export interface IdentityBlueprint {
+    kit: "identity";
+    box: Box;
+    decisions: IdentityDecisions;
+}
+
 /** Any game as data. */
 export type Blueprint =
     | GuessingBlueprint
@@ -121,7 +129,8 @@ export type Blueprint =
     | StrangerBlueprint
     | OddWordBlueprint
     | ChainBlueprint
-    | GalleryBlueprint;
+    | GalleryBlueprint
+    | IdentityBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {

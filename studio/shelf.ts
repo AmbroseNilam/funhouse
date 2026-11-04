@@ -19,6 +19,7 @@ import { PAINTED_WHISPERS_BLUEPRINT } from "./games/painted-whispers.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import { MAGPIE_POCKETS_BLUEPRINT } from "./games/magpie-pockets.ts";
 import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup.ts";
+import { NAME_TAG_BLUEPRINT } from "./games/name-tag.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
@@ -39,6 +40,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
     TIN_CAN_TELEPHONE_BLUEPRINT,
     WRONG_ROOM_BLUEPRINT,
     STRAY_WORD_BLUEPRINT,
+    NAME_TAG_BLUEPRINT,
     PAINTED_WHISPERS_BLUEPRINT,
     CLUE_GALLERY_BLUEPRINT,
 ];
@@ -49,6 +51,7 @@ export const BLUEPRINTS: readonly Blueprint[] = [
  * scripted runs that prove them.
  */
 export const HELD_BACK: Readonly<Record<string, string>> = {
+    nameTag: "no run with the real host yet",
     paintedWhispers: "no run with the real picture model; its cost and latency are unmeasured",
     clueGallery: "no run with the real picture model; its cost and latency are unmeasured",
 };

@@ -109,6 +109,11 @@ export interface RoleCheck<State> {
     deal(seat: number, players: readonly CartridgePlayer[]): KitGame<State>;
     /** Events and player inputs to play, the same whoever holds the role. */
     script: readonly TraceEvent[];
+    /**
+     * True when other players are meant to see the role, as in a game where everyone but its owner
+     * can read each name tag. Then only the TV and the host must stay the same.
+     */
+    publicOnly?: boolean;
 }
 
 /** Keys whose values are never shown to anyone: kinds, ids, styles and image addresses. */
@@ -527,7 +532,7 @@ function roleProblems<State>(check: RoleCheck<State> | undefined, players: reado
     const games: { game: KitGame<State>; holderId: string }[] = players.map((player: CartridgePlayer, seat: number) => {
         return { game: check.deal(seat, players), holderId: player.playerId };
     });
-    return roleBlindness(games, check.script, players).map((problem: string) => `role check: ${problem}`);
+    return roleBlindness(games, check.script, players, check.publicOnly === true).map((problem: string) => `role check: ${problem}`);
 }
 
 /**
@@ -537,12 +542,14 @@ function roleProblems<State>(check: RoleCheck<State> | undefined, players: reado
  * @param games the same game dealt differently, with who holds the role in each.
  * @param script the events to play, the same for every game.
  * @param players who is at the table.
+ * @param publicOnly compare only the TV and the host, for games where the other phones may see the role.
  * @returns a problem per difference found.
  */
 export function roleBlindness<State>(
     games: readonly { game: KitGame<State>; holderId: string }[],
     script: readonly TraceEvent[],
     players: readonly CartridgePlayer[] = PAPER_PLAYERS,
+    publicOnly: boolean = false,
 ): string[] {
     const problems: string[] = [];
     const runs: { holderId: string; views: Map<string, unknown[]>[] }[] = games.map(({ game, holderId }: { game: KitGame<State>; holderId: string }) => {
@@ -571,7 +578,8 @@ export function roleBlindness<State>(
             problems.push(`The game ran a different number of steps when ${other.holderId} held the role.`);
         }
         for (let index = 0; index < length; index += 1) {
-            const viewers: string[] = ["screen", "host", ...players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== first.holderId && id !== other.holderId)];
+            const phones: string[] = publicOnly === true ? [] : players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== first.holderId && id !== other.holderId);
+            const viewers: string[] = ["screen", "host", ...phones];
             for (const viewer of viewers) {
                 const seenFirst: string = JSON.stringify(first.views[index]?.get(viewer) ?? []);
                 const seenOther: string = JSON.stringify(other.views[index]?.get(viewer) ?? []);
