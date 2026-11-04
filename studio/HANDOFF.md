@@ -172,5 +172,6 @@ marked "Testing." when shown; they need a `reason`), and `order` is an optional 
 unordered games last by id. Put notes, tests and helper modules in the same folder. A new kit is likewise a folder
 `studio/kits/<kit>/` with `kit.meta.json` (`{ "kit": "<name blueprints use>" }`) and an `index.ts` exporting `KIT` (a
 `KitDefinition`: `problems`, `create`, `check`, `pauseActions`), its blueprint type, `defineGame` and its paper
-players in `personas.ts`. Nothing else needs editing: startup scans both folders, and throws, naming the game, if a
-folder lacks its metadata, a game's kit is unknown, or its blueprint fails its kit's `problems`.
+players in `personas.ts`. Nothing else needs editing: startup scans both folders. A folder that lacks its metadata,
+names an unknown kit, won't load or fails its kit's `problems` is left off the shelf and logged as `LEFT OUT`, naming
+the folder and why, so it can't stop the room; `npm run check` fails on any such folder, so it never reaches a server.

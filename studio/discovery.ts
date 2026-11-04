@@ -1,10 +1,12 @@
 // Finds the games and kits by scanning folders, so adding either never edits a shared file. A kit is a
 // folder under kits/ holding kit.meta.json ({ kit }) and an index.ts that exports KIT. A game is a
 // folder under games/ holding game.meta.json ({ id, kit, level, reason?, order? }) and a blueprint.ts
-// that exports its blueprint. Everything is checked at load: a folder without its metadata, a game
-// whose kit is unknown, or a blueprint its kit says can't run, throws and names the culprit.
+// that exports its blueprint. Everything is checked at load. A folder that fails (no metadata, an unknown
+// kit, a module that won't load, a blueprint its kit says can't run) sits out and is listed in `skipped`
+// naming the culprit, so one bad folder can't stop a server that also runs the plain shelf. A test holds
+// the real tree to an empty `skipped`, so a broken game fails the checks long before it reaches a server.
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Blueprint } from "./blueprint.ts";
@@ -31,16 +33,23 @@ export interface DiscoveredGame {
     folder: string;
 }
 
+/** A folder that sat out of the scan, and why. */
+export interface SkippedFolder {
+    folder: string;
+    reason: string;
+}
+
 /** Everything a scan finds. */
 export interface Catalog {
     kits: Readonly<Record<string, KitDefinition<Blueprint>>>;
     games: readonly DiscoveredGame[];
+    skipped: readonly SkippedFolder[];
 }
 
 const GAME_LEVELS: readonly string[] = ["visible", "testing", "held"];
 
 /**
- * The sub-folders of a folder, by name.
+ * The sub-folders of a folder, by name, leaving out hidden ones.
  * @param folder the folder to list.
  * @returns the directory names, sorted.
  */
@@ -48,7 +57,10 @@ function foldersIn(folder: string): string[] {
     if (existsSync(folder) === false) {
         return [];
     }
-    return readdirSync(folder).filter((name: string) => statSync(join(folder, name)).isDirectory() === true).sort();
+    return readdirSync(folder, { withFileTypes: true })
+        .filter((entry: Dirent) => entry.isDirectory() === true && entry.name.startsWith(".") === false)
+        .map((entry: Dirent) => entry.name)
+        .sort();
 }
 
 /**
@@ -175,27 +187,44 @@ async function loadGame(root: string, name: string, kits: Readonly<Record<string
 }
 
 /**
- * Scans a root for kits and games.
+ * The words of whatever a failed load threw.
+ * @param error what was thrown.
+ * @returns its message.
+ */
+function reasonOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Scans a root for kits and games. A folder that fails sits out, listed in `skipped`, and the rest load.
  * @param root a folder holding kits/ and games/.
- * @returns the kits by name and the games in shelf order.
- * @throws on any folder without its metadata, an unknown kit, a repeated name or id, or a blueprint its kit rejects.
+ * @returns the kits by name, the games in shelf order, and the folders that sat out.
  */
 export async function discover(root: string): Promise<Catalog> {
+    const skipped: SkippedFolder[] = [];
     const kits: Record<string, KitDefinition<Blueprint>> = {};
     for (const name of foldersIn(join(root, "kits"))) {
-        const [kitName, kit]: [string, KitDefinition<Blueprint>] = await loadKit(root, name);
-        if (kits[kitName] !== undefined) {
-            throw new Error(`The kit "${kitName}" is defined twice (kits/${name}).`);
+        try {
+            const [kitName, kit]: [string, KitDefinition<Blueprint>] = await loadKit(root, name);
+            if (kits[kitName] !== undefined) {
+                throw new Error(`The kit "${kitName}" is defined twice (kits/${name}).`);
+            }
+            kits[kitName] = kit;
+        } catch (error: unknown) {
+            skipped.push({ folder: `kits/${name}`, reason: reasonOf(error) });
         }
-        kits[kitName] = kit;
     }
     const games: DiscoveredGame[] = [];
     for (const name of foldersIn(join(root, "games"))) {
-        const game: DiscoveredGame = await loadGame(root, name, kits);
-        if (games.some((other: DiscoveredGame) => other.meta.id === game.meta.id) === true) {
-            throw new Error(`The game id "${game.meta.id}" is used twice (games/${name}).`);
+        try {
+            const game: DiscoveredGame = await loadGame(root, name, kits);
+            if (games.some((other: DiscoveredGame) => other.meta.id === game.meta.id) === true) {
+                throw new Error(`The game id "${game.meta.id}" is used twice (games/${name}).`);
+            }
+            games.push(game);
+        } catch (error: unknown) {
+            skipped.push({ folder: `games/${name}`, reason: reasonOf(error) });
         }
-        games.push(game);
     }
     const placeOf = (game: DiscoveredGame): number => game.meta.order ?? Number.MAX_SAFE_INTEGER;
     games.sort((first: DiscoveredGame, second: DiscoveredGame) => {
@@ -204,5 +233,5 @@ export async function discover(root: string): Promise<Catalog> {
         }
         return placeOf(first) < placeOf(second) ? -1 : 1;
     });
-    return { kits, games };
+    return { kits, games, skipped };
 }

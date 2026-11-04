@@ -9,7 +9,7 @@ import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
 import { blueprintPauseActions, blueprintProblems, createKitGame, type Blueprint, type Kits } from "./blueprint.ts";
-import type { Catalog, DiscoveredGame } from "./discovery.ts";
+import type { Catalog, DiscoveredGame, GameLevel } from "./discovery.ts";
 import { CATALOG, KITS } from "./registry.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 
@@ -24,16 +24,13 @@ export const BLUEPRINTS: readonly Blueprint[] = CATALOG.games.map((game: Discove
  */
 export const HELD_BACK: Readonly<Record<string, string>> = reasonsFor(CATALOG, "held");
 
-/** Games being tried: hidden and marked as testing exactly like held ones, for a game that has had a first run. */
-export const TESTING: Readonly<Record<string, string>> = reasonsFor(CATALOG, "testing");
-
 /**
  * The reason each game at a level gives for not being visible yet.
  * @param catalog the discovered games.
  * @param level the level to list.
  * @returns reasons by game id.
  */
-function reasonsFor(catalog: Catalog, level: "testing" | "held"): Record<string, string> {
+function reasonsFor(catalog: Catalog, level: GameLevel): Record<string, string> {
     const reasons: Record<string, string> = {};
     for (const game of catalog.games) {
         if (game.meta.level === level) {
@@ -73,7 +70,8 @@ export function installBlueprint(given: Blueprint, kits: Kits = KITS): Installed
 
 /**
  * A shelf where every shipped blueprint stands in for the hand-written game with the same id,
- * and blueprints with new ids come after the hand-written games.
+ * and blueprints with new ids come after the hand-written games. A game that can't be installed is
+ * logged and left off, so a hand-written game it would replace stays on the shelf.
  * @param handWritten the games written in TypeScript.
  * @param showHeld true to include the games on hold or in testing, each marked as testing in its pitch.
  * @param catalog the games and kits to build from; the discovered ones unless a test gives its own.
@@ -81,9 +79,14 @@ export function installBlueprint(given: Blueprint, kits: Kits = KITS): Installed
  */
 export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = false, catalog: Catalog = CATALOG): InstalledGame[] {
     const shown: DiscoveredGame[] = catalog.games.filter((game: DiscoveredGame) => game.meta.level === "visible" || showHeld === true || process.env.STUDIO_SHOW_HELD === "1");
-    const installed: InstalledGame[] = shown.map((game: DiscoveredGame) => {
-        const made: InstalledGame = installBlueprint(game.blueprint, catalog.kits);
-        return game.meta.level === "visible" ? made : { ...made, pitch: `Testing. ${made.pitch}` };
+    const installed: InstalledGame[] = shown.flatMap((game: DiscoveredGame) => {
+        try {
+            const made: InstalledGame = installBlueprint(game.blueprint, catalog.kits);
+            return [game.meta.level === "visible" ? made : { ...made, pitch: `Testing. ${made.pitch}` }];
+        } catch (error: unknown) {
+            log("studio", `LEFT OUT ${game.meta.id}: ${error instanceof Error ? error.message : String(error)}`);
+            return [];
+        }
     });
     const replaced: InstalledGame[] = handWritten.map((game: InstalledGame) => installed.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
     const added: InstalledGame[] = installed.filter((game: InstalledGame) => handWritten.some((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) === false);
