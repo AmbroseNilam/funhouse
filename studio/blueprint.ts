@@ -23,6 +23,7 @@ import type { IdentityDecisions } from "./kits/identity.ts";
 import type { HostGuessDecisions } from "./kits/host-guess.ts";
 import type { HandDecisions } from "./kits/hand.ts";
 import type { ClueDecisions } from "./kits/clue.ts";
+import type { CharadesDecisions } from "./kits/charades.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -140,6 +141,13 @@ export interface ClueBlueprint {
     decisions: ClueDecisions;
 }
 
+/** A charades game: one player acts a private prompt in silence while the rest shout guesses. */
+export interface CharadesBlueprint {
+    kit: "charades";
+    box: Box;
+    decisions: CharadesDecisions;
+}
+
 /** Any game as data. */
 export type Blueprint =
     | GuessingBlueprint
@@ -157,7 +165,8 @@ export type Blueprint =
     | IdentityBlueprint
     | HostGuessBlueprint
     | HandBlueprint
-    | ClueBlueprint;
+    | ClueBlueprint
+    | CharadesBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
