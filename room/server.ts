@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Drawing } from "../providers/meta/image.ts";
+import { buildInfoFrom, type BuildInfo } from "../shared/build-info.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
 import { GAMES } from "../cartridges/index.ts";
 import { studioShelf } from "../studio/shelf.ts";
@@ -74,6 +75,9 @@ const SECURITY_HEADERS: Record<string, string> = {
 
 /** How often bookkeeping for departed addresses is cleared. */
 const LIMITS_SWEEP_MILLISECONDS: number = 600000;
+
+/** The build this server is, stamped in by the release. */
+const BUILD: BuildInfo = buildInfoFrom(process.env);
 
 /** Names the phone's current build, which changes whenever its page does. Empty when it hasn't been built. */
 const PHONE_VERSION: string = await readFile(join(STAGE_ROOTS.phone ?? "", "index.html")).then(
@@ -163,6 +167,10 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
     const url: URL = new URL(request.url ?? "/", "http://room");
     if (url.pathname === "/favicon.ico") {
         response.writeHead(302, { location: "/landing/brand/favicon-32.png" }).end();
+        return;
+    }
+    if (url.pathname === "/version") {
+        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(BUILD));
         return;
     }
     if (url.pathname === "/phone-version") {
@@ -289,5 +297,5 @@ process.on("uncaughtException", (error: Error) => { console.error("uncaught:", e
 process.on("unhandledRejection", (reason: unknown) => { console.error("unhandled:", reason instanceof Error ? reason.stack ?? reason.message : String(reason)); });
 
 server.listen(PORT, () => {
-    console.warn(`listening on http://localhost:${PORT}  public: ${PUBLIC_URL}`);
+    console.warn(`listening on http://localhost:${PORT}  public: ${PUBLIC_URL}  build: ${BUILD.commit} ${BUILD.builtAt}`);
 });

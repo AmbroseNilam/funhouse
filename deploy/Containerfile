@@ -7,6 +7,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-fund --no-audit
 COPY . .
+ARG BUILD_COMMIT=dev
+ARG BUILD_TIME=
+ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_TIME=$BUILD_TIME
 RUN npm run build
 
 FROM docker.io/library/node:24-alpine
@@ -22,6 +25,9 @@ COPY --from=build /app/studio ./studio
 COPY --from=build /app/screen/dist ./screen/dist
 COPY --from=build /app/phone/dist ./phone/dist
 COPY --from=build /app/landing/dist ./landing/dist
+ARG BUILD_COMMIT=dev
+ARG BUILD_TIME=
+ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_TIME=$BUILD_TIME
 USER node
 EXPOSE 8740
 CMD ["node", "room/server.ts"]
