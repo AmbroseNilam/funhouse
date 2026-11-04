@@ -8,9 +8,10 @@ import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
 import { createBluffGame, type BluffState } from "./kits/bluff.ts";
+import { createBotGame, type BotState } from "./kits/bot.ts";
 import { createWitGame, type WitState } from "./kits/wit.ts";
 import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
-import { bluffPersonas, witPersonas } from "./personas-text.ts";
+import { bluffPersonas, botPersonas, witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -38,6 +39,14 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
         const failing: Tally = rehearseMany(makeBluff, bluffPersonas(), CHECK_SEEDS, options);
         const matching: Tally = rehearseMany(makeBluff, bluffPersonas(), CHECK_SEEDS, { ...options, content: options.content ?? "1, 2" });
         return addTallies(failing, matching);
+    }
+    if (blueprint.kit === "bot") {
+        const makeBot = (seed: number): KitGame<BotState> => createBotGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        // Once with the model failing, and once with it writing one line for everything it is asked, which
+        // gives the game a prompt of the model's and a machine's answer of the model's to place among the humans'.
+        const failing: Tally = rehearseMany(makeBot, botPersonas(), CHECK_SEEDS, options);
+        const writing: Tally = rehearseMany(makeBot, botPersonas(), CHECK_SEEDS, { ...options, content: options.content ?? "Gerald the goldfish" });
+        return addTallies(failing, writing);
     }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });

@@ -8,6 +8,7 @@ import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { bluffBlueprintProblems, createBluffGame, type BluffDecisions } from "./kits/bluff.ts";
+import { botBlueprintProblems, createBotGame, type BotDecisions } from "./kits/bot.ts";
 import { createWitGame, witBlueprintProblems, type WitDecisions } from "./kits/wit.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -38,8 +39,15 @@ export interface BluffBlueprint {
     decisions: BluffDecisions;
 }
 
+/** A bot game: everyone answers in secret, the host writes one more, and the table votes for the machine's. */
+export interface BotBlueprint {
+    kit: "bot";
+    box: Box;
+    decisions: BotDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | WitBlueprint | BluffBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | WitBlueprint | BluffBlueprint | BotBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -63,6 +71,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "bluff") {
         return bluffBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "bot") {
+        return botBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -82,6 +93,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "bluff") {
         return erase(createBluffGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "bot") {
+        return erase(createBotGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
