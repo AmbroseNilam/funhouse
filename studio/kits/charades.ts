@@ -284,7 +284,7 @@ export function charadesManifest(box: Box): CartridgeManifest {
                 hostBrief: [
                     "A turn is starting. In one short line say who is up, as you're told, and that they're choosing how hard.",
                     "If this is the first turn, first explain in two short sentences: one person acts silently, everyone else shouts guesses at their phone, and the quicker the guess the more points both get.",
-                    "Then stop.",
+                    "Then stop. In this spirit, never word for word: 'One of you acts it out, no talking. The rest shout. Quicker guess, more points, for both of you.' then 'Up first: Spoon. Choose how hard.'",
                 ].join(" "),
                 listening: { "*": "muted" },
                 hostMayInterject: false,
@@ -292,7 +292,10 @@ export function charadesManifest(box: Box): CartridgeManifest {
             },
             {
                 id: "ready",
-                hostBrief: "The performer is reading their prompt. Say only what you're told, in one short line: what kind of prompt it is and how many words, and that the room should get their voices ready. Reply exactly (quiet) to anything else.",
+                hostBrief: [
+                    "The performer is reading their prompt. Say only what you're told, in one short line: what kind of prompt it is and how many words, and that the room should get their voices ready.",
+                    "In this spirit, never word for word: 'A movie title, four words. Warm up your voices.' Reply exactly (quiet) to anything else.",
+                ].join(" "),
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
@@ -303,7 +306,8 @@ export function charadesManifest(box: Box): CartridgeManifest {
                     "The clock is running. Guesses reach you as 'Name: what they said'. You do not rule on them.",
                     "Reply exactly (quiet) to every guess unless a (Game: ...) note told you something.",
                     "When told, react in six words or fewer, in fresh words each time: a close guess gets a cheer for the guesser without saying what was close, ten seconds left gets a nudge, the start gets a go.",
-                    "Never repeat what a guesser said as if it might be right.",
+                    "In this spirit, never word for word: 'Go on, then.' 'Nearly there.' 'That was warm.' 'Ten seconds.' 'Clock's nearly gone.'",
+                    "Never repeat what a guesser said back as if it might be right.",
                 ].join(" "),
                 listening: { performer: "muted", "*": "holdToTalk" },
                 hostMayInterject: false,
@@ -315,6 +319,7 @@ export function charadesManifest(box: Box): CartridgeManifest {
                 hostBrief: [
                     "The turn is over and you've been told the answer. In one or two short sentences say what it was and who got it, and tease the performer or the guessers.",
                     "Be kind: a turn nobody got is still a good show. Don't say whose turn is next; that follows by itself.",
+                    "In this spirit, never word for word: 'The Lighthouse Keeper's Secret. Spoon had it fast, and Teacup earned every point of that.' or 'Nobody got it. It was Sneezing. Brave effort.'",
                 ].join(" "),
                 listening: { "*": "muted" },
                 hostMayInterject: false,
@@ -322,7 +327,10 @@ export function charadesManifest(box: Box): CartridgeManifest {
             },
             {
                 id: "end",
-                hostBrief: "The game is over. In two or three sentences name the winner or winners, mention the best moment you were told, and tease whoever scored least, kindly. Then ask if they want another game.",
+                hostBrief: [
+                    "The game is over. In two or three sentences name the winner or winners, mention the best moment you were told, and tease whoever scored least, kindly. Then ask if they want another game.",
+                    "In this spirit, never word for word: 'Saucer takes it, with Teacup right behind. Spoon got the quickest guess of the night. Another go?'",
+                ].join(" "),
                 listening: { "*": "holdToTalk" },
                 hostMayInterject: true,
                 silenceSeconds: 0,
@@ -746,7 +754,7 @@ export function createCharadesGame(givenBox: Box, givenDecisions: CharadesDecisi
                 return {
                     mood: record.ending === "guessed" ? "victory" : "dawn",
                     transition: "fade",
-                    blocks: [{ type: "title", text: record.answer, kicker: kickers[record.ending] }, { type: "text", text: lines[record.ending], emphasis: "large" }, { type: "tally", title: "Scores", rows }, turns],
+                    blocks: [{ type: "title", text: record.answer, kicker: kickers[record.ending] }, { type: "text", text: lines[record.ending], emphasis: "large" }, { type: "tally", title: "Scores", rows }],
                 };
             }
             const top: number = rows[0]?.count ?? 0;
@@ -781,7 +789,7 @@ export function createCharadesGame(givenBox: Box, givenDecisions: CharadesDecisi
                     const decision: LevelDecision = decisions.levels[level];
                     return { id: `${LEVEL_PREFIX}${level}`, label: `${decision.label} · ${decision.points} ${pointsWord(decision.points)}` };
                 });
-                return [{ type: "buttons", prompt: "How hard?", options }];
+                return [{ type: "buttons", prompt: "How hard?", options }, { type: "waiting", text: "Choose how hard" }];
             }
             if (prompt === null) {
                 return [{ type: "waiting", text: "Your prompt is coming" }];
@@ -792,7 +800,7 @@ export function createCharadesGame(givenBox: Box, givenDecisions: CharadesDecisi
                 return [card, { type: "waiting", text: "Act it out. No words." }];
             }
             const options: ControlOption[] = [{ id: GO_ACTION, label: "Start acting" }, ...(state.swapped === false ? [{ id: SWAP_ACTION, label: "Swap it for another" }] : [])];
-            return [card, { type: "buttons", options }];
+            return [card, { type: "buttons", options }, { type: "waiting", text: "Read it, then start" }];
         },
 
         hostFacts(state: CharadesState, scope: Scope): ScopedFact[] {

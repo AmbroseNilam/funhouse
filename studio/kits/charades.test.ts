@@ -210,6 +210,9 @@ describe("a turn", () => {
         assert.equal(buttons.options.length, 3);
         assert.equal(game.cartridge.privateControls(state, "paper2").some((control: Control) => control.type === "buttons"), false);
         assert.equal(game.cartridge.apply(state, "paper2", `${LEVEL_PREFIX}hard`).state, state);
+        const surface = (controls: Control[]): string[] => controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : []));
+        assert.deepEqual(surface(game.cartridge.privateControls(state, "paper1")), ["Choose how hard"]);
+        assert.deepEqual(surface(game.cartridge.privateControls(state, "paper2")), ["Teacup is choosing how hard"]);
     });
 
     it("chooses the middle level for a performer who does not choose", () => {
