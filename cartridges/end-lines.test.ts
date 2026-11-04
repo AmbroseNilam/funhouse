@@ -234,6 +234,21 @@ describe("Quizmaster's four answers", () => {
         assert.deepEqual(moved.state.answered, []);
     });
 
+    it("counts an answer said or typed the same as a tap, once the host rules on it", () => {
+        const { game, state } = inQuestion();
+        const started = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
+        const heard = game.onEvent(started, { type: "speechEnded", at: 0, playerId: "a", text: "It's Right0" }).state;
+        const ruled = game.onEvent(heard, { type: "hostRuled", at: 0, ruling: "right", detail: "", playerId: "a" }).state;
+        assert.deepEqual(ruled.answered, ["a"]);
+        const turn = game.turn?.(ruled);
+        assert.equal(turn?.kind === "everyone" ? turn.doneIds.includes("a") : false, true, "the TV's tick comes from this");
+        assert.equal(turn?.label, "Still answering: Alex");
+        const wrong: number = state.questions[0]?.choices?.indexOf("Bad0a") ?? -1;
+        const locked = game.apply(ruled, "b", `answer:0:${wrong}`).state;
+        const lit = game.onEvent(locked, { type: "timerFired", at: 0, timerId: "reveal-build" }).state;
+        assert.equal(lit.scores.a, 2, "the points land at the reveal");
+    });
+
     it("ignores a tap off the list, and shuffles the right answer's place", () => {
         const { game, state } = inQuestion();
         assert.equal(game.apply(state, "a", "answer:0:9").state, state);

@@ -68,8 +68,10 @@ export const GAMES: InstalledGame[] = [
     },
     {
         manifest: QUIZMASTER_MANIFEST,
-        pitch: `Name any topic out loud. ${HOST_NAME} writes the questions and judges the answers.`,
-        howToPlay: ["Say a topic. Anything you think you know.", "Tap to talk on your phone, or hold to talk, to answer each question out loud.", "Two points for right, one for close. One try each."],
+        pitch: `Name any topic. ${HOST_NAME} writes the questions and you race to answer.`,
+        howToPlay: QUIZ_MULTIPLE_CHOICE === true
+            ? ["Pick a topic, or say your own.", "Every question has four answers. Tap one on your phone, or say or type it. One try each.", "Two points for a right answer."]
+            : ["Say a topic. Anything you think you know.", "Tap to talk on your phone, or hold to talk, to answer each question out loud.", "Two points for right, one for close. One try each."],
         art: "art/quizmaster.webp",
         pauseActions: [{ id: "skip", label: "Skip this question" }],
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],
