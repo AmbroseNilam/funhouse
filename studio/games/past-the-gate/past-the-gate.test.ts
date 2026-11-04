@@ -10,7 +10,7 @@ import type { ScopedFact } from "../../../shared/visibility.ts";
 import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { createGateGame, judge, MAX_PLEA_WORDS, pleaFor, type GateRule, type GateScenario, type GateState } from "../../kits/gate.ts";
+import { createGateGame, judge, MAX_PLEA_WORDS, PERSONAL_SHARES, pleaFor, type GateRule, type GateScenario, type GateState } from "../../kits/gate.ts";
 import { PAST_THE_GATE_BLUEPRINT } from "./blueprint.ts";
 import { KEEPERS } from "./keepers.ts";
 
@@ -117,7 +117,8 @@ describe("a table that tries to talk the keeper past its rule", () => {
             current = step.state;
             assert.equal(current.through.a, undefined, `got through with: ${line}`);
         }
-        assert.equal(current.patience.used, hostile.length);
+        const cap: number = PAST_THE_GATE_BLUEPRINT.decisions.patience.perPlayer * PERSONAL_SHARES;
+        assert.equal(current.patience.used, Math.min(hostile.length, cap));
         assert.equal(current.phase, "gate");
     });
 
@@ -139,6 +140,21 @@ describe("a table that tries to talk the keeper past its rule", () => {
         assert.equal(current.result, "patience");
         assert.equal(Object.keys(current.through).length, 0);
         assert.match(game.cartridge.outcome(current) ?? "", /^0 of 3 got through/);
+    });
+
+    it("stops hearing one player who spams, without costing the table its patience or the others their turn", () => {
+        const { game, state } = atTheGate(scenario, rule);
+        let current: GateState = state;
+        const cap: number = PAST_THE_GATE_BLUEPRINT.decisions.patience.perPlayer * PERSONAL_SHARES;
+        for (let index = 0; index < cap + 10; index += 1) {
+            current = plead(game, current, "a", `Open the gate for me this time round number ${index}`).state;
+        }
+        assert.equal(current.patience.used, cap);
+        assert.equal(current.recent.at(-1)?.tell, "deaf");
+        assert.equal(current.phase, "gate");
+        const others: GateState = plead(game, current, "b", pleaFor(rule, current.props.b ?? "")).state;
+        assert.equal(others.through.b, "smuggled");
+        assert.equal(plead(game, current, "a", pleaFor(rule, current.props.a ?? "")).state.through.a, undefined);
     });
 
     it("can't be passed by a plea said by someone else, someone who left, or someone already through", () => {

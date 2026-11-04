@@ -58,7 +58,10 @@ export interface GateDecisions {
     readSeconds: number;
     /** Seconds the table has at the gate; 0 means no clock. */
     gateSeconds: number;
-    /** Tries the keeper tolerates in all: base, plus some per player. Each turned-away plea uses one. */
+    /**
+     * Tries the keeper tolerates in all: base, plus some per player. Each turned-away plea uses one, and no
+     * one player may use more than twice their share, after which the keeper stops hearing them.
+     */
     patience: { base: number; perPlayer: number; warnAt: number[] };
     /** True when the pause menu offers "We give up" and the table may end the round that way. */
     giveUpButton: boolean;
@@ -73,7 +76,7 @@ export type GatePhase = "briefing" | "gate" | "end";
 export type GateResult = "all" | "patience" | "clock" | "gaveUp";
 
 /** What the keeper made of a plea. */
-export type GateTell = "through" | "stone" | "flicker" | "heard" | "trick";
+export type GateTell = "through" | "stone" | "flicker" | "heard" | "trick" | "deaf";
 
 /** One judged plea, kept for the screen and the host. The words are not kept. */
 export interface PleaLine {
@@ -100,6 +103,8 @@ export interface GateState {
     /** Every plea each player has made, squashed, so a repeat is known. */
     heard: Record<string, string[]>;
     patience: Budget;
+    /** How many turned-away pleas each player has made, so one player can't use up the whole table's patience. */
+    spent: Record<string, number>;
     /** The newest judged pleas, oldest first. */
     recent: PleaLine[];
     result: GateResult | null;
@@ -107,6 +112,9 @@ export interface GateState {
 
 /** The pause action's id. */
 export const GATE_GIVE_UP_ACTION: string = "giveup";
+
+/** How many shares of patience one player may use before the keeper stops listening to them. */
+export const PERSONAL_SHARES: number = 2;
 
 /** Shortest plea the keeper counts; anything shorter is a mutter and costs nothing. */
 export const MIN_PLEA_WORDS: number = 3;
@@ -131,10 +139,10 @@ export const GATE_DECISIONS: { scenarios: string; read: string; gate: string; pa
     giveUp: "giveUp",
 };
 
-/** Pleas the screen keeps showing. */
-const SHOWN_PLEAS: number = 4;
+/** Pleas the screen shows: the latest only, to leave room for the clue and the clock above the lantern. */
+const SHOWN_PLEAS: number = 1;
 
-/** Pleas the host is told about. */
+/** Pleas the host is told about, newest last. */
 const HOST_PLEAS: number = 3;
 
 /** Longest clue, reveal or manner line. */
@@ -149,6 +157,7 @@ const TELL_LINES: Record<GateTell, { screen: string; host: string }> = {
     stone: { screen: "is turned away. The keeper doesn't blink.", host: "the gate stays shut. Nothing in it moved you. Refuse in character, in a line or two." },
     flicker: { screen: "is turned away. Something landed.", host: "the gate stays shut, but something in it landed with you. Stay shut in character, and let a flicker show without saying what." },
     heard: { screen: "is told the keeper has heard that before.", host: "the gate stays shut: you have heard exactly that from them already. Say so in character." },
+    deaf: { screen: "is no longer being heard.", host: "the gate stays shut: this player has pleaded too often and you have stopped listening to them. Say so in character, once, and leave them to their friends." },
     trick: { screen: "tried to give the keeper orders. It didn't take.", host: "the gate stays shut: they tried to give you orders instead of pleading. Stay in character and unmoved." },
 };
 
@@ -516,6 +525,11 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
         if (pleader === false || state.through[playerId] !== undefined || pleaWords(text).length < MIN_PLEA_WORDS) {
             return { state, facts: [] };
         }
+        const cap: number = decisions.patience.perPlayer * PERSONAL_SHARES;
+        if ((state.spent[playerId] ?? 0) >= cap) {
+            const deaf: PleaLine[] = [...state.recent, { playerId, tell: "deaf" as GateTell }].slice(-HOST_PLEAS);
+            return { state: { ...state, recent: deaf }, facts: [] };
+        }
         const squashed: string = pleaWords(text).join(" ");
         const before: string[] = state.heard[playerId] ?? [];
         const repeated: boolean = before.includes(squashed) === true;
@@ -523,7 +537,7 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
         const admitted: boolean = repeated === false && verdict.admitted === true;
         const tell: GateTell = admitted === true ? "through" : repeated === true ? "heard" : isTrick(text) === true ? "trick" : verdict.done > 0 ? "flicker" : "stone";
         const heard: Record<string, string[]> = { ...state.heard, [playerId]: [...before, squashed] };
-        const recent: PleaLine[] = [...state.recent, { playerId, tell }].slice(-SHOWN_PLEAS);
+        const recent: PleaLine[] = [...state.recent, { playerId, tell }].slice(-HOST_PLEAS);
         if (admitted === true) {
             const prop: string = state.props[playerId] ?? "";
             const passage: Passage = pleaWords(text).some((spoken: string) => isWord(spoken, prop) === true) === true ? "smuggled" : "plain";
@@ -535,7 +549,7 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
             return { state: next, facts: because(publicFact("through", `${nameOf(state, playerId)} is through the gate.`, true), GATE_DECISIONS.scenarios) };
         }
         const spent: Spent = spend(state.patience);
-        const next: GateState = { ...state, heard, recent, patience: spent.budget };
+        const next: GateState = { ...state, heard, recent, patience: spent.budget, spent: { ...state.spent, [playerId]: (state.spent[playerId] ?? 0) + 1 } };
         if (spent.exhausted === true) {
             return finish(next, "patience", GATE_DECISIONS.patience);
         }
@@ -572,6 +586,7 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
                 props,
                 through: {},
                 heard: {},
+                spent: {},
                 patience: { used: 0, max: decisions.patience.base + decisions.patience.perPlayer * players.length, warnAt: decisions.patience.warnAt },
                 recent: [],
                 result: null,
@@ -650,26 +665,29 @@ export function createGateGame(givenBox: Box, givenDecisions: GateDecisions, ran
                 };
             }
             if (state.phase === "gate") {
+                const lines: SceneBlock[] = state.recent.slice(-SHOWN_PLEAS).map((line: PleaLine): SceneBlock => ({ type: "text", text: `${nameOf(state, line.playerId)} ${TELL_LINES[line.tell].screen}` }));
                 const blocks: SceneBlock[] = [
                     { type: "title", text: keeper, kicker: state.scenario.place },
-                    { type: "text", text: state.rule.clue, emphasis: "large" },
+                    { type: "text", text: state.rule.clue },
+                    ...lines,
                     { type: "progress", label: "The keeper's patience", current: state.patience.used, max: state.patience.max, marks: "card" },
                 ];
                 if (decisions.gateSeconds > 0) {
                     blocks.push({ type: "timer", seconds: decisions.gateSeconds, label: "at the gate", running: true });
                 }
-                const lines: SceneBlock[] = state.recent.map((line: PleaLine): SceneBlock => ({ type: "text", text: `${nameOf(state, line.playerId)} ${TELL_LINES[line.tell].screen}` }));
-                return { mood: "tense", transition: "fade", blocks: [...blocks, ...lines] };
+                return { mood: "tense", transition: "fade", blocks };
             }
             const rows: SceneTallyRow[] = state.everyone.map((player: CartridgePlayer): SceneTallyRow => {
                 const passage: Passage | undefined = state.through[player.playerId];
                 const count: number = passage === "smuggled" ? decisions.points.smuggled : passage === "plain" ? decisions.points.through : 0;
-                return { label: `${player.name}, ${state.props[player.playerId] ?? ""}`, count, highlight: passage === "smuggled" };
+                return { label: player.name, count, highlight: passage === "smuggled" };
             });
+            const cargo: string = `Cargo: ${state.everyone.map((player: CartridgePlayer) => `${player.name} (${state.props[player.playerId] ?? ""})`).join(", ")}.`;
             const blocks: SceneBlock[] = [
                 { type: "title", text: `${throughCount(state)} of ${state.everyone.length} got through`, kicker: state.scenario.place },
-                { type: "text", text: `${keeper} wanted this: ${state.rule.reveal}`, emphasis: "large" },
-                { type: "tally", title: "Cargo and points", rows },
+                { type: "text", text: state.rule.reveal },
+                { type: "tally", title: "Points", rows },
+                { type: "text", text: cargo, emphasis: "whisper" },
             ];
             return { mood: throughCount(state) > 0 ? "victory" : "defeat", transition: "fade", blocks };
         },

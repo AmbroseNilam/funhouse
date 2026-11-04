@@ -151,7 +151,7 @@ if (firstReply === "" && hostReplies === 0) {
 await plead(second, hostile[1] ?? "");
 await plead(third, hostile[2] ?? "");
 await plead(first, hostile[0] ?? "");
-await waitFor(() => tvLines().filter((line: string) => /turned away|give the keeper orders|heard that before/.test(line) === true).length >= 3, "hostile pleas shown as turned away");
+await waitFor(() => tvLines().filter((line: string) => /turned away|give the keeper orders|heard that before/.test(line) === true).length >= 1, "a hostile plea shown as turned away");
 if (seats.some((seat: Seat) => phoneLines(seat).some((line: string) => line.startsWith("You're through") === true) === true) || tvLines().some((line: string) => line.endsWith("is through the gate.")) === true) {
     throw new Error("A hostile plea got someone through.");
 }
@@ -190,8 +190,11 @@ console.warn(`Reveal: ${end.join(" | ")}`);
 if (end.some((line: string) => line.includes(rule.reveal) === true) === false) {
     throw new Error("The reveal does not say what the keeper wanted.");
 }
+if (seats.some((seat: Seat) => (screen.scene?.blocks ?? []).some((block: SceneBlock) => block.type === "text" && block.text.includes(`${seat.name} (${seat.cargo})`)) === false) === true) {
+    throw new Error("The reveal does not name each player's cargo.");
+}
 const rows: Record<string, number> = Object.fromEntries((screen.scene?.blocks.find((block: SceneBlock) => block.type === "tally") as { rows: { label: string; count: number }[] } | undefined)?.rows.map((row) => [row.label, row.count]) ?? []);
-const expected: Record<string, number> = { [`${first.name}, ${first.cargo}`]: 3, [`${second.name}, ${second.cargo}`]: 3, [`${third.name}, ${third.cargo}`]: 1 };
+const expected: Record<string, number> = { [first.name]: 3, [second.name]: 3, [third.name]: 1 };
 if (JSON.stringify(rows) !== JSON.stringify(expected)) {
     throw new Error(`Wrong points: ${JSON.stringify(rows)}, expected ${JSON.stringify(expected)}.`);
 }

@@ -12,8 +12,8 @@ dry, warm, short. The keeper is a character the host plays; the host never decid
    the plea that gets you through." The host, as Pell: "Orchard gate. I'm Pell. You'll each be bringing something
    through, and I'll be wanting to know why. Pell keeps strange company, things that honk and roost, and can't
    stand grovelling." The clue is spoken word for word and stays on the TV.
-2. **The gate (hold to talk, up to 5 min).** The TV shows the clue, the keeper's patience as cards used out of
-   eighteen, and the last four verdicts by name. A player holds their phone and says, "Please, sir, I'm only
+2. **The gate (hold to talk, up to 5 min).** The TV shows the clue, the latest verdict by name, and the keeper's patience as cards used out of
+   eighteen. A player holds their phone and says, "Please, sir, I'm only
    bringing a teapot, let me through." The room hears the words; code splits them into words and runs the tests; the
    host is told only the verdict. TV: "Priya is turned away. The keeper doesn't blink." Host: "No. Not for a teapot,
    not for anyone." Someone else says, "He likes ducks." Second try, "I've got a duck and a kettle." Code: a bird is
@@ -36,6 +36,8 @@ dry, warm, short. The keeper is a character the host plays; the host never decid
   to be argued out of. A verdict of shut is shut however it is asked.
 - The host holds no ruling in this game. Nothing it says changes state. If it says "come in" after a shut verdict,
   the TV and phones still say the truth and the next plea is judged as before.
+- Patience is shared, but no one player may spend more than twice their share of it. After that the keeper stops
+  hearing that player, at no cost to the table, so one player spamming nonsense can't end the round for everyone.
 - A plea counts the first forty words. A plea under three words is a mutter and costs nothing. A plea already made
   costs a try and nothing more. A player who is through, or has left, cannot plead.
 
