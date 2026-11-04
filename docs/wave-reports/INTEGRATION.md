@@ -106,6 +106,7 @@ Scenarios in `tools/scenarios/`: games on the stub model use `tools/stub-model.t
 ## Shelf levels
 
 - `/screen/?studio=1`: the curated Studio shelf (games not on `HELD_BACK`).
-- `/screen/?studio=all`: the same plus every held game, each with "Testing." at the start of its pitch. The
-  new-room button keeps the query, so a testing room stays a testing room.
+- `/screen/?studio=all&key=...`: the same plus every held game, each with "Testing." at the start of its pitch.
+  Off unless the server has `STUDIO_ALL=1` and `STUDIO_ALL_KEY`, and the key matches; otherwise it is the plain
+  shelf. The new-room button keeps the query, so a testing room stays a testing room.
 - Anything else: the plain shelf.

@@ -2,7 +2,7 @@
 // routes WebSocket connections to rooms: /ws/screen for the public stage and /ws/phone for
 // phones, each with a ?room= code. A screen without a known code opens a new room.
 
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -89,7 +89,7 @@ const HEARTBEAT_MILLISECONDS: number = 15000;
 /** What each stage receives on a heartbeat, so it can tell when the server has gone quiet. */
 const HEARTBEAT_MESSAGE: string = JSON.stringify({ type: "heartbeat" });
 
-/** A room opened with ?studio=1 (or ?studio=all, which adds the games still on hold, marked as testing) gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. */
+/** A room opened with ?studio=1 gets the Studio shelf: blueprint versions of games in place of the hand-written ones, and new blueprint games after them. See mayShowHeldGames for the level that adds the games still on hold. */
 const directory: RoomDirectory = new RoomDirectory(PUBLIC_URL, GAMES, studioShelf(GAMES), studioShelf(GAMES, true));
 const limits: AddressLimits = new AddressLimits();
 setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
@@ -103,6 +103,22 @@ setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 function addressOf(request: IncomingMessage): string {
     const forwarded: string | string[] | undefined = request.headers["cf-connecting-ip"];
     return typeof forwarded === "string" ? forwarded : request.socket.remoteAddress ?? "unknown";
+}
+
+/**
+ * Decides whether a URL unlocks the games still on hold. They stay off unless the server has
+ * STUDIO_ALL=1 and a STUDIO_ALL_KEY, and the URL says ?studio=all with that key.
+ * @param url the address the screen connected with.
+ * @returns true when this room may show the games on hold.
+ */
+function mayShowHeldGames(url: URL): boolean {
+    const key: string = process.env.STUDIO_ALL_KEY ?? "";
+    if (process.env.STUDIO_ALL !== "1" || key === "" || url.searchParams.get("studio") !== "all") {
+        return false;
+    }
+    const expected: Buffer = createHash("sha256").update(key).digest();
+    const given: Buffer = createHash("sha256").update(url.searchParams.get("key") ?? "").digest();
+    return timingSafeEqual(expected, given);
 }
 
 /**
@@ -245,7 +261,8 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "roomClosed");
             return;
         }
-        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("tap") === "1", url.searchParams.get("fast") === "1", url.searchParams.get("studio") === "1" || url.searchParams.get("studio") === "all", url.searchParams.get("studio") === "all");
+        const showHeld: boolean = mayShowHeldGames(url);
+        const room: Room | null = existing ?? openRoom(address, url.searchParams.get("lively") === "1", url.searchParams.get("tap") === "1", url.searchParams.get("fast") === "1", url.searchParams.get("studio") === "1" || showHeld === true, showHeld);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;
