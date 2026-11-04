@@ -100,7 +100,7 @@ export function contentFor(prompt: string): string {
     if (prompts !== null) {
         return PROMPT_POOL.slice(0, Number(prompts[1])).join("\n");
     }
-    if (prompt.includes("are the two answers the same thing") === true) {
+    if (prompt.includes("say yes only if both of these are true") === true) {
         return sameAnswersFor(prompt);
     }
     if (prompt.startsWith("Write one answer to this party-game prompt") === true) {

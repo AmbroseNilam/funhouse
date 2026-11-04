@@ -27,7 +27,7 @@ import { classifierRefusedLine } from "../stand-in-marker.ts";
 import { boxIn, everythingOnPhone, phoneStrings, pause, sceneStrings, seatPlayers, typeInto, typeRefused, type Seat } from "./text-support.ts";
 
 /** True when the room has the real host and merge seam, whose rulings the script can't know: what depends on them is noted, not failed. */
-const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1";
+const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1" || (process.env.META_MODEL_API_KEY !== undefined && process.env.SCENARIO_STAND_IN !== "1");
 
 /**
  * Fails the run, or against the real host, notes the problem for the transcript and carries on.

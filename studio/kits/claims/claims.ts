@@ -29,6 +29,8 @@ export interface ClaimsDecisions {
     answerSeconds: number;
     /** Seconds the table has to vote. */
     voteSeconds: number;
+    /** Seconds the vote count stays up before the lie is shown. */
+    countSeconds: number;
     /** Seconds the result stays up. */
     revealSeconds: number;
     points: {
@@ -42,7 +44,7 @@ export interface ClaimsDecisions {
 }
 
 /** The phases of the kit. */
-export type ClaimsPhase = "gathering" | "interview" | "challenge" | "answer" | "vote" | "reveal" | "end";
+export type ClaimsPhase = "gathering" | "interview" | "challenge" | "answer" | "vote" | "count" | "reveal" | "end";
 
 /** How the game ended. */
 export type ClaimsResult = "played" | "tooFew";
@@ -155,6 +157,12 @@ const OFF_LIMITS: RegExp = new RegExp(
 /** Longest claim a creator may configure. */
 const CLAIM_LIMIT_MAXIMUM: number = 60;
 
+/** What each empty claim box suggests, so a blank box isn't the first thing a player has to solve. */
+const CLAIM_EXAMPLES: readonly string[] = ["I once ate a whole cake alone", "I can whistle with my fingers", "I got lost in a corn maze"];
+
+/** Added to a fact that must be spoken, so a phase that is mostly silent can't swallow it. */
+const SAY_IT_ALOUD: string = "Say this out loud; don't reply (quiet).";
+
 /**
  * Whether a claim touches something the host never goes near: health, money, family, work or romance.
  * @param text the claim.
@@ -180,6 +188,7 @@ export function claimsProblems(decisions: ClaimsDecisions): string[] {
         ["Question time", decisions.challengeSeconds, 8, 60],
         ["Answer time", decisions.answerSeconds, 8, 60],
         ["Voting time", decisions.voteSeconds, 8, 60],
+        ["Count time", decisions.countSeconds, 2, 10],
         ["Result time", decisions.revealSeconds, 3, 30],
     ];
     for (const [name, value, low, high] of spans) {
@@ -279,6 +288,13 @@ export function claimsManifest(box: Box): CartridgeManifest {
                     `Everyone but the claimant taps the claim they think is the lie. ${quietUnlessTold}`,
                     "When told, tell them to pick, in a few words, and say nothing about which claim looks likelier.",
                 ].join(" "),
+                listening: { "*": "muted" },
+                hostMayInterject: false,
+                silenceSeconds: 0,
+            },
+            {
+                id: "count",
+                hostBrief: "The votes are on the screen and the answer is still hidden. When told, say a few words that build the suspense. You don't know it, so don't guess.",
                 listening: { "*": "muted" },
                 hostMayInterject: false,
                 silenceSeconds: 0,
@@ -414,7 +430,7 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
         const next: ClaimsState = { ...state, phase: "challenge", askerId, asked: { ...state.asked, [askerId]: (state.asked[askerId] ?? 0) + 1 } };
         const text: string = [
             `${nameOf(next, askerId)} puts the next question to ${nameOf(next, claimantId)}, in their own words.`,
-            `Name ${nameOf(next, askerId)} and tell them to hold their phone and ask. Do not ask a question yourself, and say nothing else.`,
+            `Name ${nameOf(next, askerId)} and tell them to ask out loud. Do not ask a question yourself, and say nothing else.`,
         ].join(" ");
         return { state: next, facts: because(publicFact("asker-named", text), CLAIMS_DECISIONS.challenge), nextPhaseId: "challenge", timers: { challenge: decisions.challengeSeconds } };
     };
@@ -448,6 +464,19 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
             "Tell everyone else to pick the claim they think is the lie, on their phones, in a few words. Say nothing about which looks likelier.",
         ].join(" ");
         return { state: next, facts: because(publicFact("vote-open", text), CLAIMS_DECISIONS.vote), nextPhaseId: "vote", timers: { vote: decisions.voteSeconds } };
+    };
+
+    /**
+     * Shows how the votes fell, with the lie still hidden, for a moment before the reveal.
+     * @param state the state with the vote closed.
+     * @returns the step.
+     */
+    const toCount = (state: ClaimsState): Step<ClaimsState> => {
+        if (Object.keys(state.votes).length === 0) {
+            return resolve(state);
+        }
+        const text: string = `The votes are in. Say so in a few words that build the suspense. You don't know the answer yet, so don't guess. ${SAY_IT_ALOUD}`;
+        return { state: { ...state, phase: "count" }, facts: because(publicFact("count", text), CLAIMS_DECISIONS.reveal), nextPhaseId: "count", timers: { count: decisions.countSeconds } };
     };
 
     /**
@@ -537,7 +566,7 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
             return toAnswer(next);
         }
         if (next.phase === "vote" && next.voters.every((id: string) => next.votes[id] !== undefined) === true) {
-            return resolve(next);
+            return toCount(next);
         }
         return { state: next, facts: [] };
     };
@@ -709,7 +738,7 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
                     return { state, facts: [] };
                 }
                 const voted: ClaimsState = { ...state, votes: { ...state.votes, [playerId]: index } };
-                return voted.voters.every((voter: string) => voted.votes[voter] !== undefined) === true ? resolve(voted) : { state: voted, facts: [] };
+                return voted.voters.every((voter: string) => voted.votes[voter] !== undefined) === true ? toCount(voted) : { state: voted, facts: [] };
             }
             return { state, facts: [] };
         },
@@ -749,6 +778,9 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
                 return toVote(state);
             }
             if (state.phase === "vote") {
+                return toCount(state);
+            }
+            if (state.phase === "count") {
                 return resolve(state);
             }
             if (state.phase === "reveal") {
@@ -802,6 +834,13 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
                     ],
                 };
             }
+            if (state.phase === "count") {
+                const lines: SceneBlock[] = shownClaims(state).map((text: string, index: number): SceneBlock => {
+                    const votes: number = Object.values(state.votes).filter((vote: number) => vote === index).length;
+                    return { type: "text", text: `${LETTERS[index] ?? "?"}. ${text}: ${votes} ${votes === 1 ? "vote" : "votes"}`, emphasis: "large" };
+                });
+                return { mood: "tense", transition: "fade", blocks: [{ type: "title", text: "The votes are in", kicker: `${nameOf(state, claimant)}'s claims` }, ...lines] };
+            }
             if (state.phase === "reveal") {
                 return { mood: "dawn", transition: "fade", blocks: revealBlocks(state) };
             }
@@ -810,7 +849,7 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
             return {
                 mood: "victory",
                 transition: "fade",
-                blocks: [{ type: "title", text: "Final scores", kicker: state.result === "tooFew" ? "The table got small" : "That's the game" }, { type: "tally", title: "Points", rows: rows.map((row: SceneTallyRow) => ({ ...row, highlight: row.count === top && top > 0 })) }],
+                blocks: [{ type: "title", text: winnerLine(rows, top), kicker: state.result === "tooFew" ? "The table got small" : "Final scores" }, { type: "tally", title: "Points", rows: rows.map((row: SceneTallyRow) => ({ ...row, highlight: row.count === top && top > 0 })) }],
             };
         },
 
@@ -822,27 +861,27 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
                     const retry: boolean = (state.attempts[playerId] ?? 0) > 0;
                     const note: string = retry === true ? "Not that one. Keep it off health, money, family, work and romance, and don't repeat yourself." : "True or false. Keep it off health, money, family, work and romance.";
                     return [
-                        { type: "textInput", id: boxId(state, playerId), prompt: `Claim ${mine.length + 1} of ${CLAIM_COUNT}`, placeholder: "Something about you", maxLength: decisions.claimLimit, note },
-                        ...mine.map((text: string): Control => ({ type: "notice", text: `Saved: ${text}`, tone: "info" })),
+                        { type: "textInput", id: boxId(state, playerId), prompt: `Claim ${mine.length + 1} of ${CLAIM_COUNT}`, placeholder: CLAIM_EXAMPLES[mine.length] ?? "Something about you", maxLength: decisions.claimLimit, note },
+                        ...mine.map((text: string, index: number): Control => ({ type: "notice", text: `${index + 1}. ${text}`, tone: "info" })),
                     ];
                 }
                 if (mayMark(state, playerId) === true) {
                     const options: ControlOption[] = mine.map((text: string, index: number): ControlOption => {
                         return { id: `${CLAIMS_LIE_PREFIX}${index}`, label: `${index + 1}. ${text}` };
                     });
-                    return [{ type: "choice", prompt: "Which one is the lie?", options, multiple: false }];
+                    return [{ type: "choice", prompt: "Tap your lie. Only you can see this.", options, multiple: false }];
                 }
                 return [{ type: "waiting", text: "Locked in. Waiting for the others." }];
             }
             if (state.phase === "interview" || state.phase === "answer") {
                 if (playerId === claimant) {
-                    return [{ type: "notice", text: "Hold your phone to answer the host.", tone: "info" }];
+                    return [{ type: "notice", text: "Your turn: answer the host out loud.", tone: "info" }];
                 }
                 return [{ type: "waiting", text: `${nameOf(state, claimant)} is on the stand. Listen, and decide which claim is the lie.` }];
             }
             if (state.phase === "challenge") {
                 if (playerId === state.askerId) {
-                    return [{ type: "notice", text: `Hold your phone and ask ${nameOf(state, claimant)} one question.`, tone: "info" }];
+                    return [{ type: "notice", text: `Your turn: ask ${nameOf(state, claimant)} one question out loud.`, tone: "info" }];
                 }
                 return [{ type: "waiting", text: `${nameOf(state, state.askerId)} is asking ${nameOf(state, claimant)} a question.` }];
             }
@@ -899,9 +938,21 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
         return [
             { type: "title", text: `Claim ${LETTERS[last.lie] ?? "?"} was the lie`, kicker: `${name}'s claims` },
             ...claimLines,
-            { type: "text", text: voted === 0 ? "Nobody voted." : `${last.fooledIds.length} fooled, ${last.caughtIds.length} caught it.${last.swept === true ? " A sweep, so it counts double." : ""}` },
+            { type: "text", text: voted === 0 ? "Nobody voted." : `${last.fooledIds.length} fooled, ${last.caughtIds.length} caught it.${last.swept === true ? " A sweep, so it counts double." : ""}`, emphasis: "large" },
             ...(rows.length === 0 ? [] : [{ type: "tally", title: "Points this round", rows } satisfies SceneBlock]),
+            { type: "tally", title: "Scores so far", rows: scoreRows(state) },
         ];
+    }
+
+    /**
+     * Says who won, for the top of the final screen.
+     * @param rows the scores.
+     * @param top the highest score.
+     * @returns the line.
+     */
+    function winnerLine(rows: readonly SceneTallyRow[], top: number): string {
+        const leaders: string[] = rows.filter((row: SceneTallyRow) => row.count === top).map((row: SceneTallyRow) => row.label);
+        return leaders.length === 1 ? `${leaders[0] ?? "Someone"} wins` : `${leaders.join(" and ")} tie`;
     }
 
     /**

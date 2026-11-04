@@ -166,6 +166,9 @@ function interview(table: Table): void {
  */
 function ballots(table: Table, choose: (place: number) => number): void {
     [...table.state.voters].forEach((id: string, place: number) => { press(table, id, `${CLAIMS_VOTE_PREFIX}${choose(place)}`); });
+    if (table.state.phase === "count") {
+        fire(table, "count");
+    }
 }
 
 /**
@@ -199,6 +202,9 @@ function playOut(table: Table): void {
         }
         if (table.state.phase === "vote") {
             ballots(table, () => 0);
+        }
+        if (table.state.phase === "count") {
+            fire(table, "count");
         }
         if (table.state.phase === "reveal") {
             fire(table, "reveal");
@@ -372,6 +378,9 @@ describe("the claims kit, as Three Claims", () => {
             if (table.state.phase === "vote") {
                 ballots(table, () => 0);
             }
+            if (table.state.phase === "count") {
+                fire(table, "count");
+            }
             if (table.state.phase === "reveal") {
                 fire(table, "reveal");
             }
@@ -437,6 +446,8 @@ describe("the claims kit, as Three Claims", () => {
             const claimant: string = table.state.queue[0] ?? "";
             const votes: number[] = outcome.votes(lieOf(table));
             table.state.voters.forEach((id: string, place: number) => { press(table, id, `${CLAIMS_VOTE_PREFIX}${votes[place] ?? 0}`); });
+            assert.equal(table.state.phase, "count", "the votes show before the lie does");
+            fire(table, "count");
             assert.equal(table.state.scores[claimant] ?? 0, outcome.claimant, JSON.stringify(votes));
             assert.equal(table.state.scores[table.state.voters[0] ?? ""] ?? 0, votes[0] === lieOf(table) ? outcome.catcher : 0);
             assert.equal(table.state.played[0]?.swept, outcome.swept);
@@ -511,7 +522,7 @@ describe("the claims kit, as Three Claims", () => {
         const [one, two, three] = voterLeaves.state.voters;
         press(voterLeaves, one ?? "", `${CLAIMS_VOTE_PREFIX}0`);
         press(voterLeaves, two ?? "", `${CLAIMS_VOTE_PREFIX}1`);
-        assert.equal(on(voterLeaves, { type: "playerLeft", at: 1, playerId: three ?? "" }).state.phase, "reveal", "the last ballot outstanding left, so the vote closes");
+        assert.equal(on(voterLeaves, { type: "playerLeft", at: 1, playerId: three ?? "" }).state.phase, "count", "the last ballot outstanding left, so the vote closes");
     });
 
     it("ends the game when fewer than three people are left", () => {
@@ -568,15 +579,15 @@ describe("the claims kit, as Three Claims", () => {
         }
         perTurn.push(count);
         const turns: number[] = perTurn.slice(1);
-        const SIX_REPLIES: number = 6;
+        const SEVEN_REPLIES: number = 7;
         const FASTEST_STEP_SECONDS: number = 4;
         for (const replies of turns) {
-            assert.ok(replies <= SIX_REPLIES, `a turn told the host ${replies} times`);
-            assert.ok(replies / (SIX_REPLIES * FASTEST_STEP_SECONDS / 60) <= 20, "even at four seconds a step");
+            assert.ok(replies <= SEVEN_REPLIES, `a turn told the host ${replies} times`);
+            assert.ok(replies / (SEVEN_REPLIES * FASTEST_STEP_SECONDS / 60) <= 20, "even at four seconds a step");
         }
         const timing = THREE_CLAIMS_BLUEPRINT.decisions;
-        const slowest: number = timing.interviewSeconds * 2 + timing.challengeSeconds + timing.answerSeconds + timing.voteSeconds + timing.revealSeconds;
-        assert.ok(slowest <= 95, `a turn takes at most ${slowest} seconds`);
+        const slowest: number = timing.interviewSeconds * 2 + timing.challengeSeconds + timing.answerSeconds + timing.voteSeconds + timing.countSeconds + timing.revealSeconds;
+        assert.ok(slowest <= 100, `a turn takes at most ${slowest} seconds`);
     });
 
     it("never changes a state it was given", () => {

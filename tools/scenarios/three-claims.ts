@@ -34,7 +34,7 @@ import { assertNeverSeen, everythingOnPhone, everythingOnScreen, pause, phoneStr
 
 /** Where the stand-in model keeps what the room asked it. */
 /** True when the room has the real host, whose words the script can't know. */
-const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1";
+const REAL_HOST: boolean = process.env.SCENARIO_REAL_HOST === "1" || (process.env.META_MODEL_API_KEY !== undefined && process.env.SCENARIO_STAND_IN !== "1");
 
 /** How many times the first claimant holds and says a sound with CLAIMS_SPAM=1. */
 const SPAM_PRESSES: number = 30;
@@ -190,7 +190,7 @@ async function typeRefused(seat: Seat, text: string, label: string, mark: string
  * @returns the seat that is up, or null.
  */
 function claimantSeat(): Seat | null {
-    return seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone to answer") === true)) ?? null;
+    return seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Your turn: answer") === true)) ?? null;
 }
 
 /**
@@ -345,11 +345,11 @@ for (let turn = 0; turn < count; turn += 1) {
         await hostSpeaks(heardBefore, "the host to speak");
         const heardAfter: number = screen.hostLines.length;
         claimant.phone.say("There were four of us and it rained all day");
-        await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) ?? claimant).some((line: string) => line.startsWith("Hold your phone and ask") === true), "the named player");
+        await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Your turn: ask") === true)) ?? claimant).some((line: string) => line.startsWith("Your turn: ask") === true), "the named player");
         if (screen.hostLines.length <= heardAfter) {
             await hostSpeaks(heardAfter, "the host to speak");
         }
-        const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) as Seat;
+        const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Your turn: ask") === true)) as Seat;
         if (asker === claimant) {
             throw new Error("The claimant was named to ask themselves.");
         }
@@ -363,7 +363,7 @@ for (let turn = 0; turn < count; turn += 1) {
             throw new Error("The claimant was heard during the named player's question.");
         }
         asker.phone.say("Which street was that on exactly");
-        await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Hold your phone to answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Hold your phone and ask") === true) === false, "the claimant to answer the question");
+        await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Your turn: answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Your turn: ask") === true) === false, "the claimant to answer the question");
         if (REAL_HOST === true) {
             await pause(REAL_STEP_MILLISECONDS);
         }
@@ -382,7 +382,6 @@ for (let turn = 0; turn < count; turn += 1) {
     if (REAL_HOST === true) {
         await pause(REAL_STEP_MILLISECONDS);
     }
-    const tallyFrom: number = screen.hostLines.length;
     const voters: Seat[] = seats.filter((seat: Seat) => seat !== claimant);
     for (const voter of voters) {
         const labels: string = voter.phone.options().map((option: { label: string }) => option.label).join(" | ");
@@ -416,6 +415,7 @@ for (let turn = 0; turn < count; turn += 1) {
     await waitFor(() => squash(everythingOnScreen(screen)).includes(squash("was the lie")), "the reveal");
     await waitFor(() => (screen.scene === null ? [] : sceneStrings(screen.scene)).some((line: string) => line.endsWith("(the lie)") === true), "the lie marked on the TV");
     const revealed: string[] = sceneStrings(screen.scene ?? { mood: "neutral", transition: "cut", blocks: [] });
+    const linesAtMark: number = screen.hostLines.length;
     const marked: string | undefined = revealed.find((line: string) => line.endsWith("(the lie)") === true);
     if (marked === undefined || squash(marked).includes(squash(mine.lie)) === false) {
         throw new Error(`The reveal marks the wrong claim: "${marked ?? ""}", expected "${mine.lie}".`);
@@ -426,7 +426,7 @@ for (let turn = 0; turn < count; turn += 1) {
     console.warn(`  ok: the reveal marks ${claimant.name}'s lie, and ${catchers.length} of ${voters.length} caught it`);
 
     if (REAL_HOST === true) {
-        await hostSpeaks(tallyFrom, "the host to read the tally");
+        await hostSpeaks(linesAtMark, "the host to read the tally");
     }
     if (REAL_HOST === false) {
         await waitFor(() => screen.hostLines.some((line: string) => /^Claim [ABC] was the lie\./.test(line) === true && screen.hostLines.indexOf(line) >= lines), "the host to read the tally");
@@ -467,8 +467,8 @@ for (let turn = 0; turn < count; turn += 1) {
 await waitFor(() => screen.shell?.gameOver === true, "the final scores");
 const gameOverAt: number = Date.now();
 const linesAtEnd: number = screen.hostLines.length;
-if (screen.title() !== "Final scores") {
-    throw new Error(`Expected the final scores, saw "${screen.title()}".`);
+if (/ (?:wins|tie)$/.test(screen.title()) === false) {
+    throw new Error(`Expected the winner on the final screen, saw "${screen.title()}".`);
 }
 const rows: Record<string, number> = Object.fromEntries((screen.scene?.blocks.find((block) => block.type === "tally") as { rows: { label: string; count: number }[] } | undefined)?.rows.map((row) => [row.label, row.count]) ?? []);
 if (JSON.stringify(Object.entries(rows).sort()) !== JSON.stringify(Object.entries(expected).sort())) {
