@@ -6,7 +6,7 @@
 // Muse Spark. A pass against it proves the room, the filter's local layer, the shelf and the game's
 // rules and screens work together; it proves nothing about the real host's wording or judgement.
 //
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 //   node tools/fake-meta.ts
 //   ROOM_STUDIO=1 node tools/scenarios/two-takes.ts
 //

@@ -8,7 +8,7 @@
 // Run it with model keys, or without them against the stand-in model:
 //   GAME_ROOM_TEXT_ONLY=1 npm run room                                                  (with keys)
 //   node tools/fake-meta.ts, then in the room's terminal:
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 //   ROOM_STUDIO=1 node tools/scenarios/two-takes.ts                                      (in a third terminal)
 // ROOM_STUDIO=1 makes the fake screen open its room with ?studio=1, the only kind of room whose
 // shelf has Two Takes. A pass prints PASS as its last line and takes about a minute. The room's log
