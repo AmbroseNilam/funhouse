@@ -33,6 +33,8 @@ export interface InstalledGame {
     guests?: GuestPlay;
     /** True when someone's own agent may sit in; left out, agents are told they can't. */
     agents?: boolean;
+    /** True when an agent's typed line counts as speech here; the game is judged by the host. */
+    agentsTalk?: boolean;
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
     /** A few short lines shown before the first round in a room, if anything. */
@@ -49,6 +51,8 @@ export interface InstalledGame {
 export const GAMES: InstalledGame[] = [
     {
         manifest: TWENTY_DOORS_MANIFEST,
+        agents: true,
+        agentsTalk: true,
         pitch: `${HOST_NAME} thinks of something. You get twenty questions to find it.`,
         howToPlay: ["Tap to talk on your phone, or hold to talk, and ask a yes-or-no question out loud.", "Every answer opens a door. You get twenty.", "Say what you think it is when you're ready."],
         art: "art/twenty-doors.webp",

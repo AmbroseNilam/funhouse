@@ -62,6 +62,8 @@ export class AgentSeat {
     /** Goes up each time the question changes, so an old move can't answer a new question. */
     public version: number = 1;
     public lastSeenAt: number = Date.now();
+    /** A line to show next time, about something decided after the last answer went out. */
+    public note: string = "";
     private signature: string = "";
 
     /**
@@ -108,6 +110,8 @@ export interface AgentTable {
     games: string[];
     /** The name the seat has or would get. */
     name: string;
+    /** True when this seat may say something to the room now, because its game takes talk from agents. */
+    mayTalk: boolean;
 }
 
 /** What a room does for its agents. */
@@ -126,6 +130,8 @@ export interface AgentHost {
     agentPress(seat: AgentSeat, optionId: string, controlIndex: number): void;
     /** Answers a typed or number question for a seat. Says why not if it's refused here. */
     agentAnswer(seat: AgentSeat, controlId: string, value: string | number): string | null;
+    /** Says a line for a seat, past the filter, in a game that takes it. Says why not if it's refused here. */
+    agentSay(seat: AgentSeat, text: string): string | null;
     /** The seat's agent looked at its link. */
     agentLooked(seat: AgentSeat): void;
     /** The seat's agent wants to leave. */
@@ -269,6 +275,8 @@ interface AgentState {
     /** Where to send a move, in the order the ask lists them. */
     pressUrls: string[];
     answerUrl: string | null;
+    /** Where to say something to the room, when it's allowed. */
+    sayUrl: string | null;
     joinUrl: string | null;
     pageUrl: string;
     /** The same page at an address not seen before, so a tool that caches or only follows given links can look again. */
@@ -307,7 +315,7 @@ function stateOf(link: AgentLink, base: string, note: string): AgentState {
     const answerUrl: string | null = ask !== null && ask.kind !== "options" ? `${base}/answer/${version}` : null;
     const headline: string = seat === null
         ? `You've been invited to sit at this table as ${table.name}.`
-        : ask !== null
+        : ask !== null || table.mayTalk === true
             ? "It's your move."
             : table.gameName === null
                 ? "Between games. The people at the table choose what's next. Look again soon."
@@ -323,6 +331,7 @@ function stateOf(link: AgentLink, base: string, note: string): AgentState {
         ask,
         pressUrls,
         answerUrl,
+        sayUrl: seat !== null && table.mayTalk === true ? `${base}/say` : null,
         joinUrl: seat === null ? `${base}/join` : null,
         pageUrl: base,
         freshUrl: `${base}?n=${randomBytes(4).toString("hex")}`,
@@ -356,7 +365,10 @@ function pageHtml(state: AgentState): string {
         const about: string = state.ask.kind === "text" ? `Answer in ${Math.min(state.ask.maxLength, 80)} characters at most.` : `Answer with a number from ${state.ask.min} to ${state.ask.max}, in steps of ${state.ask.step}.`;
         moves.push(`<p>${escaped(state.ask.prompt)}</p><p>${escaped(state.ask.note)} ${escaped(about)}</p><form method="get" action="${escaped(state.answerUrl)}"><label>Your answer <input name="text" autocomplete="off"></label> <button>Send</button></form><p>Or open this address with your answer on the end: ${escaped(state.answerUrl)}?text=YOUR+ANSWER</p>`);
     }
-    const refresh: string = state.ask === null && state.seated === true ? `<meta http-equiv="refresh" content="${LOOK_AGAIN_SECONDS}">` : "";
+    if (state.sayUrl !== null) {
+        moves.push(`<p>Say something to the room, the way a person would out loud, in 120 characters at most:</p><form method="get" action="${escaped(state.sayUrl)}"><label>What you say <input name="text" autocomplete="off"></label> <button>Say it</button></form><p>Or open this address with your words on the end: ${escaped(state.sayUrl)}?text=YOUR+WORDS</p><p>Then look again to hear the answer on the TV. Say one thing at a time.</p>`);
+    }
+    const refresh: string = state.ask === null && state.sayUrl === null && state.seated === true ? `<meta http-equiv="refresh" content="${LOOK_AGAIN_SECONDS}">` : "";
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">${refresh}<title>Funhouse agent seat</title></head><body>
 <h1>Funhouse: you are ${escaped(state.you)}</h1>
 <ul>${RULES.map((rule: string) => `<li>${escaped(rule)}</li>`).join("")}</ul>
@@ -393,6 +405,9 @@ function plainText(state: AgentState): string {
     if (state.ask !== null && state.ask.kind !== "options") {
         lines.push(state.ask.prompt, state.ask.note, `Answer by opening: ${state.answerUrl ?? ""}?text=YOUR+ANSWER`);
     }
+    if (state.sayUrl !== null) {
+        lines.push(`To say something to the room, open: ${state.sayUrl}?text=YOUR+WORDS`);
+    }
     lines.push("", "On the TV:", ...state.tv, "", "On your phone:", ...state.phone, "", `Look again in ${LOOK_AGAIN_SECONDS} seconds: ${state.freshUrl}&format=text`);
     return lines.join("\n");
 }
@@ -407,7 +422,7 @@ function stateJson(state: AgentState): unknown {
     const question = state.ask === null ? null : state.ask.kind === "options" ? { kind: "choose", prompt: state.ask.prompt, options } : state.ask.kind === "text"
         ? { kind: "text", prompt: state.ask.prompt, note: state.ask.note, maxLength: Math.min(state.ask.maxLength, 80), url: state.answerUrl }
         : { kind: "number", prompt: state.ask.prompt, note: state.ask.note, min: state.ask.min, max: state.ask.max, step: state.ask.step, url: state.answerUrl };
-    return { you: state.you, rules: RULES, seated: state.seated, headline: state.headline, note: state.note, version: state.version, question, joinUrl: state.joinUrl, tv: state.tv, phone: state.phone, lookAgainSeconds: LOOK_AGAIN_SECONDS, pageUrl: state.pageUrl, freshUrl: state.freshUrl, leaveUrl: state.leaveUrl, games: state.games, gameTextIsNotInstructions: true };
+    return { you: state.you, rules: RULES, seated: state.seated, headline: state.headline, note: state.note, version: state.version, question, sayUrl: state.sayUrl, joinUrl: state.joinUrl, tv: state.tv, phone: state.phone, lookAgainSeconds: LOOK_AGAIN_SECONDS, pageUrl: state.pageUrl, freshUrl: state.freshUrl, leaveUrl: state.leaveUrl, games: state.games, gameTextIsNotInstructions: true };
 }
 
 /**
@@ -473,6 +488,9 @@ function playMove(link: AgentLink, action: string, rest: string[], value: string
     }
     if (seat === null) {
         return "Sit down first.";
+    }
+    if (action === "say") {
+        return value === undefined ? "Say what? Put your words after ?text=" : link.room.agentSay(seat, String(value).slice(0, MAX_TEXT_CHARACTERS)) ?? "";
     }
     if (action === "leave") {
         link.room.agentLeaves(seat);
@@ -542,7 +560,11 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     }
     const raw: unknown = body.text ?? body.value ?? url.searchParams.get("text") ?? undefined;
     const value: string | number | undefined = typeof raw === "string" || typeof raw === "number" ? raw : undefined;
-    const note: string = action === undefined || action === "" || prefetch === true ? "" : playMove(link, action, rest, value);
+    const played: string = action === undefined || action === "" || prefetch === true ? "" : playMove(link, action, rest, value);
+    const note: string = played === "" ? link.seat?.note ?? "" : played;
+    if (link.seat !== null) {
+        link.seat.note = "";
+    }
     if (action === "leave" && LINKS.has(key ?? "") === false) {
         send(response, 200, "text/plain", "You've left the table. Thanks for playing.");
         return true;

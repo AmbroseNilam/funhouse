@@ -297,6 +297,15 @@ const MAX_GUEST_DECISIONS_PER_GAME: number = 120;
 /** Most typed answers from all a room's agents the filter will check in one game; after that they're refused. */
 const MAX_AGENT_CHECKS_PER_GAME: number = 60;
 
+/** Most an agent may say in a line. */
+const AGENT_SAY_LIMIT: number = 120;
+
+/** Least time between one agent's lines, as each wakes the host and costs a reply and a voice line. */
+const AGENT_SAY_GAP_MILLISECONDS: number = 5000;
+
+/** Most lines all a room's agents may say in one game. */
+const MAX_AGENT_LINES_PER_GAME: number = 40;
+
 /** Why a table with someone's agent can't start a game that doesn't take them. */
 const NO_AGENTS_HERE: string = "Agents can't join this one. Remove them first.";
 
@@ -471,6 +480,8 @@ export class Room implements HostStage, AgentHost {
     private guestDecisions: number = 0;
     /** Typed answers from agents the filter has checked this game. */
     private agentChecks: number = 0;
+    /** Lines from agents this game. */
+    private agentLines: number = 0;
     /** Each person's unused agent link, by their seat. */
     private readonly agentLinks: Map<string, string> = new Map();
     /** The site's address, for the links this room gives out. */
@@ -1251,6 +1262,7 @@ export class Room implements HostStage, AgentHost {
             tv: sceneLines(this.currentScene()),
             games: this.agentGames(),
             name: player?.name ?? this.agentNameFor(ownerId),
+            mayTalk: player !== undefined && this.agentMayTalk(player),
         };
     }
 
@@ -1285,6 +1297,72 @@ export class Room implements HostStage, AgentHost {
         }
         this.onAnswer(player, controlId, value);
         return null;
+    }
+
+    /**
+     * Whether an agent may say something now: in a game that takes talk from agents, and when the game has phones listening.
+     * @param player the seat.
+     * @returns true when it may.
+     */
+    private agentMayTalk(player: Player): boolean {
+        return this.game !== null && this.runningBox()?.agentsTalk === true && this.game.outcome() === null && this.gamePlayerIds.has(player.playerId) === true && this.canTalk(player) === true;
+    }
+
+    /**
+     * Says a line for an agent, past the same filter as a person's typing. It goes to the game and the
+     * host as speech does, but never through voice commands, so it can't end or restart a game, and it
+     * doesn't cut the host off.
+     * @param seat the seat.
+     * @param text what to say.
+     * @returns a line saying why it was refused here, or null when it's on its way.
+     */
+    public agentSay(seat: AgentSeat, text: string): string | null {
+        const player: Player | undefined = this.players.get(seat.playerId);
+        if (player === undefined || this.agentMayTalk(player) === false) {
+            return "You can't say anything to the room right now.";
+        }
+        if (Date.now() - player.lastTextAnswerAt < AGENT_SAY_GAP_MILLISECONDS) {
+            return "Wait a few seconds, and hear the last answer first.";
+        }
+        if (this.agentLines >= MAX_AGENT_LINES_PER_GAME) {
+            return "That's enough from the agents this game.";
+        }
+        if (HOST_MARKUP.test(text) === true) {
+            log(this.scope(), `${seat.playerId} line refused: markup`);
+            return ANSWER_REFUSED_NOTE;
+        }
+        player.lastTextAnswerAt = Date.now();
+        this.agentLines += 1;
+        void this.sayForAgent(player, seat, text);
+        return null;
+    }
+
+    /**
+     * Runs an agent's line past the filter and hands it to the game and the host.
+     * @param player the seat.
+     * @param seat its link's end.
+     * @param text what it said.
+     */
+    private async sayForAgent(player: Player, seat: AgentSeat, text: string): Promise<void> {
+        const classify = async (line: string): Promise<boolean> => {
+            this.agentChecks += 1;
+            return this.agentChecks <= MAX_AGENT_CHECKS_PER_GAME && BUDGET.spend("guest") === true && await isFitForRoom(line);
+        };
+        const result: FilterResult = await filterText(text.slice(0, AGENT_SAY_LIMIT * 2), AGENT_SAY_LIMIT, classify);
+        if (this.players.get(player.playerId) !== player || this.agentMayTalk(player) === false) {
+            return;
+        }
+        if (result.allowed === false) {
+            log(this.scope(), `${player.playerId} line filtered: ${result.category}`);
+            seat.note = ANSWER_REFUSED_NOTE;
+            return;
+        }
+        this.game?.event({ type: "speechStarted", at: Date.now(), playerId: player.playerId });
+        this.lastActivityAt = Date.now();
+        this.lastSpeakerId = player.playerId;
+        this.caption = { speaker: player.name, text: result.text, final: true };
+        this.broadcastScene();
+        this.passToGame(player, result.text);
     }
 
     /**
@@ -1816,6 +1894,7 @@ export class Room implements HostStage, AgentHost {
         this.gamePlayerIds = new Set(this.players.keys());
         this.guestDecisions = 0;
         this.agentChecks = 0;
+        this.agentLines = 0;
         this.guests().forEach((guest: Player) => { guest.guest?.newGame(); });
         log(this.scope(), `starting ${installed.manifest.id} with ${count}`);
         this.caption = null;
