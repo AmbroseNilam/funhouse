@@ -199,6 +199,9 @@ export function localCategory(text: string): FilterCategory | null {
     return null;
 }
 
+/** One word wholly in capitals, which a classifier can take for an acronym. */
+const ONE_WORD_IN_CAPITALS: RegExp = /^\p{Lu}{2,}$/u;
+
 /**
  * Runs both layers. The classifier only sees what the local check passed, and a classifier that
  * fails counts as no, so a provider outage can't let anything through.
@@ -217,7 +220,16 @@ export async function filterText(text: string, limit: number, classify: TextClas
         return { allowed: false, category: local };
     }
     const fit: boolean = await classify(tidy).catch(() => false);
-    return fit === true ? { allowed: true, text: tidy } : { allowed: false, category: "classifier" };
+    if (fit === true) {
+        return { allowed: true, text: tidy };
+    }
+    if (ONE_WORD_IN_CAPITALS.test(tidy) === false) {
+        return { allowed: false, category: "classifier" };
+    }
+    // A word in capitals can read as an acronym ("MAP"). Ask again about the plain word, and show what passed.
+    const plain: string = tidy.toLowerCase();
+    const plainFit: boolean = await classify(plain).catch(() => false);
+    return plainFit === true ? { allowed: true, text: plain } : { allowed: false, category: "classifier" };
 }
 
 /** Words that read as the room itself talking, anywhere in a name. */
