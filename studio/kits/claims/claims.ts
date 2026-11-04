@@ -430,7 +430,7 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
         const next: ClaimsState = { ...state, phase: "challenge", askerId, asked: { ...state.asked, [askerId]: (state.asked[askerId] ?? 0) + 1 } };
         const text: string = [
             `${nameOf(next, askerId)} puts the next question to ${nameOf(next, claimantId)}, in their own words.`,
-            `Name ${nameOf(next, askerId)} and tell them to hold their phone and ask. Do not ask a question yourself, and say nothing else.`,
+            `Name ${nameOf(next, askerId)} and tell them to ask out loud. Do not ask a question yourself, and say nothing else.`,
         ].join(" ");
         return { state: next, facts: because(publicFact("asker-named", text), CLAIMS_DECISIONS.challenge), nextPhaseId: "challenge", timers: { challenge: decisions.challengeSeconds } };
     };

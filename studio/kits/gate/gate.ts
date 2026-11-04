@@ -419,7 +419,7 @@ export function gateManifest(box: Box): CartridgeManifest {
             {
                 id: "gate",
                 hostBrief: [
-                    "A plea is what a player says to you while holding their phone. When you hear one, you'll be told the verdict on it in what you know.",
+                    "A plea is what a player says to you through their phone. When you hear one, you'll be told the verdict on it in what you know.",
                     "Answer only that verdict, in character, in one or two short sentences. If nothing new has been judged, say a line to keep the gate tense, or stay quiet.",
                     "Never repeat a plea back word for word. Don't count tries aloud; you'll be told when your patience is nearly gone. Don't lean on one pet word or image from line to line.",
                 ].join(" "),
