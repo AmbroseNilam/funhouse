@@ -2,6 +2,6 @@
     "id": "pastTheGate",
     "kit": "gate",
     "level": "held",
-    "reason": "Ambrose: not realistic, not fun",
-    "order": 70
+    "order": 70,
+    "reason": "Ambrose dropped it from the showcase; held, not deleted"
 }

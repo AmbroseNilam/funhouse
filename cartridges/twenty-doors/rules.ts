@@ -104,6 +104,18 @@ export const TWENTY_DOORS_PICK: StartPick = {
  */
 export function createTwentyDoors(random: () => number = Math.random, chosen?: string): Cartridge<TwentyDoorsState> {
     const publicFact = (kind: string, text: string, quiet: boolean = false): ScopedFact => ({ scope: { kind: "public" }, kind, text, quiet });
+    /**
+     * Says how a finished game went, in one plain line.
+     * @param state the finished game.
+     * @returns the line.
+     */
+    const endLine = (state: TwentyDoorsState): string => {
+        const doors: string = `${state.doorsOpened} ${state.doorsOpened === 1 ? "door" : "doors"}`;
+        if (state.won === true) {
+            return `${state.finder ?? "Someone"} got it with ${doors} open.`;
+        }
+        return state.doorsOpened >= DOOR_COUNT ? "All twenty doors opened, and nobody got it." : `You opened ${doors}, then called it.`;
+    };
     const nameOf = (state: TwentyDoorsState, playerId: string): string => state.players.find((player) => player.playerId === playerId)?.name ?? "Someone";
 
     /**
@@ -210,6 +222,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
         publicScene(state: TwentyDoorsState): Scene {
             if (state.phase === "end") {
                 const blocks: SceneBlock[] = [{ type: "title", text: state.secret, kicker: state.won === true ? `${state.finder ?? "Someone"} found it` : "The secret was" }];
+                blocks.push({ type: "text", text: endLine(state), emphasis: "large" });
                 if (state.revealPicture !== null) {
                     blocks.push({ type: "image", src: state.revealPicture });
                 }
@@ -225,7 +238,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
 
         privateControls(state: TwentyDoorsState): Control[] {
             if (state.phase === "end") {
-                return [{ type: "waiting", text: state.won === true ? "You found it." : "Better luck next time." }];
+                return [{ type: "waiting", text: `It was ${state.secret}. ${endLine(state)}` }];
             }
             return [{ type: "waiting", text: "Ask a yes-or-no question" }];
         },

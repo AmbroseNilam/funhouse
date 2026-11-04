@@ -2,6 +2,6 @@
     "id": "threeClaims",
     "kit": "claims",
     "level": "held",
-    "reason": "Ambrose: confusing after claims lock in, unclear points; revisit later",
-    "order": 200
+    "order": 200,
+    "reason": "Ambrose dropped it from the showcase; held, not deleted"
 }

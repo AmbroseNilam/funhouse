@@ -11,7 +11,7 @@ const { HELD_BACK, showcaseShelf } = await import("../studio/shelf.ts");
 const { RoomDirectory } = await import("./directory.ts");
 
 describe("room directory shelves", () => {
-    it("shows the five games with no parameters, hand-written ones first", () => {
+    it("shows the showcase games with no parameters, hand-written ones first", () => {
         const shelf: string[] = showcaseShelf(GAMES).map((game) => game.manifest.id);
         assert.deepEqual(shelf.slice(0, 3), ["twentyDoors", "quizmaster", "werewolf"]);
         assert.deepEqual([...shelf.slice(3)].sort(), ["paintedWhispers", "samePage"].sort());
@@ -32,7 +32,7 @@ describe("room directory shelves", () => {
         const everyday = directory.create();
         const testing = directory.create(false, false, false, true);
         assert.ok(everyday !== null && testing !== null);
-        assert.equal(everyday.brief().includes("paintedWhispers"), true);
+        assert.equal(everyday.brief().includes("samePage"), true);
         for (const held of Object.keys(HELD_BACK)) {
             assert.equal(everyday.brief().includes(held), false, held);
             assert.equal(testing.brief().includes(held), true, held);
