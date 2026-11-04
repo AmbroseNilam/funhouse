@@ -269,10 +269,13 @@ export function createPushGame(givenBox: Box, givenDecisions: PushDecisions, ran
      */
     const stakes = (state: PushState): string => {
         const ranked: string[] = stillIn(state).sort((first: string, second: string) => worth(state.hands[second] ?? []) - worth(state.hands[first] ?? []));
-        const parts: string[] = ranked.slice(0, 3).map((id: string): string => {
+        const groups: Map<string, string[]> = new Map();
+        for (const id of ranked) {
             const odds: number = Math.round((100 * dangerous(state, id)) / Math.max(1, state.deck.length));
-            return `${nameIn(state.players, id)} holds ${worth(state.hands[id] ?? [])} with a ${odds} percent chance the next card busts them`;
-        });
+            const key: string = `${worth(state.hands[id] ?? [])} with a ${odds} percent chance of a repeat`;
+            groups.set(key, [...(groups.get(key) ?? []), id]);
+        }
+        const parts: string[] = [...groups.entries()].slice(0, 3).map(([key, ids]: [string, string[]]) => `${namesOf(state, ids)} ${ids.length === 1 ? "holds" : "each hold"} ${key}`);
         return parts.length === 0 ? "" : `${parts.join("; ")}.`;
     };
 

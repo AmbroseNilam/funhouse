@@ -100,7 +100,9 @@ describe("magpie pockets", () => {
         assert.equal(revealed.state.banked.paper1, undefined, "a bust banks nothing");
         assert.equal(revealed.state.deck[0], THIMBLE);
         assert.equal(revealed.state.roundOver, false);
-        assert.match(revealed.facts[0]?.text ?? "", /Brass key.*Spoon|Teacup busted and lost 3.*Candle stayed and banked 3/);
+        assert.match(revealed.facts[0]?.text ?? "", /Teacup busted and lost 3.*Candle stayed and banked 3/);
+        assert.match(revealed.facts[0]?.text ?? "", /Spoon holds 4 with a 0 percent chance of a repeat/, "the host is given the odds, from code");
+        assert.match(revealed.facts[0]?.text ?? "", /Still choosing: Spoon\./, "someone who stayed is not still choosing");
     });
 
     it("ends the round when everyone has stayed or busted, banks only what stayed, and opens the next round", () => {
