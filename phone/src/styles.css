@@ -173,13 +173,13 @@
     /* While someone types, screens fit the part of the page the keyboard leaves showing (see keyboard.ts).
        A sheet with a box arrives in place: a box still sliding in from off-screen when it takes focus
        is why iOS left it under the keyboard. */
-    .sheet { max-height: 100%; overflow-y: auto; }
+    .sheet { max-height: 100%; overflow-y: auto; box-shadow: 0 80px 0 var(--paper); }
     .sheet:has(input) { animation: none; }
     [data-typing] .sheet-backdrop,
     [data-typing] .note-screen,
     [data-typing] .pad-screen:not(:has(.sheet-backdrop)) { top: var(--visible-top); bottom: auto; height: var(--visible-height); }
     [data-typing] .note-screen { justify-content: flex-start; overflow-y: auto; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: 12px; }
-    [data-typing] .sheet { padding-bottom: 12px; }
+    [data-typing] .sheet { padding-bottom: 12px; overflow: visible; }
     [data-typing] .has-private .surface,
     [data-typing] .has-private .talk-row { display: none; }
 }
