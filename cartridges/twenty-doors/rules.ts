@@ -357,7 +357,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
         },
 
         turn(state: TwentyDoorsState): Turn | null {
-            return state.phase === "asking" ? { kind: "anyone", label: "Anyone can ask" } : state.phase === "topic" ? { kind: "anyone", label: "Anyone can pick the topic" } : null;
+            return state.phase === "asking" ? { kind: "anyone", label: "Anyone can ask" } : state.phase === "topic" ? { kind: "anyone", label: "" } : null;
         },
 
         hostFacts(state: TwentyDoorsState, scope: Scope): ScopedFact[] {

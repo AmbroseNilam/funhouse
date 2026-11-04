@@ -506,7 +506,7 @@ export function App(): ReactElement {
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" onError={(event) => { if (game !== undefined && event.currentTarget.getAttribute("src") !== game.art) { event.currentTarget.src = game.art; } }} style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
                     <div className="play-column">
-                        {state.turn !== null ? <p className="turn-label">{state.turn.label}</p> : null}
+                        {state.turn !== null && state.turn.label !== "" ? <p className="turn-label">{state.turn.label}</p> : null}
                         <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
                     </div>
                     {shell?.gameOver === true ? <GameOverMenu shell={shell} driver={driver} /> : null}

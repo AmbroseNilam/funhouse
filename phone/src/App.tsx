@@ -1225,7 +1225,7 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
-            {turn !== null && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
+            {turn !== null && turn.line !== "" && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {pad !== null && pad.startCard.length > 0 ? (
                 <section className="private">

@@ -456,7 +456,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         publicScene(state: QuizmasterState): Scene {
             if (state.phase === "topic") {
-                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Say or type a topic.", emphasis: "whisper" }] };
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Say or type a topic.", emphasis: "large" }] };
             }
             if (state.phase === "preparing") {
                 const waiting: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: state.topic }, { type: "text", text: "Writing the questions…", emphasis: "whisper" }];
@@ -521,7 +521,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         turn(state: QuizmasterState): Turn | null {
             if (state.phase === "topic") {
-                return { kind: "anyone", label: "Anyone can pick the topic" };
+                return { kind: "anyone", label: "" };
             }
             if (state.phase === "question") {
                 return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label: "Everyone answers once" };
