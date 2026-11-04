@@ -6,6 +6,7 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
+import { createHostGuessGame, hostGuessBlueprintProblems, type HostGuessDecisions } from "./kits/host-guess.ts";
 import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
 
@@ -23,6 +24,13 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** A host-guess game: the players hold a thing in secret and the host asks questions to find it. */
+export interface HostGuessBlueprint {
+    kit: "hostGuess";
+    box: Box;
+    decisions: HostGuessDecisions;
+}
+
 /** The tap games, each its own style on the tap kit. */
 export type TapDecisions = FitsDecisions;
 
@@ -34,7 +42,7 @@ export interface TapBlueprint {
 }
 
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | HostGuessBlueprint | TapBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -55,6 +63,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "plant") {
         return plantBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "hostGuess") {
+        return hostGuessBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -71,6 +82,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "plant") {
         return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "hostGuess") {
+        return erase(createHostGuessGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createFitsGame(blueprint.box, blueprint.decisions));
 }
