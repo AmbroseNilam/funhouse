@@ -21,6 +21,7 @@ import type { PushDecisions } from "./kits/tap-push.ts";
 import type { WitDecisions } from "./kits/wit.ts";
 import type { IdentityDecisions } from "./kits/identity.ts";
 import type { HostGuessDecisions } from "./kits/host-guess.ts";
+import type { HandDecisions } from "./kits/hand.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
@@ -124,6 +125,13 @@ export interface HostGuessBlueprint {
     decisions: HostGuessDecisions;
 }
 
+/** A hand game: dealt cards on phones, a rotating judge, a prompt with a gap. */
+export interface HandBlueprint {
+    kit: "hand";
+    box: Box;
+    decisions: HandDecisions;
+}
+
 /** Any game as data. */
 export type Blueprint =
     | GuessingBlueprint
@@ -139,7 +147,8 @@ export type Blueprint =
     | ChainBlueprint
     | GalleryBlueprint
     | IdentityBlueprint
-    | HostGuessBlueprint;
+    | HostGuessBlueprint
+    | HandBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
