@@ -1,6 +1,7 @@
 {
     "id": "pastTheGate",
     "kit": "gate",
-    "level": "visible",
+    "level": "held",
+    "reason": "Ambrose: not realistic, not fun",
     "order": 70
 }

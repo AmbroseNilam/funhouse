@@ -11,10 +11,10 @@ const { HELD_BACK, showcaseShelf } = await import("../studio/shelf.ts");
 const { RoomDirectory } = await import("./directory.ts");
 
 describe("room directory shelves", () => {
-    it("shows the six games with no parameters, hand-written ones first", () => {
+    it("shows the five games with no parameters, hand-written ones first", () => {
         const shelf: string[] = showcaseShelf(GAMES).map((game) => game.manifest.id);
         assert.deepEqual(shelf.slice(0, 3), ["twentyDoors", "quizmaster", "werewolf"]);
-        assert.deepEqual([...shelf.slice(3)].sort(), ["pastTheGate", "samePage", "threeClaims"].sort());
+        assert.deepEqual([...shelf.slice(3)].sort(), ["paintedWhispers", "samePage"].sort());
     });
 
     it("keeps the hand-written Twenty Doors, with its choice before the game", () => {
@@ -23,7 +23,7 @@ describe("room directory shelves", () => {
     });
 
     it("gives a blueprint game its how-to card from its how-to-play text", () => {
-        const gate = showcaseShelf(GAMES).find((game) => game.manifest.id === "pastTheGate");
+        const gate = showcaseShelf(GAMES).find((game) => game.manifest.id === "samePage");
         assert.deepEqual(gate?.startCard, gate?.howToPlay);
     });
 
@@ -32,7 +32,7 @@ describe("room directory shelves", () => {
         const everyday = directory.create();
         const testing = directory.create(false, false, false, true);
         assert.ok(everyday !== null && testing !== null);
-        assert.equal(everyday.brief().includes("pastTheGate"), true);
+        assert.equal(everyday.brief().includes("paintedWhispers"), true);
         for (const held of Object.keys(HELD_BACK)) {
             assert.equal(everyday.brief().includes(held), false, held);
             assert.equal(testing.brief().includes(held), true, held);

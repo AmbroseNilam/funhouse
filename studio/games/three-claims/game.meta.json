@@ -1,6 +1,7 @@
 {
     "id": "threeClaims",
     "kit": "claims",
-    "level": "visible",
+    "level": "held",
+    "reason": "Ambrose: confusing after claims lock in, unclear points; revisit later",
     "order": 200
 }
