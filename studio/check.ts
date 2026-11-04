@@ -7,9 +7,10 @@ import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
+import { createBluffGame, type BluffState } from "./kits/bluff.ts";
 import { createWitGame, type WitState } from "./kits/wit.ts";
 import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
-import { witPersonas } from "./personas-text.ts";
+import { bluffPersonas, witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -30,6 +31,34 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
         const makeWit = (seed: number): KitGame<WitState> => createWitGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makeWit, witPersonas(), CHECK_SEEDS, options);
     }
+    if (blueprint.kit === "bluff") {
+        const makeBluff = (seed: number): KitGame<BluffState> => createBluffGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        // Once with the model failing, and once with its second look "finding" the first two answers alike,
+        // which turns the first fake into the true answer, so both ways a round can go are rehearsed.
+        const failing: Tally = rehearseMany(makeBluff, bluffPersonas(), CHECK_SEEDS, options);
+        const matching: Tally = rehearseMany(makeBluff, bluffPersonas(), CHECK_SEEDS, { ...options, content: options.content ?? "1, 2" });
+        return addTallies(failing, matching);
+    }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
+}
+
+/**
+ * Adds two sets of rehearsal counts together.
+ * @param first one tally.
+ * @param second another.
+ * @returns their sum; a phase is never reached only if neither reached it.
+ */
+function addTallies(first: Tally, second: Tally): Tally {
+    const outcomes: Record<string, number> = { ...first.outcomes };
+    for (const [outcome, count] of Object.entries(second.outcomes)) {
+        outcomes[outcome] = (outcomes[outcome] ?? 0) + count;
+    }
+    return {
+        rehearsals: first.rehearsals + second.rehearsals,
+        ended: first.ended + second.ended,
+        outcomes,
+        phasesNeverReached: first.phasesNeverReached.filter((phase: string) => second.phasesNeverReached.includes(phase) === true),
+        problems: [...first.problems, ...second.problems],
+    };
 }
