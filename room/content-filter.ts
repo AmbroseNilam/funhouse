@@ -219,3 +219,28 @@ export async function filterText(text: string, limit: number, classify: TextClas
     const fit: boolean = await classify(tidy).catch(() => false);
     return fit === true ? { allowed: true, text: tidy } : { allowed: false, category: "classifier" };
 }
+
+/** Words that read as the room itself talking, anywhere in a name. */
+const RESERVED_WORDS: string[] = ["host", "system", "admin", "moderator", "narrator", "referee", "funhouse"];
+
+/** Names that only read that way on their own. */
+const RESERVED_NAMES: string[] = ["game", "the game"];
+
+/**
+ * The local check for a nickname: everything a typed line must pass, and it mustn't pose as the host.
+ * @param name the cleaned name.
+ * @param hostName the host's name.
+ * @returns why it can't be used, or null when it passes.
+ */
+export function nicknameCategory(name: string, hostName: string): FilterCategory | "impersonation" | null {
+    const local: FilterCategory | null = localCategory(name);
+    if (local !== null) {
+        return local;
+    }
+    const words: string[] = wordsOf(plainLetters(name));
+    const spaced: string = words.join(" ");
+    const pieces: string[] = [...words, ...words.slice(1).map((word: string, index: number) => `${words[index] ?? ""}${word}`), words.join("")];
+    const posesAsHost: boolean = pieces.some((piece: string) => squeeze(piece) === squeeze(hostName.toLowerCase()));
+    const reserved: boolean = words.some((word: string) => RESERVED_WORDS.includes(word) === true) || RESERVED_NAMES.includes(spaced) === true;
+    return posesAsHost === true || reserved === true ? "impersonation" : null;
+}

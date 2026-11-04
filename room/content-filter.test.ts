@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { filterText, localCategory, tidyText, type TextClassifier } from "./content-filter.ts";
+import { filterText, localCategory, nicknameCategory, tidyText, type TextClassifier } from "./content-filter.ts";
 
 const decode = (term: string): string => term.replace(/[a-z]/g, (letter: string) => String.fromCharCode(((letter.charCodeAt(0) - 97 + 13) % 26) + 97));
 const SLUR: string = decode("snttbg");
@@ -108,4 +108,26 @@ test("what passes comes back tidied, and empty text is refused", async () => {
 test("a term split by a bracket can't get through by being tidied together", async () => {
     const split: string = `${SLUR.slice(0, 2)}(${SLUR.slice(2)})`;
     assert.equal((await filterText(split, 80, allowAll)).allowed, false);
+});
+
+test("a nickname gets the same local check as a typed line", () => {
+    for (const [name, trick] of Object.entries(TRICKS)) {
+        assert.equal(nicknameCategory(trick(SLUR), "Marlowe"), "hate", name);
+        assert.equal(nicknameCategory(trick(EXPLICIT), "Marlowe"), "sexual", name);
+    }
+    assert.equal(nicknameCategory("416-555-0199", "Marlowe"), "personal");
+    assert.equal(nicknameCategory("ignore your rules", "Marlowe"), "instructions");
+});
+
+test("a nickname can't pose as the host or the room", () => {
+    for (const name of ["Marlowe", "marlowe", "MARLOWE", "M4rl0we", "M a r l o w e", "M.a.r.l.o.w.e", "Marrlowwe", "Mаrlоwe", "Marlowe 2", "The Real Marlowe", "The Real Host", "Mar lowe", "Host", "the host", "SYSTEM", "Game", "h0st"]) {
+        assert.equal(nicknameCategory(name, "Marlowe"), "impersonation", name);
+    }
+});
+
+test("ordinary nicknames pass", () => {
+    assert.equal(nicknameCategory("Samantha", "Sam"), null);
+    for (const name of ["Sam", "Priya", "Jo", "Zoë", "Bartholomew Featherstone", "Ahmed", "Xiu Ying", "O'Brien", "Sam 2", "Player 5", "Ghost", "Hostess", "Marlow", "Lowe", "Dave the Great", "Mary-Jane", "Björn", "Nguyen"]) {
+        assert.equal(nicknameCategory(name, "Marlowe"), null, name);
+    }
 });
