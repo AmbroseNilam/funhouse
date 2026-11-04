@@ -120,12 +120,13 @@ test("a nickname gets the same local check as a typed line", () => {
 });
 
 test("a nickname can't pose as the host or the room", () => {
-    for (const name of ["Marlowe", "marlowe", "MARLOWE", "M4rl0we", "M a r l o w e", "M.a.r.l.o.w.e", "Marrlowwe", "Mаrlоwe", "Marlowe 2", "The Real Marlowe", "Host", "the host", "SYSTEM", "Game", "h0st"]) {
+    for (const name of ["Marlowe", "marlowe", "MARLOWE", "M4rl0we", "M a r l o w e", "M.a.r.l.o.w.e", "Marrlowwe", "Mаrlоwe", "Marlowe 2", "The Real Marlowe", "The Real Host", "Mar lowe", "Host", "the host", "SYSTEM", "Game", "h0st"]) {
         assert.equal(nicknameCategory(name, "Marlowe"), "impersonation", name);
     }
 });
 
 test("ordinary nicknames pass", () => {
+    assert.equal(nicknameCategory("Samantha", "Sam"), null);
     for (const name of ["Sam", "Priya", "Jo", "Zoë", "Bartholomew Featherstone", "Ahmed", "Xiu Ying", "O'Brien", "Sam 2", "Player 5", "Ghost", "Hostess", "Marlow", "Lowe", "Dave the Great", "Mary-Jane", "Björn", "Nguyen"]) {
         assert.equal(nicknameCategory(name, "Marlowe"), null, name);
     }
