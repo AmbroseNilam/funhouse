@@ -40,6 +40,9 @@ function erase<State>(game: KitGame<State>): AnyKitGame {
     return game;
 }
 
+/** The give-up row a kit offers when its blueprint turns the button on. */
+const giveUpRow = (blueprint: { decisions: { giveUpButton: boolean } }): { id: string; label: string }[] => (blueprint.decisions.giveUpButton === true ? [{ id: "giveup", label: "We give up" }] : []);
+
 /** A kit with nothing extra in the pause menu. */
 const NO_PAUSE = (): { id: string; label: string }[] => [];
 
@@ -88,7 +91,7 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             const make = (seed: number): KitGame<GateState> => createGateGame(blueprint.box, blueprint.decisions, seededRandom(seed));
             return rehearseMany(make, gatePersonas(), CHECK_SEEDS, options);
         },
-        pauseActions: NO_PAUSE,
+        pauseActions: giveUpRow,
     },
     estimate: {
         problems: (blueprint: EstimateBlueprint): string[] => estimateBlueprintProblems(blueprint.box, blueprint.decisions),
@@ -97,7 +100,7 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             const make = (seed: number): KitGame<EstimateState> => createEstimateGame(blueprint.box, blueprint.decisions, seededRandom(seed));
             return rehearseMany(make, estimatePersonas(blueprint.decisions), CHECK_SEEDS, options);
         },
-        pauseActions: NO_PAUSE,
+        pauseActions: giveUpRow,
     },
     line: {
         problems: (blueprint: LineBlueprint): string[] => lineBlueprintProblems(blueprint.box, blueprint.decisions),
@@ -106,7 +109,7 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             const make = (seed: number): KitGame<LineState> => createLineGame(blueprint.box, blueprint.decisions, seededRandom(seed));
             return rehearseMany(make, linePersonas(blueprint.decisions), CHECK_SEEDS, options);
         },
-        pauseActions: NO_PAUSE,
+        pauseActions: giveUpRow,
     },
     clueboard: {
         problems: (blueprint: ClueBoardBlueprint): string[] => clueBoardBlueprintProblems(blueprint.box, blueprint.decisions),

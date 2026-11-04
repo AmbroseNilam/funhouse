@@ -612,6 +612,9 @@ export function createStrangerGame(givenBox: Box, givenDecisions: StrangerDecisi
         },
 
         privateControls(state: StrangerState, playerId: string): Control[] {
+            if (state.players.some((player: CartridgePlayer) => player.playerId === playerId) === false) {
+                return [];
+            }
             const isStranger: boolean = playerId === state.strangerId;
             const card: Control = isStranger === true
                 ? { type: "roleCard", title: STRANGER_CARD_TITLE, body: "You don't know where you are. Listen to the answers, and bluff.", secret: true }

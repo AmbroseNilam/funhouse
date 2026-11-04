@@ -552,6 +552,9 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
         },
 
         privateControls(state: OddWordState, playerId: string): Control[] {
+            if (state.players.some((player: CartridgePlayer) => player.playerId === playerId) === false) {
+                return [];
+            }
             const isStray: boolean = playerId === state.strayId;
             const category: string = state.category === "" ? "something" : state.category;
             const card: Control = isStray === true
