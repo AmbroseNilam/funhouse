@@ -38,6 +38,23 @@ export function pick<Item>(items: readonly Item[], random: () => number): Item {
 }
 
 /**
+ * Puts items in a random order, leaving the original alone.
+ * @param items what to shuffle.
+ * @param random the random source.
+ * @returns a shuffled copy.
+ */
+export function shuffle<Item>(items: readonly Item[], random: () => number): Item[] {
+    const result: Item[] = [...items];
+    for (let index = result.length - 1; index > 0; index -= 1) {
+        const other: number = Math.floor(random() * (index + 1));
+        const held: Item | undefined = result[index];
+        result[index] = result[other] as Item;
+        result[other] = held as Item;
+    }
+    return result;
+}
+
+/**
  * Deals one hidden role to one player.
  * @param players everyone at the table; must not be empty.
  * @param random the random source.

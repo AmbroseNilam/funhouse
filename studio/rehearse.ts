@@ -94,6 +94,12 @@ export interface RehearsalOptions {
     /** Like content, but chosen by the request, for a game that asks for more than one kind of content. */
     contentFor?: (request: string) => string;
     players?: readonly CartridgePlayer[];
+    /**
+     * How the picture provider behaves: seconds each picture takes, or null when pictures never
+     * come, which is how the room treats a failed or refused drawing. Left out, every picture
+     * arrives at once.
+     */
+    drawSeconds?: number | null;
 }
 
 /** How to check that a game's hidden role is invisible to everyone who doesn't hold it. */
@@ -246,6 +252,15 @@ export function viewsOf<State>(cartridge: Cartridge<State>, state: State, player
     return views;
 }
 
+/**
+ * A stand-in for the random key the room gives a picture, made from its id.
+ * @param id the picture's id.
+ * @returns lower-case hex.
+ */
+function seedHex(id: string): string {
+    return [...id].map((letter: string) => letter.charCodeAt(0).toString(16)).join("");
+}
+
 /** The rehearsal's own running state, kept in one object so its step function can update it. */
 interface Run<State> {
     state: State | null;
@@ -257,6 +272,8 @@ interface Run<State> {
     timers: Map<string, number>;
     now: number;
     stopped: boolean;
+    /** Pictures asked for and not yet delivered, with when each is due. */
+    drawings: { id: string; at: number }[];
 }
 
 /**
@@ -272,7 +289,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     const trace: TraceEntry<State>[] = [];
     const phases: Set<string> = new Set();
     const problems: string[] = [];
-    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, request: "", timers: new Map(), now: 0, stopped: false };
+    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, request: "", timers: new Map(), now: 0, stopped: false, drawings: [] };
 
     /**
      * Calls the rules safely: a throw, including one from changing frozen state, becomes a problem.
@@ -317,24 +334,43 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         }
         run.pendingContent = run.pendingContent === true || step.contentRequest !== undefined;
         run.request = step.contentRequest ?? run.request;
+        if (options.drawSeconds !== null) {
+            for (const draw of step.draws ?? []) {
+                run.drawings.push({ id: draw.id, at: run.now + (options.drawSeconds ?? 0) });
+            }
+        }
         for (const [timerId, seconds] of Object.entries(step.timers ?? {})) {
             run.timers.set(timerId, run.now + seconds);
         }
         return step;
     };
 
-    /** Fires every timer that is due, earliest first, as the room would. */
+    /** The state now, read afresh, since the rules may have stepped while a player was acting. */
+    const stateNow = (): State | null => run.state;
+
+    /** Fires every timer and delivers every picture that is due, earliest first, as the room would. */
     const fireDue = (): void => {
-        const due: [string, number][] = [...run.timers.entries()]
-            .filter(([, at]: [string, number]) => at <= run.now)
-            .sort((first: [string, number], second: [string, number]) => first[1] - second[1]);
-        for (const [timerId] of due) {
-            run.timers.delete(timerId);
+        const timers: { at: number; timerId: string | null; pictureId: string | null }[] = [
+            ...[...run.timers.entries()].map(([timerId, at]: [string, number]) => ({ at, timerId, pictureId: null })),
+            ...run.drawings.map((drawing: { id: string; at: number }) => ({ at: drawing.at, timerId: null, pictureId: drawing.id })),
+        ];
+        const due: { at: number; timerId: string | null; pictureId: string | null }[] = timers
+            .filter((entry: { at: number }) => entry.at <= run.now)
+            .sort((first: { at: number }, second: { at: number }) => first.at - second.at);
+        for (const entry of due) {
             const current: State | null = run.state;
+            if (entry.timerId !== null) {
+                run.timers.delete(entry.timerId);
+            }
+            if (entry.pictureId !== null) {
+                run.drawings = run.drawings.filter((drawing: { id: string }) => drawing.id !== entry.pictureId);
+            }
             if (current === null || run.stopped === true || cartridge.outcome(current) !== null) {
                 return;
             }
-            const event: RoomEvent = { type: "timerFired", at: run.now, timerId };
+            const event: RoomEvent = entry.pictureId !== null
+                ? { type: "drawingReady", at: run.now, id: entry.pictureId, src: `/drawings/TEST/${seedHex(entry.pictureId)}` }
+                : { type: "timerFired", at: run.now, timerId: entry.timerId ?? "" };
             take(event, () => cartridge.onEvent(current, event));
         }
     };
@@ -342,7 +378,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     take({ type: "phaseChanged", at: 0, phaseId: "init" }, () => cartridge.init([...run.players], {}));
     let moves: number = 0;
     while (run.state !== null && run.stopped === false && cartridge.outcome(run.state) === null && moves < MOVE_BUDGET) {
-        const current: State = run.state;
+        let current: State = run.state;
         if (run.pendingContent === true) {
             run.pendingContent = false;
             const event: RoomEvent = { type: "contentReady", at: run.now, text: options.contentFor?.(run.request) ?? options.content ?? "" };
@@ -368,8 +404,13 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         }
         run.now += ACTION_SECONDS;
         fireDue();
-        if (run.state !== current) {
-            continue;
+        const live: State | null = stateNow();
+        if (live !== current) {
+            // A clock that ticked while the player acted, such as a card changing on the TV, doesn't undo the move; a new phase does.
+            if (live === null || cartridge.phaseOf(live) !== cartridge.phaseOf(current)) {
+                continue;
+            }
+            current = live;
         }
         if (move.kind === "leave") {
             run.players = run.players.filter((player: CartridgePlayer) => player.playerId !== move.playerId);

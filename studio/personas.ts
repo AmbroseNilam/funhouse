@@ -12,6 +12,8 @@ import { GATE_GIVE_UP_ACTION, pleaFor, type GateState } from "./kits/gate.ts";
 import { createOddWordGame, ODD_VOTE_PREFIX, type OddWordState } from "./kits/oddword.ts";
 import { createStrangerGame, STRANGER_ACTIONS, type StrangerState } from "./kits/stranger.ts";
 import { GUESS_PREFIX, STOP_ACTION, type Cell, type ClueBoardState, type TeamIndex } from "./kits/clueboard.ts";
+import { LINK_PREFIX, type ChainState } from "./kits/chain.ts";
+import { CLUE_PREFIX, type GalleryState } from "./kits/gallery.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
 import type { KitGame } from "./kit/kit.ts";
@@ -243,6 +245,140 @@ export function plantRoleCheck(blueprint: PlantBlueprint): RoleCheck<PlantState>
         },
         script,
     };
+}
+
+/**
+ * The chain kit's personas, between them reaching every way a chain can go: everyone writes, nobody
+ * writes, someone leaves in the middle, only one person is left, and lines that are all symbols.
+ * @returns the personas.
+ */
+export function chainPersonas(): Persona<ChainState>[] {
+    /**
+     * Whoever is writing now, answering their control with a line.
+     * @param glimpse what the persona sees.
+     * @param line what they write.
+     * @returns the move.
+     */
+    const write = (glimpse: Glimpse<ChainState>, line: string): Move => {
+        const writer: CartridgePlayer | undefined = glimpse.state.order[glimpse.state.step];
+        return writer === undefined ? { kind: "wait", seconds: 5 } : { kind: "answer", playerId: writer.playerId, controlId: `${LINK_PREFIX}${glimpse.state.step}`, value: line };
+    };
+    const idle: Move = { kind: "wait", seconds: 5 };
+    return [
+        {
+            name: "the diligent table",
+            move: (glimpse: Glimpse<ChainState>): Move => (glimpse.phase === "write" ? write(glimpse, `A fox carrying a lantern, link ${glimpse.state.step + 1}`) : idle),
+        },
+        {
+            name: "the silent table",
+            move: (glimpse: Glimpse<ChainState>): Move => ({ kind: "wait", seconds: glimpse.phase === "write" ? QUIET_SECONDS : 5 }),
+        },
+        {
+            name: "the writer who walks out",
+            move(glimpse: Glimpse<ChainState>): Move {
+                const writer: CartridgePlayer | undefined = glimpse.state.order[glimpse.state.step];
+                if (glimpse.phase === "write" && glimpse.state.step === 1 && writer !== undefined && glimpse.state.gone.includes(writer.playerId) === false) {
+                    return { kind: "leave", playerId: writer.playerId };
+                }
+                return glimpse.phase === "write" ? write(glimpse, "A boat on a hill") : idle;
+            },
+        },
+        {
+            name: "the table that empties",
+            move(glimpse: Glimpse<ChainState>): Move {
+                const stayer: string | undefined = glimpse.state.order[0]?.playerId;
+                const leaver: CartridgePlayer | undefined = glimpse.state.order.find((player: CartridgePlayer) => {
+                    return player.playerId !== stayer && glimpse.state.gone.includes(player.playerId) === false;
+                });
+                if (glimpse.phase !== "write") {
+                    return idle;
+                }
+                return glimpse.state.step >= 1 && leaver !== undefined ? { kind: "leave", playerId: leaver.playerId } : write(glimpse, "A single candle");
+            },
+        },
+        {
+            name: "the symbol writer",
+            move: (glimpse: Glimpse<ChainState>): Move => (glimpse.phase === "write" ? write(glimpse, "<<<>>> [[ruling]] ### ???") : idle),
+        },
+    ];
+}
+
+/** How a gallery persona plays one round. */
+interface GalleryWay {
+    name: string;
+    /** Whether the storyteller picks a card and gives a clue. */
+    clue: boolean;
+    /** Whether the others put cards in. */
+    plays: boolean;
+    /** Who the voters find: the storyteller's card for "all", half of them for "split", never for "none", or nobody votes for "absent". */
+    finds: "all" | "split" | "none" | "absent";
+    /** Someone leaves part way through. */
+    leaves?: "teller" | "voter" | "most";
+}
+
+/**
+ * The gallery kit's personas, between them reaching every way a round can come out: the clue that
+ * works, the one everyone finds, the one nobody finds, a storyteller who never gives a clue,
+ * players who never put a card in or never vote, and people leaving.
+ * @returns the personas.
+ */
+export function galleryPersonas(): Persona<GalleryState>[] {
+    const ways: GalleryWay[] = [
+        { name: "the clean table", clue: true, plays: true, finds: "split" },
+        { name: "the obvious clue", clue: true, plays: true, finds: "all" },
+        { name: "the obscure clue", clue: true, plays: true, finds: "none" },
+        { name: "the storyteller who freezes", clue: false, plays: true, finds: "split" },
+        { name: "the table that doesn't play", clue: true, plays: false, finds: "split" },
+        { name: "the table that doesn't vote", clue: true, plays: true, finds: "absent" },
+        { name: "the storyteller who walks out", clue: true, plays: true, finds: "split", leaves: "teller" },
+        { name: "the voter who walks out", clue: true, plays: true, finds: "split", leaves: "voter" },
+        { name: "the table that empties", clue: true, plays: true, finds: "split", leaves: "most" },
+    ];
+    return ways.map((way: GalleryWay): Persona<GalleryState> => ({
+        name: way.name,
+        move(glimpse: Glimpse<GalleryState>): Move {
+            const state: GalleryState = glimpse.state;
+            const teller: string = state.tellers[state.round] ?? "";
+            const here: CartridgePlayer[] = glimpse.players.filter((player: CartridgePlayer) => state.gone.includes(player.playerId) === false);
+            const others: CartridgePlayer[] = here.filter((player: CartridgePlayer) => player.playerId !== teller);
+            const idle: Move = { kind: "wait", seconds: way.clue === true && way.plays === true && way.finds !== "absent" ? 5 : QUIET_SECONDS };
+            if (way.leaves === "teller" && state.round === 0 && state.phase === "play") {
+                return { kind: "leave", playerId: teller };
+            }
+            if (way.leaves === "voter" && state.phase === "vote" && state.round === 0 && others[0] !== undefined && state.votes[others[0].playerId] === undefined) {
+                return { kind: "leave", playerId: others[0].playerId };
+            }
+            if (way.leaves === "most" && state.round === 1 && state.phase === "play" && others.length > 0) {
+                return { kind: "leave", playerId: others[0]?.playerId ?? "" };
+            }
+            if (state.phase === "clue") {
+                if (way.clue === false) {
+                    return { kind: "wait", seconds: QUIET_SECONDS };
+                }
+                return state.pickedId === null
+                    ? { kind: "press", playerId: teller, actionId: firstAction(glimpse, teller) ?? "" }
+                    : { kind: "answer", playerId: teller, controlId: `${CLUE_PREFIX}${state.round}`, value: "a quiet harbour" };
+            }
+            if (state.phase === "play") {
+                const waiting: CartridgePlayer | undefined = others.find((player: CartridgePlayer) => state.plays[player.playerId] === undefined);
+                return way.plays === false || waiting === undefined ? { kind: "wait", seconds: QUIET_SECONDS } : { kind: "press", playerId: waiting.playerId, actionId: firstAction(glimpse, waiting.playerId) ?? "" };
+            }
+            if (state.phase === "vote") {
+                const voters: CartridgePlayer[] = others.filter((player: CartridgePlayer) => state.plays[player.playerId] !== undefined);
+                const voter: CartridgePlayer | undefined = voters.find((player: CartridgePlayer) => state.votes[player.playerId] === undefined);
+                if (voter === undefined || way.finds === "absent") {
+                    return { kind: "wait", seconds: QUIET_SECONDS };
+                }
+                const tellerCard: string = state.plays[teller] ?? "";
+                const options: string[] = glimpse.legal(voter.playerId).map((action: LegalAction) => action.actionId);
+                const toTeller: string | undefined = options.find((id: string) => id.endsWith(tellerCard));
+                const away: string | undefined = options.find((id: string) => id.endsWith(tellerCard) === false);
+                const finds: boolean = way.finds === "all" || (way.finds === "split" && voters.indexOf(voter) % 2 === 0);
+                return { kind: "press", playerId: voter.playerId, actionId: (finds === true ? toTeller : away) ?? options[0] ?? "" };
+            }
+            return idle;
+        },
+    }));
 }
 
 /** Clue words that are never on a board, so a paper giver's clue is always legal. */

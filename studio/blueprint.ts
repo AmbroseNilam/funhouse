@@ -12,6 +12,9 @@ import { clueBoardBlueprintProblems, createClueBoardGame, type ClueBoardDecision
 import { createOddWordGame, oddWordBlueprintProblems, type OddWordDecisions } from "./kits/oddword.ts";
 import { createStrangerGame, strangerBlueprintProblems, type StrangerDecisions } from "./kits/stranger.ts";
 
+import { chainBlueprintProblems, createChainGame, type ChainDecisions } from "./kits/chain.ts";
+import { createGalleryGame, galleryBlueprintProblems, type GalleryDecisions } from "./kits/gallery.ts";
+
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
@@ -90,8 +93,22 @@ export interface OddWordBlueprint {
     decisions: OddWordDecisions;
 }
 
+/** A chain game: lines and paintings passed round the table, then shown in full. */
+export interface ChainBlueprint {
+    kit: "chain";
+    box: Box;
+    decisions: ChainDecisions;
+}
+
+/** A gallery game: private hands of painted cards, a clue, a matching card from everyone, a vote. */
+export interface GalleryBlueprint {
+    kit: "gallery";
+    box: Box;
+    decisions: GalleryDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint | ClueBoardBlueprint | StrangerBlueprint | OddWordBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint | GateBlueprint | EstimateBlueprint | LineBlueprint | ClueBoardBlueprint | StrangerBlueprint | OddWordBlueprint | ChainBlueprint | GalleryBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -133,6 +150,12 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "oddword") {
         return oddWordBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "chain") {
+        return chainBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
+    if (blueprint.kit === "gallery") {
+        return galleryBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -171,6 +194,12 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     if (blueprint.kit === "oddword") {
         return erase(createOddWordGame(blueprint.box, blueprint.decisions, random));
     }
+    if (blueprint.kit === "chain") {
+        return erase(createChainGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "gallery") {
+        return erase(createGalleryGame(blueprint.box, blueprint.decisions, random));
+    }
     return erase(createFitsGame(blueprint.box, blueprint.decisions));
 }
 
@@ -199,3 +228,4 @@ export function blueprintPauseActions(blueprint: Blueprint): { id: string; label
 function erase<State>(game: KitGame<State>): AnyKitGame {
     return game;
 }
+
