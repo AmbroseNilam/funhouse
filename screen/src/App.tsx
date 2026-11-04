@@ -1,6 +1,7 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
+import { versionLine } from "../../shared/build-info.ts";
 import type { Turn } from "../../shared/turn.ts";
 import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
 import { flushSync } from "react-dom";
@@ -459,6 +460,7 @@ export function App(): ReactElement {
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
+            <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
             {playing === true ? (
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}

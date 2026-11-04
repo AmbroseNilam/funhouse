@@ -11,6 +11,8 @@ import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
+import { isOutOfDate, versionLine } from "../../shared/build-info.ts";
+import { readServerBuild } from "./freshness.ts";
 import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
 import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
@@ -738,6 +740,11 @@ export function App(): ReactElement {
         return (): void => { document.documentElement.style.background = ""; };
     }, [seatColour]);
 
+    const [outOfDate, setOutOfDate] = useState<boolean>(false);
+    // A page cached from an older release says so; one open when the server restarts reloads by itself.
+    useEffect(() => {
+        void readServerBuild().then((server) => { setOutOfDate(server !== null && isOutOfDate(__BUILD_INFO__, server)); });
+    }, [state.connected]);
     const reactionsWanted: boolean = settings.reactions;
     useEffect(() => {
         if (state.stage === "joined" && state.connected === true && socketRef.current?.readyState === WebSocket.OPEN) {
@@ -1163,6 +1170,7 @@ export function App(): ReactElement {
                 </div>
             ) : null}
             {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
+            {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
@@ -1176,6 +1184,7 @@ export function App(): ReactElement {
                                 <button onClick={() => { setMenu("settings"); }}>Settings</button>
                                 <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
+                                <small className="version-line">{versionLine(__BUILD_INFO__)}</small>
                             </>
                         ) : null}
                         {menu === "mic" ? (
