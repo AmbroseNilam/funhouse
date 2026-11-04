@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CartridgePlayer, Step } from "../../../shared/cartridge.ts";
-import type { Control } from "../../../shared/controls.ts";
+import { REVEAL_NOW, type Control } from "../../../shared/controls.ts";
 import type { Scene, SceneBlock } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
@@ -319,5 +319,17 @@ describe("the chain kit", () => {
         }
         assert.equal(run.state.phase, "reveal");
         assert.equal(blocks(run).some((block: SceneBlock) => block.type === "text"), true);
+    });
+});
+
+describe("no timer", () => {
+    it("sets no clock on a writer, and the holder can move on", () => {
+        const game: KitGame<ChainState> = whispers({ ...PAINTED_WHISPERS_BLUEPRINT, decisions: { ...PAINTED_WHISPERS_BLUEPRINT.decisions, writeSeconds: 0 } });
+        const begun: Step<ChainState> = game.cartridge.init(FOUR, {});
+        assert.deepEqual(begun.timers ?? {}, {});
+        assert.equal(game.cartridge.phaseOf(begun.state), "write");
+        const anyone: string = FOUR[1]?.playerId ?? "";
+        assert.match(JSON.stringify(game.cartridge.privateControls(begun.state, anyone)), /Move on/);
+        assert.notEqual(game.cartridge.phaseOf(game.cartridge.apply(begun.state, anyone, REVEAL_NOW).state), "write");
     });
 });

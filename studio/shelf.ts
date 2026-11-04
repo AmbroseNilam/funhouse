@@ -84,6 +84,35 @@ function slowerForAgents(game: DiscoveredGame, catalog: Catalog): Partial<Instal
 }
 
 /**
+ * Offers a choice of clock before the game: No timer first, so that's what a room gets if nobody chooses.
+ * A table with an agent keeps its longer clock if it asks for one at all, and no clock if it doesn't.
+ * @param game the game.
+ * @param offered its shelf entry so far.
+ * @param catalog the kits to build with.
+ * @returns the entry, with the choice if the game has one.
+ */
+function withTimeChoice(game: DiscoveredGame, offered: InstalledGame, catalog: Catalog): InstalledGame {
+    const choice = game.meta.timeChoice;
+    if (choice === undefined) {
+        return offered;
+    }
+    const secondsFor = (pick: string | undefined): number => ({ relaxed: choice.relaxed, normal: choice.normal, quick: choice.quick } as Record<string, number>)[pick ?? ""] ?? 0;
+    const build = (seconds: number): InstalledGame => installBlueprint({ ...game.blueprint, decisions: { ...game.blueprint.decisions as object, [choice.decision]: seconds } }, catalog.kits);
+    build(0);
+    const atLeast: number = game.meta.agentDecisions?.[choice.decision] ?? 0;
+    return {
+        ...offered,
+        startPick: {
+            prompt: "How long for each answer?",
+            hostLine: "Ask if they want a clock on each answer. There's none unless they choose one.",
+            choices: [{ id: "none", label: "No timer" }, { id: "relaxed", label: `Relaxed, ${choice.relaxed} seconds` }, { id: "normal", label: `Normal, ${choice.normal} seconds` }, { id: "quick", label: `Quick, ${choice.quick} seconds` }],
+        },
+        create: (stage: GameStage, pick?: string): RunningGame => build(secondsFor(pick)).create(stage),
+        ...(offered.createForAgents === undefined ? {} : { createForAgents: (stage: GameStage, pick?: string): RunningGame => build(secondsFor(pick) === 0 ? 0 : Math.max(secondsFor(pick), atLeast)).create(stage) }),
+    };
+}
+
+/**
  * A shelf where every shipped blueprint stands in for the hand-written game with the same id,
  * and blueprints with new ids come after the hand-written games. A game that can't be installed is
  * logged and left off, so a hand-written game it would replace stays on the shelf.
@@ -99,7 +128,8 @@ export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = fa
             const made: InstalledGame = installBlueprint(game.blueprint, catalog.kits);
             const guested: InstalledGame = game.meta.guests === undefined ? made : { ...made, guests: game.meta.guests };
             const offered: InstalledGame = game.meta.agents === true ? { ...guested, agents: true, ...slowerForAgents(game, catalog) } : guested;
-            return [game.meta.level === "visible" ? offered : { ...offered, pitch: `Testing. ${offered.pitch}` }];
+            const timed: InstalledGame = withTimeChoice(game, offered, catalog);
+            return [game.meta.level === "visible" ? timed : { ...timed, pitch: `Testing. ${timed.pitch}` }];
         } catch (error: unknown) {
             log("studio", `LEFT OUT ${game.meta.id}: ${error instanceof Error ? error.message : String(error)}`);
             return [];

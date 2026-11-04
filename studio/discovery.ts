@@ -27,6 +27,8 @@ export interface GameMeta {
     agents?: boolean;
     /** Decisions that differ when an agent is at the table, such as a longer clock for one working through a browser. */
     agentDecisions?: Record<string, number>;
+    /** Offers a choice of clock at the start, with No timer first: which decision it sets, and the seconds for each pace. */
+    timeChoice?: { decision: string; relaxed: number; normal: number; quick: number };
     /** Why the game is not yet visible; required for testing and held. */
     reason?: string;
     /** Where it stands on the shelf, lowest first; games without one come last, by id. */
@@ -120,6 +122,9 @@ function gameMetaOf(raw: Record<string, unknown>, folder: string): GameMeta {
     }
     if (typeof raw.agentDecisions === "object" && raw.agentDecisions !== null) {
         meta.agentDecisions = raw.agentDecisions as Record<string, number>;
+    }
+    if (typeof raw.timeChoice === "object" && raw.timeChoice !== null) {
+        meta.timeChoice = raw.timeChoice as NonNullable<GameMeta["timeChoice"]>;
     }
     if (typeof raw.reason === "string") {
         meta.reason = raw.reason;

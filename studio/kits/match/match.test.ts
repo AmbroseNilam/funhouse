@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CartridgePlayer, Step } from "../../../shared/cartridge.ts";
-import type { Control } from "../../../shared/controls.ts";
+import { REVEAL_NOW, type Control } from "../../../shared/controls.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
@@ -357,5 +357,34 @@ describe("the rehearsal", () => {
         assert.deepEqual(tally.problems, []);
         assert.equal(tally.ended, tally.rehearsals);
         assert.deepEqual(tally.phasesNeverReached, []);
+    });
+});
+
+describe("no timer", () => {
+    const players: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 3);
+    const game: KitGame<MatchState> = createMatchGame(SAME_PAGE_BLUEPRINT.box, { ...SAME_PAGE_BLUEPRINT.decisions, writeSeconds: 0 }, seededRandom(4));
+    const writing = (): MatchState => game.cartridge.onEvent(game.cartridge.init(players, {}).state, { type: "contentReady", at: 0, text: "" }).state;
+
+    it("sets no clock, shows no bar, and offers the holder Reveal now", () => {
+        const started = game.cartridge.onEvent(game.cartridge.init(players, {}).state, { type: "contentReady", at: 0, text: "" });
+        assert.equal(game.cartridge.phaseOf(started.state), "writing");
+        assert.deepEqual(started.timers ?? {}, {});
+        assert.equal(JSON.stringify(game.cartridge.publicScene(started.state)).includes('"drain"'), false);
+        assert.match(JSON.stringify(game.cartridge.privateControls(started.state, players[0]?.playerId ?? "")), /Reveal now/);
+        assert.equal(game.cartridge.phaseOf(game.cartridge.apply(started.state, players[0]?.playerId ?? "", REVEAL_NOW).state) === "writing", false);
+    });
+
+    it("says who's still writing, and someone leaving doesn't hold the table", () => {
+        const state: MatchState = writing();
+        const [first, second, third] = players.map((player: CartridgePlayer) => player.playerId);
+        const field = game.cartridge.privateControls(state, first ?? "").find((control: Control) => control.type === "textInput");
+        assert.equal(field?.type, "textInput");
+        const one = game.cartridge.onEvent(state, { type: "answered", at: 0, playerId: first ?? "", controlId: field.id, value: "keys" }).state;
+        assert.equal(one.cards.length, 1);
+        assert.match(JSON.stringify(game.cartridge.publicScene(one)), /Still writing/);
+        const two = game.cartridge.onEvent(one, { type: "answered", at: 0, playerId: second ?? "", controlId: (game.cartridge.privateControls(one, second ?? "").find((control: Control) => control.type === "textInput") as { id: string }).id, value: "phone" }).state;
+        assert.equal(game.cartridge.phaseOf(two), "writing");
+        const gone = game.cartridge.onEvent(two, { type: "playerLeft", at: 0, playerId: third ?? "" }).state;
+        assert.notEqual(game.cartridge.phaseOf(gone), "writing", "the last person leaving closes the round");
     });
 });
