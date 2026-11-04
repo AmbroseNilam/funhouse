@@ -5,6 +5,7 @@
 
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
+import { clueBlueprintProblems, createClueGame, type ClueDecisions } from "./kits/clue.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -22,8 +23,15 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** A clue game: a secret word, one-word clues that cancel when they match, one guess. */
+export interface ClueBlueprint {
+    kit: "clue";
+    box: Box;
+    decisions: ClueDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | ClueBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -41,6 +49,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "guessing") {
         return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "clue") {
+        return clueBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -54,6 +65,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
 export function createKitGame(blueprint: Blueprint, random: () => number = Math.random): AnyKitGame {
     if (blueprint.kit === "guessing") {
         return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "clue") {
+        return erase(createClueGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
