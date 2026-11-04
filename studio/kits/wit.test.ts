@@ -339,6 +339,7 @@ describe("two takes: leaving, callbacks and the end", () => {
         const game: KitGame<WitState> = started.game;
         let state: WitState = started.state;
         const won: string[] = [];
+        const offers: string[] = [];
         for (let round = 0; round < 4; round += 1) {
             const voting: Step<WitState> = toVote(game, state);
             const side = voting.state.sides[0];
@@ -349,12 +350,15 @@ describe("two takes: leaving, callbacks and the end", () => {
             if (round > 0) {
                 assert.match(told(settled.facts), /Callback you may use once, if it fits/);
             }
+            offers.push(...(told(settled.facts).match(/Callback you may use once, if it fits: (.*?) won its round/)?.slice(1) ?? []));
             const next: Step<WitState> = on(game, settled.state, { type: "timerFired", at: 99, timerId: `reveal${round}` });
             state = next.state;
             if (round === 3) {
                 assert.equal(state.phase, "end");
                 assert.match(told(next.facts), /Final scores/);
-                assert.match(told(next.facts), /Callback you may use once/);
+                offers.push(...(told(next.facts).match(/Callback you may use once: (.*?) won its round/)?.slice(1) ?? []));
+                assert.equal(offers.length, 4);
+                assert.equal(new Set(offers).size, 4, "no line is offered twice");
                 assert.ok(game.cartridge.outcome(state) !== null);
             }
         }
