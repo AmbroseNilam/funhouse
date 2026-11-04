@@ -353,6 +353,7 @@ function CodeScreen(): ReactElement {
                     enterKeyHint="go"
                 />
                 {scanNote !== "" ? <p className="place-warning" role="alert">{scanNote}</p> : null}
+                <AgreeLine />
                 <button className="primary" type="submit" disabled={code.length !== ROOM_CODE_LENGTH}>Sit down</button>
                 {"mediaDevices" in navigator === false ? null : <button className="plain" type="button" onClick={() => { setScanNote(""); setScanning(true); }}>Scan the code</button>}
             </form>
@@ -492,6 +493,18 @@ function SliderCard(props: { control: Extract<Control, { type: "slider" }>; send
             <div className="slider-labels"><span>{control.lowLabel ?? control.min}</span><strong>{value}</strong><span>{control.highLabel ?? control.max}</span></div>
             <button onClick={() => { props.send({ type: "answer", controlId: control.id, value }); }}>Send it</button>
         </section>
+    );
+}
+
+/**
+ * What sitting down agrees to. The links open a new tab, so nobody loses their room or what they typed.
+ * @returns the line.
+ */
+function AgreeLine(): ReactElement {
+    return (
+        <p className="agree">
+            For adults 18+. By sitting down you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a>.
+        </p>
     );
 }
 
@@ -1332,6 +1345,7 @@ export function App(): ReactElement {
                 <form className="place-card" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
                     <label htmlFor="name-field">Who's sitting down?</label>
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoCapitalize="words" required />
+                    <AgreeLine />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
                 <p className="fine">Your phone asks for the mic the first time you talk, then shows it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
