@@ -265,15 +265,12 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
         return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
-        return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
-    }
-    if (canTalk === true && micOff === false && learned.has("hold") === false) {
-        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
+        return { big: waiting, small: "" };
     }
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
-    const talkLine: string = canTalk === false ? "" : micOff === true ? "Turn on your mic from the menu" : talkHint;
+    const talkLine: string = canTalk === false || micOff === true ? "" : talkHint;
     if (pad.axis === null) {
         return { big: "", small: talkLine };
     }
@@ -583,7 +580,11 @@ export function App(): ReactElement {
     const [movedAway, setMovedAway] = useState<boolean>(false);
     const [sameName, setSameName] = useState<string | null>(null);
     const [sent, setSent] = useState<boolean>(false);
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "guests">("closed");
+    // Someone at a computer, or an agent using its screen, can play without the mic ever being asked for.
+    const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
+    const noMicRef = useRef<boolean>(noMic);
+    noMicRef.current = noMic;
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -883,6 +884,9 @@ export function App(): ReactElement {
     };
 
     const ensureMicrophone = async (): Promise<void> => {
+        if (noMicRef.current === true) {
+            return;
+        }
         if (startingMicrophoneRef.current !== null) {
             await startingMicrophoneRef.current;
             return;
@@ -1101,7 +1105,7 @@ export function App(): ReactElement {
                 if (canTalkRef.current === false) {
                     nudgeLine();
                 }
-                if (canTalkRef.current === false) {
+                if (canTalkRef.current === false || noMicRef.current === true) {
                     return;
                 }
                 if (micRef.current !== "ok") {
@@ -1142,6 +1146,7 @@ export function App(): ReactElement {
                     <label htmlFor="name-field">Who's sitting down?</label>
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
+                    <button type="submit" className="quiet" onClick={() => { noMicRef.current = true; setNoMic(true); }}>Sit down without a mic</button>
                 </form>
                 <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
             </main>
@@ -1193,6 +1198,15 @@ export function App(): ReactElement {
         location.assign(INSTALLED === true ? "/phone/" : "/");
     };
 
+    const sendTyped = (event: FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        const field = event.currentTarget.elements.namedItem("typed") as HTMLInputElement;
+        if (field.value.trim() !== "") {
+            send({ type: "typed", text: field.value });
+        }
+        setMenu("closed");
+    };
+
     const rename = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
         const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement;
@@ -1218,7 +1232,7 @@ export function App(): ReactElement {
             ? <RoleCard key="role" title={secretTitle} lines={secretLines} startHidden={roleStartsHidden} />
             : <SecretCard key="secret" title={secretTitle} lines={secretLines} />;
     const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
-    const hasPrivate: boolean = privateControls.some((control) => control !== null);
+    const hasPrivate: boolean = privateControls.some((control) => control !== null) && pad?.pausedBy === "";
     const quietUnderCards: boolean = hasPrivate === true && waiting === "" && canTalk === false;
     const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true && hasPrivate === false ? "Your mic is off" : "";
@@ -1235,7 +1249,7 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
-            {turn !== null && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
+            {turn !== null && turn.line !== "" && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {pad !== null && pad.startCard.length > 0 ? (
                 <section className="private">
@@ -1278,7 +1292,12 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true && pad?.startCard.length === 0 ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
+            {tapping === false && state.holding === false && canTalk === true && pad?.startCard.length === 0 ? (
+                <div className="talk-row">
+                    {view?.tapToTalk === true && settings.talkButton === true && noMic === false ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
+                    <button className="type-instead" onClick={() => { setMenu("type"); }}>Type instead</button>
+                </div>
+            ) : null}
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
@@ -1286,7 +1305,8 @@ export function App(): ReactElement {
                         {menu === "open" ? (
                             <>
                                 {invited !== "" ? <p className="invited">{invited}</p> : null}
-                                {state.mic !== "ok" ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
+                                {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
+                                {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
                                 {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0 || view.guests.agents !== null) ? <button onClick={() => { setMenu("guests"); }}>{view.guests.agents === null ? "AI guests" : "AI guests and agents"}</button> : null}
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
@@ -1304,8 +1324,17 @@ export function App(): ReactElement {
                                     ? <ol className="mic-steps">{micSteps().map((step: string) => <li key={step}>{step}</li>)}</ol>
                                     : <p className="mic-note">Another app may be using it. Close that app, then try again.</p>}
                                 <button className="primary" onClick={() => { void ensureMicrophone().then(() => { setMicRetried(true); }); }}>Try again</button>
+                                {canTalk === true ? <button onClick={() => { setMenu("type"); setMicRetried(false); }}>Type instead</button> : null}
                                 <button className="quiet" onClick={() => { setMenu("closed"); setMicRetried(false); }}>Keep playing without talking</button>
                             </>
+                        ) : null}
+                        {menu === "type" ? (
+                            <form onSubmit={sendTyped}>
+                                <label htmlFor="typed-line">Type what you'd say</label>
+                                <input id="typed-line" name="typed" maxLength={200} autoComplete="off" enterKeyHint="send" autoFocus />
+                                <button type="submit" className="primary">Send</button>
+                                <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
+                            </form>
                         ) : null}
                         {menu === "guests" ? (
                             <>

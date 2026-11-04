@@ -65,7 +65,7 @@
     .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
     .paper p { white-space: pre-line; }
     .has-private .private { flex: 1 1 auto; max-height: none; min-height: 0; padding-bottom: 4px; }
-    .has-private .surface { flex: 0 0 84px; padding: 8px 170px calc(8px + env(safe-area-inset-bottom)) 16px; justify-content: flex-start; }
+    .has-private .surface { flex: 0 0 84px; padding: 8px 270px calc(8px + env(safe-area-inset-bottom)) 16px; justify-content: flex-start; }
     .has-private .line { text-align: left; gap: 2px; }
     .has-private .line strong { font-size: 20px; line-height: 1.15; }
     .has-private .line small { font-size: 15px; }
@@ -117,11 +117,15 @@
     .dictation button { flex: none; width: 72px; height: 72px; pointer-events: auto; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 20px; font-weight: 600; box-shadow: 3px 3px 0 #000; }
     .dictation button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
     .tap-talk:disabled { opacity: 0.45; }
-    .tap-talk { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
+    .tap-talk { font-weight: 600; box-shadow: 4px 4px 0 #000; }
     .tap-talk:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
-    .tap-talk { left: 50%; translate: -50% 0; bottom: calc(52px + env(safe-area-inset-bottom)); min-height: 48px; padding: 0 22px; border-radius: 24px; background: var(--paper); color: var(--paper-ink); font-size: 18px; white-space: nowrap; }
+    .talk-row { position: absolute; left: 0; right: 0; bottom: calc(52px + env(safe-area-inset-bottom)); display: flex; justify-content: center; align-items: center; gap: 10px; pointer-events: none; }
+    .talk-row button { pointer-events: auto; }
+    .type-instead { min-height: 44px; padding: 0 6px; background: none; box-shadow: none; color: var(--paper); font-size: 16px; text-decoration: underline; white-space: nowrap; }
+    .tap-talk { min-height: 48px; padding: 0 22px; border-radius: 24px; background: var(--paper); color: var(--paper-ink); font-size: 18px; white-space: nowrap; }
     /* With a card up, the chip sits in the corner of the short strip below it, so it never covers the card. */
-    .has-private .tap-talk { left: auto; right: 16px; translate: none; bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .has-private .talk-row { justify-content: flex-end; padding-right: 16px; bottom: calc(14px + env(safe-area-inset-bottom)); }
+    .has-private .line small { display: none; }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }

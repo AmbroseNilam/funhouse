@@ -93,6 +93,8 @@ export interface QuizmasterState {
     lastSource: string;
     /** Who has got the current question right, when it's multiple choice and waits for everyone. */
     rightNow: string[];
+    /** Who was talking when the last question ended; what they finish saying isn't for this one. */
+    staleSpeakers: string[];
     /** Points from the current question, held back until the reveal so the scores can't give the answer away. */
     pending: Record<string, number>;
 }
@@ -293,14 +295,14 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         const reveal: string = `${why}${credit} The answer to that question was: ${answer}. Tell them the answer.`;
         const nextIndex: number = state.index + 1;
         if (nextIndex >= state.questions.length || state.players.length === 0) {
-            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source, rightNow: [], pending: {} };
+            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source, rightNow: [], pending: {}, staleSpeakers: [] };
             const board: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
             const winners: string = leaders(finished).map((player) => player.name).join(" and ");
             const verdict: string = winners === "" ? "Nobody scored." : `Winner: ${winners}.`;
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source, rightNow: [], pending: {} };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source, rightNow: [], pending: {}, staleSpeakers: state.speaking };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
@@ -344,7 +346,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {} };
+            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
             if (chosen === SURPRISE) {
                 return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
             }
@@ -380,8 +382,11 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 }
                 return score({ ...state, heard: [...state.heard.filter((candidate: string) => candidate !== playerId), playerId] }, tapped === question?.answer ? "right" : "wrong", playerId);
             }
+            if (state.phase === "topic" && actionId === SURPRISE) {
+                return prepare(state, SURPRISE_TOPICS[Math.floor(random() * SURPRISE_TOPICS.length)] ?? "Animals");
+            }
             if (state.phase === "question" && actionId === "changeTopic") {
-                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "", rightNow: [], pending: {} };
+                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "", rightNow: [], pending: {}, staleSpeakers: [] };
                 return { state: fresh, facts: [publicFact("ask-topic", "They want a new topic. Scores stay. Ask what topic they would like next.")], nextPhaseId: "topic" };
             }
             if (state.phase !== "question" || actionId !== "skip") {
@@ -415,12 +420,13 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             if (event.type === "speechEnded") {
                 const seated: boolean = state.players.some((player) => player.playerId === event.playerId);
                 // Speech that began before this question was for the last one, even if it finishes now.
-                const startedInTime: boolean = state.questions[state.index]?.choices === undefined || state.speaking.includes(event.playerId) === true;
-                const eligible: boolean = state.phase === "question" && seated === true && startedInTime === true && state.answered.includes(event.playerId) === false;
+                const late: boolean = state.staleSpeakers.includes(event.playerId);
+                const eligible: boolean = state.phase === "question" && seated === true && late === false && state.answered.includes(event.playerId) === false;
                 const speaking: string[] = state.speaking.filter((playerId: string) => playerId !== event.playerId);
+                const staleSpeakers: string[] = state.staleSpeakers.filter((playerId: string) => playerId !== event.playerId);
                 const secondTry: boolean = state.phase === "question" && seated === true && state.answered.includes(event.playerId) === true;
                 const reminder: ScopedFact[] = secondTry === true ? [publicFact("second-try", "That player has already answered this question, so anything more from them doesn't count. If they just gave another answer, say in a few words that it's one try each, and don't say whether it's right. If it was only chat, treat it as chat.")] : [];
-                return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: reminder };
+                return { state: { ...state, speaking, staleSpeakers, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: late === true ? [] : reminder };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
                 const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources, mixing), mixing);
@@ -450,7 +456,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         publicScene(state: QuizmasterState): Scene {
             if (state.phase === "topic") {
-                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Choose a topic…", emphasis: "whisper" }] };
+                return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: "Quizmaster" }, { type: "text", text: "Say or type a topic.", emphasis: "large" }] };
             }
             if (state.phase === "preparing") {
                 const waiting: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: state.topic }, { type: "text", text: "Writing the questions…", emphasis: "whisper" }];
@@ -496,7 +502,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         privateControls(state: QuizmasterState, playerId: string): Control[] {
             if (state.phase === "topic") {
-                return [{ type: "waiting", text: "Say a topic out loud." }];
+                return [{ type: "buttons", prompt: "Say or type a topic.", options: [{ id: SURPRISE, label: "Surprise me instead" }] }];
             }
             if (state.phase === "preparing") {
                 return [{ type: "waiting", text: `${HOST_NAME} is writing the questions.` }];
@@ -515,7 +521,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
 
         turn(state: QuizmasterState): Turn | null {
             if (state.phase === "topic") {
-                return { kind: "anyone", label: "Anyone can pick the topic" };
+                return { kind: "anyone", label: "" };
             }
             if (state.phase === "question") {
                 return { kind: "everyone", playerIds: state.players.map((player) => player.playerId), doneIds: state.answered, label: "Everyone answers once" };

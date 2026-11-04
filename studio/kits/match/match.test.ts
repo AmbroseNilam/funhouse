@@ -275,6 +275,21 @@ describe("scoring and the hat", () => {
         assert.equal(turned.state.hat, null);
     });
 
+    it("says nothing about a hat at the end of a game of three, where there isn't one", () => {
+        const { game, state } = open(THREE);
+        let step: Step<MatchState> = resolve(game, typeAll(game, state, ["tacos", "tacos", "river"]));
+        for (let round = 1; round <= 8; round += 1) {
+            step = on(game, step.state, { type: "timerFired", at: 100 + round, timerId: `reveal${round}` });
+            if (round < 8) {
+                step = resolve(game, typeAll(game, step.state, ["tacos", "tacos", "river"]));
+            }
+        }
+        assert.equal(step.state.phase, "end");
+        const told: string = step.facts.map((fact) => fact.text).join(" ");
+        assert.equal(/hat (?:ended|cost)|the hat in/i.test(told), false, told);
+        assert.match(told, /never mention one/);
+    });
+
     it("takes the hat's points at the end from whoever holds it, once", () => {
         const { game, state } = open();
         let step: Step<MatchState> = resolve(game, typeAll(game, state, ["tacos", "tacos", "tacos", "river"]));
@@ -286,6 +301,7 @@ describe("scoring and the hat", () => {
             }
         }
         assert.equal(step.state.phase, "end");
+        assert.match(step.facts.map((fact) => fact.text).join(" "), /The hat ended with/);
         assert.equal(step.state.hatLoser, "paper4");
         assert.equal(step.state.scores.paper4, 7 * 3 - 2);
         assert.equal(step.state.scores.paper1, 2 + 7 * 3);

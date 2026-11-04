@@ -4,7 +4,7 @@
 
 /** Whose turn it is right now. */
 export type Turn =
-    /** Nobody has to go first. The label is what the TV says, such as "Anyone can ask". */
+    /** Nobody has to go first. The label is what the TV says, such as "Anyone can ask"; empty when the scene already says it. */
     | { kind: "anyone"; label: string }
     /** Each of these people goes once. */
     | { kind: "everyone"; playerIds: string[]; doneIds: string[]; label: string }

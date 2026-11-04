@@ -77,9 +77,29 @@ describe("Twenty Doors' own topic", () => {
         });
     }
 
-    it("never stalls: no topic named, or the model too slow, falls back too", () => {
-        const { game, started, choosing } = toChoosing();
-        assert.equal(game.phaseOf(game.onEvent(started.state, { type: "timerFired", at: 0, timerId: "topic-time" }).state), "asking");
+    it("never runs out the clock on someone naming a topic, however long it takes", () => {
+        const game = createTwentyDoors(() => 0, "own");
+        const started = game.init(players, {});
+        assert.deepEqual(started.timers ?? {}, {}, "no countdown");
+        const said = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "programming languages" });
+        assert.deepEqual(said.timers ?? {}, {}, "nor one after someone speaks");
+        const ruled = game.onEvent(said.state, { type: "hostRuled", at: 0, ruling: "topic", detail: "programming languages", playerId: "a" });
+        assert.equal(game.phaseOf(ruled.state), "choosing");
+        assert.match(ruled.contentRequest ?? "", /programming languages/);
+    });
+
+    it("lets them change their mind with a plain button", () => {
+        const game = createTwentyDoors(() => 0, "own");
+        const started = game.init(players, {});
+        const buttons: string = JSON.stringify(game.privateControls(started.state, "a"));
+        assert.match(buttons, /Surprise me instead/);
+        const surprised = game.apply(started.state, "a", "surprise");
+        assert.equal(game.phaseOf(surprised.state), "asking");
+        assert.notEqual(surprised.state.secret, "");
+    });
+
+    it("doesn't stall if the model is slow, and ignores it if it answers late", () => {
+        const { game, choosing } = toChoosing();
         const slow = game.onEvent(choosing.state, { type: "timerFired", at: 0, timerId: "choosing-time" });
         assert.equal(game.phaseOf(slow.state), "asking");
         const late = game.onEvent(slow.state, { type: "contentReady", at: 0, text: '{"secret": "Too late"}' });
@@ -141,11 +161,24 @@ describe("Quizmaster's four answers", () => {
 
     it("doesn't take speech begun on the last question as an answer to this one", () => {
         const { game, state } = inQuestion();
-        const heardLate = game.onEvent(state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
+        const talking = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
+        const right: number = state.questions[0]?.choices?.indexOf("Right0") ?? -1;
+        const tapped = game.apply(talking, "a", `answer:0:${right}`).state;
+        const moved = game.apply(tapped, "b", `answer:0:${right}`).state;
+        assert.equal(moved.index, 1);
+        const heardLate = game.onEvent(moved, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
         assert.deepEqual(heardLate.state.heard, []);
-        const started = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" });
-        const heard = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
-        assert.deepEqual(heard.state.heard, ["a"]);
+        const heardNext = game.onEvent(heardLate.state, { type: "speechEnded", at: 0, playerId: "a", text: "Right1" });
+        assert.deepEqual(heardNext.state.heard, ["a"], "the next thing they say counts");
+    });
+
+    it("waits for a topic with no countdown, and takes Surprise me instead", () => {
+        const game = createQuizmaster("own", () => 0);
+        const started = game.init(players, {});
+        assert.deepEqual(started.timers ?? {}, {});
+        assert.match(JSON.stringify(game.privateControls(started.state, "b")), /Surprise me instead/);
+        const surprised = game.apply(started.state, "b", "surprise");
+        assert.equal(game.phaseOf(surprised.state), "preparing");
     });
 
     it("goes back to answers out loud with the switch off", () => {

@@ -145,6 +145,15 @@ export class FakePhone {
     }
 
     /**
+     * Types a line in place of talking.
+     * @param text the words.
+     */
+    public type(text: string): void {
+        console.warn(`${this.name} types: ${text}`);
+        this.socket.send(JSON.stringify({ type: "typed", text }));
+    }
+
+    /**
      * Says a line, as if it had just been transcribed.
      * @param text the words.
      */
