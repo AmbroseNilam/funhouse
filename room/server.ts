@@ -12,6 +12,7 @@ import { buildInfoFrom, type BuildInfo } from "../shared/build-info.ts";
 import type { RejectedReason } from "../shared/protocol.ts";
 import { GAMES } from "../cartridges/index.ts";
 import { showcaseShelf } from "../studio/shelf.ts";
+import { serveAgent } from "./agent.ts";
 import { RoomDirectory } from "./directory.ts";
 import { roomOptions, type RoomOptions } from "./room-options.ts";
 import { AddressLimits, BUDGET } from "./limits.ts";
@@ -216,7 +217,7 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
         response.writeHead(301, { location: `${PUBLIC_ORIGIN}${request.url ?? "/"}` }).end();
         return;
     }
-    serveStatic(request, response).catch((error: unknown) => {
+    serveAgent(request, response, PUBLIC_URL, addressOf(request), limits).then((served: boolean) => (served === true ? undefined : serveStatic(request, response))).catch((error: unknown) => {
         console.error("static serve failed:", error instanceof Error ? error.message : String(error));
         response.writeHead(500).end();
     });

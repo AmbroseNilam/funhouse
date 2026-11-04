@@ -83,7 +83,8 @@ export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = fa
     const installed: InstalledGame[] = shown.flatMap((game: DiscoveredGame) => {
         try {
             const made: InstalledGame = installBlueprint(game.blueprint, catalog.kits);
-            const offered: InstalledGame = game.meta.guests === undefined ? made : { ...made, guests: game.meta.guests };
+            const guested: InstalledGame = game.meta.guests === undefined ? made : { ...made, guests: game.meta.guests };
+            const offered: InstalledGame = game.meta.agents === true ? { ...guested, agents: true } : guested;
             return [game.meta.level === "visible" ? offered : { ...offered, pitch: `Testing. ${offered.pitch}` }];
         } catch (error: unknown) {
             log("studio", `LEFT OUT ${game.meta.id}: ${error instanceof Error ? error.message : String(error)}`);

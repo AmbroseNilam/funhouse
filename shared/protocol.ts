@@ -19,7 +19,7 @@ export type PhoneMessage =
     | { type: "holdToTalk"; down: boolean }
     | { type: "rename"; name: string }
     | { type: "leave" }
-    | { type: "guest"; action: "add" | "remove"; playerId?: string }
+    | { type: "guest"; action: "add" | "remove" | "inviteAgent"; playerId?: string }
     | { type: "textOnlySay"; text: string }
     | { type: "nav"; action: NavAction }
     | { type: "lean"; x: number; y: number }
@@ -112,7 +112,7 @@ export function isPhoneMessage(message: { type: string } & Record<string, unknow
         return typeof message.x === "number" && typeof message.y === "number";
     }
     if (message.type === "guest") {
-        return (message.action === "add" || message.action === "remove") && ["string", "undefined"].includes(typeof message.playerId) === true;
+        return (message.action === "add" || message.action === "remove" || message.action === "inviteAgent") && ["string", "undefined"].includes(typeof message.playerId) === true;
     }
     if (message.type === "textOnlySay") {
         return typeof message.text === "string";

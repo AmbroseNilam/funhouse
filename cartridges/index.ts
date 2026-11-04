@@ -31,6 +31,8 @@ export interface InstalledGame {
     remarks: string[];
     /** How AI guests play it; left out, it isn't offered to a table with guests. */
     guests?: GuestPlay;
+    /** True when someone's own agent may sit in; left out, agents are told they can't. */
+    agents?: boolean;
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
     /** A few short lines shown before the first round in a room, if anything. */

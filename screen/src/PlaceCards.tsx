@@ -50,7 +50,7 @@ export function PlaceCards(props: { seats: Seat[]; turn: Turn | null; touchedId:
                 <li key={seat.playerId} className={cardState(seat, props.turn, props.touchedId === seat.playerId)} style={{ background: seat.colour }}>
                     <span className="short-name">{seat.name.split(" ")[0]}</span>
                     <span className="full-name">{seat.name}</span>
-                    {seat.guest === true ? <small className="guest-mark">AI guest</small> : null}
+                    {seat.guest === true ? <small className="guest-mark">{seat.agent === true ? "AI agent" : "AI guest"}</small> : null}
                     <i className="tick" aria-hidden="true" />
                 </li>
             ))}

@@ -3,5 +3,6 @@
     "kit": "match",
     "level": "visible",
     "guests": "model",
+    "agents": true,
     "order": 220
 }
