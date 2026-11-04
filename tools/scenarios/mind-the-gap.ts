@@ -59,7 +59,7 @@ function tvLines(): string[] {
  */
 function rowOnTv(): LineCard[] {
     const tally = screen.scene?.blocks.find((block: SceneBlock) => block.type === "tally") as { rows: { label: string }[] } | undefined;
-    return (tally?.rows ?? []).map((row) => CARDS.find((card: LineCard) => card.name === row.label) as LineCard);
+    return (tally?.rows ?? []).map((row) => CARDS.find((card: LineCard) => card.tag === row.label) as LineCard);
 }
 
 /**

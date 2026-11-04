@@ -559,8 +559,6 @@ export function createEstimateGame(givenBox: Box, givenDecisions: EstimateDecisi
                 const blocks: SceneBlock[] = [
                     { type: "title", text: box.name, kicker },
                     { type: "text", text: question.prompt, emphasis: "large" },
-                    { type: "text", text: `Answer in ${question.unit}.`, emphasis: "whisper" },
-                    { type: "progress", label: "Guesses in", current: Object.keys(state.guesses).length, max: state.players.length, marks: "card" },
                     { type: "timer", seconds: decisions.guessSeconds, label: "to guess", running: true },
                 ];
                 return { mood: "neutral", transition: "fade", blocks };
@@ -571,29 +569,22 @@ export function createEstimateGame(givenBox: Box, givenDecisions: EstimateDecisi
                     mood: "tense",
                     transition: "fade",
                     blocks: [
-                        { type: "title", text: question.prompt, kicker },
+                        { type: "text", text: "Whose guess is closest?", emphasis: "large" },
+                        { type: "text", text: question.prompt },
                         { type: "tally", title: `Guesses in ${question.unit}, lowest first`, rows },
-                        { type: "text", text: "Whose guess is closest? Back one on your phone.", emphasis: "large" },
-                        { type: "progress", label: "Bets in", current: Object.keys(state.bets).length, max: state.players.length, marks: "card" },
                         { type: "timer", seconds: decisions.betSeconds, label: "to bet", running: true },
                     ],
                 };
             }
             if (state.phase === "reveal") {
                 const last: RoundResult | null = state.last;
-                const near: SceneTallyRow[] = Object.keys(last?.off ?? {})
-                    .sort((first: string, second: string) => (last?.off[first] ?? 0) - (last?.off[second] ?? 0))
-                    .map((playerId: string): SceneTallyRow => ({
-                        label: `${nameOf(state, playerId)}, off by ${formatNumber(last?.off[playerId] ?? 0)}`,
-                        count: state.guesses[playerId] ?? 0,
-                        highlight: last?.closest.includes(playerId) === true,
-                    }));
+                const names = (list: string[]): string => list.map((playerId: string) => nameOf(state, playerId)).join(", ");
+                const closeBy: string = last === null || last.closest.length === 0 ? "" : `Closest: ${names(last.closest)}, off by ${formatNumber(last.off[last.closest[0] ?? ""] ?? 0)}.`;
                 const backed: string = last === null || last.closest.length === 0
                     ? "Too few guesses to score this one."
-                    : last.backers.length === 0 ? "Nobody backed the closest guess." : `Backed the closest: ${last.backers.map((playerId: string) => nameOf(state, playerId)).join(", ")}.`;
+                    : last.backers.length === 0 ? `${closeBy} Nobody backed it.` : `${closeBy} Backed it: ${names(last.backers)}.`;
                 const blocks: SceneBlock[] = [
                     { type: "title", text: `${formatNumber(question.answer)} ${question.unit}`, kicker: "The answer" },
-                    { type: "tally", title: "Guesses, closest first", rows: near },
                     { type: "text", text: backed, emphasis: "large" },
                     { type: "text", text: question.aside },
                     { type: "tally", title: "Scores", rows: standings },
@@ -625,7 +616,7 @@ export function createEstimateGame(givenBox: Box, givenDecisions: EstimateDecisi
                     min: question.min,
                     max: question.max,
                     step: question.step,
-                    note: `Answer in ${question.unit}. Nobody sees your number until everyone is in.`,
+                    note: `In ${question.unit}. Nobody sees it yet.`,
                 }];
             }
             if (state.phase === "bet") {

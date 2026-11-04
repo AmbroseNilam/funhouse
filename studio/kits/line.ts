@@ -21,6 +21,8 @@ export interface LineCard {
     name: string;
     /** The card in a few words, for a button: "the telephone". */
     short: string;
+    /** The card in two or three words for the TV's list, which cuts a label off past about seventeen characters. */
+    tag: string;
     /** The year. Whole, and shown only once the card is placed. */
     year: number;
     /** Where the year comes from, named well enough to check. */
@@ -179,6 +181,9 @@ function cardProblems(card: LineCard): string[] {
     }
     if (card.short.length < 3 || card.short.length > 30 || LINE_PATTERN.test(card.short) === false || /\d/.test(card.short) === true) {
         problems.push(`${named} needs a short name of 3 to 30 plain characters with no digits.`);
+    }
+    if (card.tag.length < 3 || card.tag.length > 17 || LINE_PATTERN.test(card.tag) === false || /\d/.test(card.tag) === true) {
+        problems.push(`${named} needs a tag of 3 to 17 plain characters with no digits.`);
     }
     if (isWholeIn(card.year, 1000, 2100) === false) {
         problems.push(`${named} needs a whole year from 1000 to 2100.`);
@@ -488,7 +493,7 @@ export function createLineGame(givenBox: Box, givenDecisions: LineDecisions, ran
         publicScene(state: LineState): Scene {
             const standings: SceneTallyRow[] = ranking(state).map((playerId: string): SceneTallyRow => ({ label: nameOf(state, playerId), count: state.scores[playerId] ?? 0 }));
             const table = (highlight: LineCard | null): SceneTallyRow[] => state.row.map((index: number): SceneTallyRow => {
-                return { label: cardAt(index).name, count: cardAt(index).year, highlight: highlight !== null && cardAt(index) === highlight };
+                return { label: cardAt(index).tag, count: cardAt(index).year, highlight: highlight !== null && cardAt(index) === highlight };
             });
             if (state.phase === "place") {
                 const card: LineCard = current(state);
@@ -497,9 +502,7 @@ export function createLineGame(givenBox: Box, givenDecisions: LineDecisions, ran
                     transition: "fade",
                     blocks: [
                         { type: "title", text: card.name, kicker: `The ${ordinal(state.round)} card` },
-                        { type: "text", text: "Where does it go? Pick a gap on your phone.", emphasis: "large" },
                         { type: "tally", title: "On the table, earliest first", rows: table(null) },
-                        { type: "progress", label: "Picks in", current: Object.keys(state.picks).length, max: state.players.length, marks: "card" },
                         { type: "timer", seconds: decisions.placeSeconds, label: "to pick", running: true },
                     ],
                 };
@@ -517,7 +520,6 @@ export function createLineGame(givenBox: Box, givenDecisions: LineDecisions, ran
                 if (card.surprise !== null) {
                     blocks.push({ type: "text", text: card.surprise });
                 }
-                blocks.push({ type: "tally", title: "Scores", rows: standings });
                 return { mood: "victory", transition: "fade", blocks };
             }
             const top: number = standings[0]?.count ?? 0;
@@ -540,13 +542,13 @@ export function createLineGame(givenBox: Box, givenDecisions: LineDecisions, ran
                     return [{ type: "waiting", text: picked === undefined ? "Watching." : `You put it ${inSentence(slotLabel(state.row, decisions.cards, picked))}. Waiting for the others.` }];
                 }
                 const options: ControlOption[] = labels(state).map((label: string, slot: number): ControlOption => ({ id: `${SLOT_PREFIX}${slot}`, label }));
-                return [{ type: "choice", prompt: `Where does "${current(state).name}" go?`, options, multiple: false }];
+                return [{ type: "choice", prompt: `${current(state).name}. Where does it go?`, options, multiple: false }];
             }
             const gain: number = state.last?.gains[playerId] ?? 0;
             const score: number = state.scores[playerId] ?? 0;
             if (state.phase === "reveal") {
                 const how: string = state.last?.exact.includes(playerId) === true ? "Right gap." : state.last?.adjacent.includes(playerId) === true ? "One gap off." : "Not that time.";
-                return [{ type: "waiting", text: `${how} ${gain > 0 ? `${gain} ${gain === 1 ? "point" : "points"}, ` : ""}You're on ${score}.` }];
+                return [{ type: "waiting", text: `${how} ${gain > 0 ? `You won ${gain} ${gain === 1 ? "point" : "points"}. ` : ""}You're on ${score}.` }];
             }
             return [{ type: "waiting", text: `You finished on ${score}. Look at the screen.` }];
         },
