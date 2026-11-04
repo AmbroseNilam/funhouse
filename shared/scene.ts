@@ -22,7 +22,7 @@ export type SceneBlock =
     | { type: "tally"; title: string; rows: TallyRow[] }
     | { type: "progress"; label: string; current: number; max: number; marks?: "door" | "card" }
     | { type: "board"; columns: number; cells: BoardCell[] }
-    | { type: "choices"; options: string[] }
+    | { type: "choices"; options: string[]; locked?: boolean; right?: number }
     | { type: "moment"; kind: "night" | "dawn" | "out" | "shot" | "calm"; heading: string; detail?: string }
     | { type: "caption"; speaker: string; text: string; final: boolean };
 
@@ -65,6 +65,8 @@ export interface TallyRow {
     label: string;
     count: number;
     highlight?: boolean;
+    /** Points just won, so the TV can count them up. */
+    gained?: number;
 }
 
 /** A complete screen. */
