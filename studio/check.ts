@@ -6,10 +6,11 @@ import type { Blueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createClueBoardGame, type ClueBoardState } from "./kits/clueboard.ts";
+import { createOddWordGame, type OddWordState } from "./kits/oddword.ts";
 import { createStrangerGame, type StrangerState } from "./kits/stranger.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { clueBoardContent, clueBoardPersonas, strangerPersonas, strangerRoleCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { clueBoardContent, clueBoardPersonas, oddWordPersonas, oddWordRoleCheck, strangerPersonas, strangerRoleCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -36,6 +37,10 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "stranger") {
         const makeStranger = (seed: number): KitGame<StrangerState> => createStrangerGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
         return rehearseMany(makeStranger, strangerPersonas(), CHECK_SEEDS, { ...options, roleCheck: strangerRoleCheck(blueprint) });
+    }
+    if (blueprint.kit === "oddword") {
+        const makeOddWord = (seed: number): KitGame<OddWordState> => createOddWordGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
+        return rehearseMany(makeOddWord, oddWordPersonas(), CHECK_SEEDS, { ...options, roleCheck: oddWordRoleCheck(blueprint) });
     }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });

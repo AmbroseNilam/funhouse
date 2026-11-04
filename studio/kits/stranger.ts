@@ -14,7 +14,7 @@ import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box, type HiddenValue, type KitGame } from "../kit/kit.ts";
 import { because, dealOne, frozenCopy, pick, spend, tally, type Budget, type Spent, type Tally } from "../kit/primitives.ts";
-import { shuffled, titleCase } from "../kit/words.ts";
+import { guessMatches, shuffled, titleCase } from "../kit/words.ts";
 
 /** A place and the roles people have there. */
 export interface Place {
@@ -196,9 +196,7 @@ export function parsePlace(reply: string): Place | null {
  * @returns true when it counts.
  */
 export function namesPlace(place: string, guess: string): boolean {
-    const wanted: string = squash(place);
-    const given: string = squash(guess.replace(/^(the|a|an)\s+/i, ""));
-    return given.length >= 3 && (given === wanted || (given.length >= 4 && wanted.includes(given) === true) || (wanted.length >= 4 && given.includes(wanted) === true));
+    return guessMatches(place, guess);
 }
 
 /**

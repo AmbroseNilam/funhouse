@@ -9,7 +9,7 @@ import { squash } from "./kit.ts";
 const NUMBER_WORDS: Readonly<Record<string, number>> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, to: 2, too: 2, for: 4, won: 1 };
 
 /** Words a person says around a clue that are not the clue. */
-const FILLER_WORDS: ReadonlySet<string> = new Set(["the", "a", "an", "um", "uh", "er", "erm", "my", "our", "clue", "clues", "is", "its", "it's", "it", "okay", "ok", "so", "number", "words", "word", "and", "of", "i", "say", "go", "with", "that", "s", "comma", "then", "please"]);
+const FILLER_WORDS: ReadonlySet<string> = new Set(["the", "a", "an", "um", "uh", "er", "erm", "my", "our", "clue", "clues", "is", "its", "it's", "it", "okay", "ok", "so", "number", "words", "word", "and", "of", "i", "say", "go", "with", "that", "s", "comma", "then", "please", "like", "just", "maybe", "oh", "yeah", "hmm", "mm", "ah", "well"]);
 
 /** Longest word accepted for a clue or a board word. */
 const PLAIN_WORD_LIMIT: number = 16;
@@ -131,4 +131,17 @@ export function tooClose(clue: string, word: string): boolean {
         return true;
     }
     return first.length >= 5 && second.length >= 5 && first.slice(0, 5) === second.slice(0, 5);
+}
+
+/**
+ * Whether a typed guess names a target: the same letters, or one inside the other when long enough.
+ * A leading "the", "a" or "an" is ignored.
+ * @param target what it should be.
+ * @param guess what was typed.
+ * @returns true when it counts.
+ */
+export function guessMatches(target: string, guess: string): boolean {
+    const wanted: string = squash(target);
+    const given: string = squash(guess.replace(/^(the|a|an)\s+/i, ""));
+    return given.length >= 3 && (given === wanted || (given.length >= 4 && wanted.includes(given) === true) || (wanted.length >= 4 && given.includes(wanted) === true));
 }

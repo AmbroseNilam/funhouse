@@ -6,6 +6,7 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { clueBoardBlueprintProblems, createClueBoardGame, type ClueBoardDecisions } from "./kits/clueboard.ts";
+import { createOddWordGame, oddWordBlueprintProblems, type OddWordDecisions } from "./kits/oddword.ts";
 import { createStrangerGame, strangerBlueprintProblems, type StrangerDecisions } from "./kits/stranger.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
@@ -38,8 +39,15 @@ export interface StrangerBlueprint {
     decisions: StrangerDecisions;
 }
 
+/** An odd-word game: everyone knows the secret word but one player, and says one word about it each round. */
+export interface OddWordBlueprint {
+    kit: "oddword";
+    box: Box;
+    decisions: OddWordDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | ClueBoardBlueprint | StrangerBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | ClueBoardBlueprint | StrangerBlueprint | OddWordBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -63,6 +71,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "stranger") {
         return strangerBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "oddword") {
+        return oddWordBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -82,6 +93,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "stranger") {
         return erase(createStrangerGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "oddword") {
+        return erase(createOddWordGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
