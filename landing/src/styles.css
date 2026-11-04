@@ -106,6 +106,8 @@
 
     /* The shelf: boxes of different sizes, as on a real shelf */
     .shelf-section, .hears, .secrets, .foot { max-width: var(--max); width: 100%; box-sizing: border-box; margin: 0 auto; padding: 0 var(--gutter); }
+    .install-section { padding: 0 var(--gutter); margin-bottom: 32px; }
+    .install-section .install-card { box-shadow: 5px 5px 0 #000; rotate: -0.5deg; }
     .shelf-section { display: flex; flex-direction: column; gap: 14px; }
     .shelf { display: grid; grid-template-columns: 1.14fr 1fr 0.9fr; gap: 28px; align-items: end; margin-top: 24px; padding: 0 12px; }
     .box { position: relative; min-width: 0; background: var(--card); box-shadow: 8px 8px 0 #000; }

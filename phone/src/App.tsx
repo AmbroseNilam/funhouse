@@ -12,6 +12,7 @@ import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
 import { isOutOfDate, versionLine } from "../../shared/build-info.ts";
+import { InstallCard, mayOfferInstall, useInstallWay, type InstallWay } from "../../landing/src/InstallCard.tsx";
 import { readServerBuild } from "./freshness.ts";
 import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
 import { drawWave } from "./talkWave.ts";
@@ -140,6 +141,9 @@ const INSTALLED: boolean = matchMedia("(display-mode: standalone)").matches === 
 const ROOM_CODE_LENGTH: number = 4;
 
 /** True when this phone has a share sheet. */
+/** How long after a game ends the home screen offer waits. */
+const INSTALL_OFFER_DELAY_MILLISECONDS: number = 4000;
+
 const CAN_SHARE: boolean = "share" in navigator && "canShare" in navigator;
 
 /** What the credits say. */
@@ -560,7 +564,7 @@ export function App(): ReactElement {
     const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
     const noMicRef = useRef<boolean>(noMic);
     noMicRef.current = noMic;
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "install">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -797,6 +801,28 @@ export function App(): ReactElement {
     }, [waveShown]);
 
     useEffect(() => blockBrowserGestures(), []);
+
+    // Offers the home screen once, a few seconds after a game ends, and only if nothing else is open.
+    const installWay: InstallWay | null = useInstallWay();
+    const betweenGames: boolean = state.view?.gameOn === false;
+    const wasInGameRef = useRef<boolean>(false);
+    useEffect(() => {
+        if (state.view === null) {
+            return;
+        }
+        if (betweenGames === false) {
+            wasInGameRef.current = true;
+            return;
+        }
+        if (wasInGameRef.current === false || installWay === null || mayOfferInstall() === false) {
+            return;
+        }
+        wasInGameRef.current = false;
+        const timer: number = window.setTimeout(() => {
+            setMenu((current) => (current === "closed" ? "install" : current));
+        }, INSTALL_OFFER_DELAY_MILLISECONDS);
+        return (): void => { window.clearTimeout(timer); };
+    }, [betweenGames, installWay, state.view === null]);
 
     // Colours the page behind the surface too, so no band of another colour shows past its edge.
     const seatColour: string | undefined = state.view?.pad.colour;
@@ -1300,6 +1326,7 @@ export function App(): ReactElement {
                                 {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
                                 {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0) ? <button onClick={() => { setMenu("guests"); }}>AI guests</button> : null}
+                                {installWay !== null ? <button onClick={() => { setMenu("install"); }}>Add to your home screen</button> : null}
                                 <button onClick={() => { setMenu("rename"); }}>Change your name</button>
                                 <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <button onClick={() => { setMenu("settings"); }}>Settings</button>
@@ -1327,6 +1354,7 @@ export function App(): ReactElement {
                                 <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
                             </form>
                         ) : null}
+                        {menu === "install" && installWay !== null ? <InstallCard way={installWay} onDone={() => { setMenu("closed"); }} /> : null}
                         {menu === "guests" ? (
                             <>
                                 <p>Short of people? An AI guest takes a seat. It plays from its own phone, and it can't talk.</p>

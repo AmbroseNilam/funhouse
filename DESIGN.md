@@ -53,8 +53,8 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 - **Corners:** back top-left and phone menu top-right, 60pt. Touches starting there never swipe.
   Back goes to the parent; in a game it pauses.
 - **Browser leaks are bugs:** `touch-action: none`, fixed root, no callout or selection, non-passive
-  touchmove block, swipe-back blocked in 20px edges. Installing to the home screen is optional and
-  never asked for. The QR link must always work in the browser, and the app opens to a code screen.
+  touchmove block, swipe-back blocked in 20px edges. Installing to the home screen is optional:
+  a quiet offer sits on the landing page, in the phone menu, and once after a game, and a "not now" is remembered. Never during a game or on the way into one. The QR link must always work in the browser, and the app opens to a code screen.
 - **Vibration is a bonus only.** iPhones can't be relied on. Feedback comes from the TV.
 - **Slow choices may look down.** Secret roles and votes appear on the phone as paper cards, with
   the touch surface below them. Instructions always stay on the TV.

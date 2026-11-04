@@ -160,6 +160,7 @@
     .sheet .setting { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 14px; text-align: left; }
     .sheet .setting-state { flex: none; min-width: 52px; padding: 4px 8px; text-align: center; font-size: 17px; font-weight: 600; background: var(--paper); color: var(--paper-ink); }
     .sheet .setting[aria-checked="true"] .setting-state { background: var(--lamp); color: #241a02; }
+    .sheet .install-card { padding: 4px 0; }
     .sheet .quiet { background: none; color: var(--paper-ink); }
     .sheet .text-link { background: none; color: var(--paper-ink); min-height: 44px; font-size: 17px; text-decoration: underline; }
     .invited { font-size: 17px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
