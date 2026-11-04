@@ -20,7 +20,7 @@
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
 import { CARDS } from "../../studio/games/mind-the-gap/cards.ts";
-import { slotFor, type LineCard } from "../../studio/kits/line.ts";
+import { slotFor, type LineCard } from "../../studio/kits/line/line.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** Cards to place in a game. */

@@ -4,7 +4,7 @@
 // card people find surprising says why in one plain sentence for the host to explain. No two cards in
 // the same game share a year, so the kit skips one of any pair that does.
 
-import type { LineCard } from "../../kits/line.ts";
+import type { LineCard } from "../../kits/line/line.ts";
 
 /** The card bank. A game deals from it without repeats. */
 export const CARDS: LineCard[] = [

@@ -6,9 +6,9 @@
 
 import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
 import type { Control } from "../shared/controls.ts";
-import type { BluffState } from "./kits/bluff.ts";
-import type { BotState } from "./kits/bot.ts";
-import type { WitState } from "./kits/wit.ts";
+import type { BluffState } from "./kits/bluff/bluff.ts";
+import type { BotState } from "./kits/bot/bot.ts";
+import type { WitState } from "./kits/wit/wit.ts";
 import type { Glimpse, Move, Persona } from "./rehearse.ts";
 
 /** Seconds a quiet table lets pass at a time. */

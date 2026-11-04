@@ -20,8 +20,8 @@
 
 import type { Control, PhoneView } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
-import { CLUE_GALLERY_BLUEPRINT } from "../../studio/games/clue-gallery.ts";
-import { picturesAsked } from "../../studio/kits/gallery.ts";
+import { CLUE_GALLERY_BLUEPRINT } from "../../studio/games/clue-gallery/blueprint.ts";
+import { picturesAsked } from "../../studio/kits/gallery/gallery.ts";
 import { HOUSE_RULE } from "../../studio/kit/painting.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 

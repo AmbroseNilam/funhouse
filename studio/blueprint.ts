@@ -5,27 +5,27 @@
 
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue } from "./kit/kit.ts";
-import type { EstimateDecisions } from "./kits/estimate.ts";
-import type { GateDecisions } from "./kits/gate.ts";
-import type { LineDecisions } from "./kits/line.ts";
-import type { ClueBoardDecisions } from "./kits/clueboard.ts";
-import type { OddWordDecisions } from "./kits/oddword.ts";
-import type { StrangerDecisions } from "./kits/stranger.ts";
-import type { ChainDecisions } from "./kits/chain.ts";
-import type { GalleryDecisions } from "./kits/gallery.ts";
-import type { GuessingDecisions } from "./kits/guessing.ts";
-import type { PlantDecisions } from "./kits/plant.ts";
-import type { DiceDecisions } from "./kits/tap-dice.ts";
-import type { FitsDecisions } from "./kits/tap-fits.ts";
-import type { PushDecisions } from "./kits/tap-push.ts";
-import type { WitDecisions } from "./kits/wit.ts";
-import type { IdentityDecisions } from "./kits/identity.ts";
-import type { HostGuessDecisions } from "./kits/host-guess.ts";
-import type { HandDecisions } from "./kits/hand.ts";
-import type { ClueDecisions } from "./kits/clue.ts";
-import type { CharadesDecisions } from "./kits/charades.ts";
-import type { BluffDecisions } from "./kits/bluff.ts";
-import type { BotDecisions } from "./kits/bot.ts";
+import type { EstimateDecisions } from "./kits/estimate/estimate.ts";
+import type { GateDecisions } from "./kits/gate/gate.ts";
+import type { LineDecisions } from "./kits/line/line.ts";
+import type { ClueBoardDecisions } from "./kits/clueboard/clueboard.ts";
+import type { OddWordDecisions } from "./kits/oddword/oddword.ts";
+import type { StrangerDecisions } from "./kits/stranger/stranger.ts";
+import type { ChainDecisions } from "./kits/chain/chain.ts";
+import type { GalleryDecisions } from "./kits/gallery/gallery.ts";
+import type { GuessingDecisions } from "./kits/guessing/guessing.ts";
+import type { PlantDecisions } from "./kits/plant/plant.ts";
+import type { DiceDecisions } from "./kits/tap/tap-dice.ts";
+import type { FitsDecisions } from "./kits/tap/tap-fits.ts";
+import type { PushDecisions } from "./kits/tap/tap-push.ts";
+import type { WitDecisions } from "./kits/wit/wit.ts";
+import type { IdentityDecisions } from "./kits/identity/identity.ts";
+import type { HostGuessDecisions } from "./kits/host-guess/host-guess.ts";
+import type { HandDecisions } from "./kits/hand/hand.ts";
+import type { ClueDecisions } from "./kits/clue/clue.ts";
+import type { CharadesDecisions } from "./kits/charades/charades.ts";
+import type { BluffDecisions } from "./kits/bluff/bluff.ts";
+import type { BotDecisions } from "./kits/bot/bot.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */

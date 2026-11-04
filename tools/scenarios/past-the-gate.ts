@@ -21,7 +21,7 @@
 import type { Control } from "../../shared/controls.ts";
 import type { SceneBlock } from "../../shared/scene.ts";
 import { CARGO, KEEPERS } from "../../studio/games/past-the-gate/keepers.ts";
-import { pleaFor, ruleWords, type GateRule, type GateScenario } from "../../studio/kits/gate.ts";
+import { pleaFor, ruleWords, type GateRule, type GateScenario } from "../../studio/kits/gate/gate.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** Milliseconds to wait for a host reply before deciding there is no model behind the room. */

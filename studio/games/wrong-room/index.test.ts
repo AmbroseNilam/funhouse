@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
-import { WRONG_ROOM_BLUEPRINT } from "./index.ts";
+import { WRONG_ROOM_BLUEPRINT } from "./blueprint.ts";
 
 describe("wrong room: the check every blueprint passes", () => {
     it("is a runnable blueprint", () => {

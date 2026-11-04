@@ -3,7 +3,7 @@
 // code; its clue is the only hint the table gets, and it never contains a word that opens or shuts
 // the gate (the kit's check enforces that). The cargo words are everyday things; none is a rule word.
 
-import type { GateScenario } from "../../kits/gate.ts";
+import type { GateScenario } from "../../kits/gate/gate.ts";
 
 /** The words that count as a bird, for Pell's first rule. */
 const BIRD_WORDS: string[] = [

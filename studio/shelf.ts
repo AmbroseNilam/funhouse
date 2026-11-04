@@ -8,29 +8,29 @@ import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
 import { blueprintPauseActions, blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
-import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
+import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions/blueprint.ts";
 import { TWO_TAKES_BLUEPRINT } from "./games/two-takes/blueprint.ts";
 import { MIND_THE_GAP_BLUEPRINT } from "./games/mind-the-gap/blueprint.ts";
 import { OFF_BY_A_MILE_BLUEPRINT } from "./games/off-by-a-mile/blueprint.ts";
 import { PAST_THE_GATE_BLUEPRINT } from "./games/past-the-gate/blueprint.ts";
-import { CLUE_GALLERY_BLUEPRINT } from "./games/clue-gallery.ts";
-import { PAINTED_WHISPERS_BLUEPRINT } from "./games/painted-whispers.ts";
+import { CLUE_GALLERY_BLUEPRINT } from "./games/clue-gallery/blueprint.ts";
+import { PAINTED_WHISPERS_BLUEPRINT } from "./games/painted-whispers/blueprint.ts";
 
-import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
-import { MAGPIE_POCKETS_BLUEPRINT } from "./games/magpie-pockets.ts";
-import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup.ts";
-import { NAME_TAG_BLUEPRINT } from "./games/name-tag.ts";
-import { COLD_READ_BLUEPRINT } from "./games/cold-read.ts";
-import { BLANK_VERDICT_BLUEPRINT } from "./games/blank-verdict.ts";
-import { LONELY_CLUES_BLUEPRINT } from "./games/lonely-clues.ts";
-import { PANTOMIME_PANIC_BLUEPRINT } from "./games/pantomime-panic.ts";
+import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors/blueprint.ts";
+import { MAGPIE_POCKETS_BLUEPRINT } from "./games/magpie-pockets/blueprint.ts";
+import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup/blueprint.ts";
+import { NAME_TAG_BLUEPRINT } from "./games/name-tag/blueprint.ts";
+import { COLD_READ_BLUEPRINT } from "./games/cold-read/blueprint.ts";
+import { BLANK_VERDICT_BLUEPRINT } from "./games/blank-verdict/blueprint.ts";
+import { LONELY_CLUES_BLUEPRINT } from "./games/lonely-clues/blueprint.ts";
+import { PANTOMIME_PANIC_BLUEPRINT } from "./games/pantomime-panic/blueprint.ts";
 import { BLANK_TRUTH_BLUEPRINT } from "./games/blank-truth/blueprint.ts";
 import { GHOST_WRITER_BLUEPRINT } from "./games/ghost-writer/blueprint.ts";
-import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
+import { WHO_FITS_BLUEPRINT } from "./games/who-fits/blueprint.ts";
 import { frozenCopy } from "./kit/primitives.ts";
-import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
-import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./games/tin-can-telephone/index.ts";
-import { WRONG_ROOM_BLUEPRINT } from "./games/wrong-room/index.ts";
+import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/blueprint.ts";
+import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./games/tin-can-telephone/blueprint.ts";
+import { WRONG_ROOM_BLUEPRINT } from "./games/wrong-room/blueprint.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
 export const BLUEPRINTS: readonly Blueprint[] = [

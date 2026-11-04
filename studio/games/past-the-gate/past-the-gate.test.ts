@@ -10,7 +10,7 @@ import type { ScopedFact } from "../../../shared/visibility.ts";
 import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { createGateGame, judge, MAX_PLEA_WORDS, PERSONAL_SHARES, pleaFor, type GateRule, type GateScenario, type GateState } from "../../kits/gate.ts";
+import { createGateGame, judge, MAX_PLEA_WORDS, PERSONAL_SHARES, pleaFor, type GateRule, type GateScenario, type GateState } from "../../kits/gate/gate.ts";
 import { PAST_THE_GATE_BLUEPRINT } from "./blueprint.ts";
 import { KEEPERS } from "./keepers.ts";
 
