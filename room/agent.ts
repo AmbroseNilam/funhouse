@@ -229,7 +229,7 @@ export function sceneLines(scene: Scene): string[] {
             return [`${block.seconds} seconds ${block.label ?? "left"}`];
         }
         if (block.type === "tally") {
-            return [block.title, ...block.rows.map((row) => `${row.label}: ${row.value}`)];
+            return [block.title, ...block.rows.map((row) => `${row.label}: ${row.count}`)];
         }
         if (block.type === "progress") {
             return [`${block.label}: ${block.current} of ${block.max}`];

@@ -6,21 +6,31 @@
 
 import { writeFileSync } from "node:fs";
 import type { Control } from "../../shared/controls.ts";
+import type { ShellView } from "../../shared/shell.ts";
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** How long the agent gets to sit down. */
 const SIT_DOWN_MILLISECONDS: number = 300000;
 
 const screen: FakeScreen = new FakeScreen();
+
+/**
+ * The console as the TV has it now.
+ * @returns the console.
+ */
+function shell(): ShellView | null {
+    return screen.shell;
+}
+
 await waitFor(() => screen.code !== "", "a room");
 const person: FakePhone = new FakePhone(screen.code, "Teacup");
-await waitFor(() => screen.shell?.seats.length === 1, "the person");
+await waitFor(() => shell()?.seats.length === 1, "the person");
 person.guest("inviteAgent");
 await waitFor(() => (person.view?.guests.agents?.link ?? "") !== "", "the link");
 writeFileSync(process.env.AGENT_LINK_FILE ?? "agent-link.txt", `${person.view?.guests.agents?.link ?? ""}\n`);
 console.warn("Link written. Waiting for the agent.");
 const asked: number = Date.now();
-while (screen.shell?.seats.some((seat) => seat.agent === true) !== true) {
+while (shell()?.seats.some((seat) => seat.agent === true) !== true) {
     if (Date.now() - asked > SIT_DOWN_MILLISECONDS) {
         throw new Error("No agent sat down.");
     }
@@ -28,22 +38,22 @@ while (screen.shell?.seats.some((seat) => seat.agent === true) !== true) {
 }
 console.warn("The agent sat down.");
 person.guest("add");
-await waitFor(() => screen.shell?.seats.length === 3, "a guest");
-const target: number = screen.shell?.games.findIndex((game) => game.id === "samePage") ?? -1;
-person.nav({ kind: "step", delta: target - (screen.shell?.focus ?? 0) });
-await waitFor(() => screen.shell?.focus === target, "the highlight");
+await waitFor(() => shell()?.seats.length === 3, "a guest");
+const target: number = shell()?.games.findIndex((game) => game.id === "samePage") ?? -1;
+person.nav({ kind: "step", delta: target - (shell()?.focus ?? 0) });
+await waitFor(() => shell()?.focus === target, "the highlight");
 person.nav({ kind: "select" });
-await waitFor(() => screen.shell?.screen === "game", "the page");
-await waitFor(() => screen.shell?.games[target]?.blocked === null, "room to start");
+await waitFor(() => shell()?.screen === "game", "the page");
+await waitFor(() => shell()?.games[target]?.blocked === null, "room to start");
 person.nav({ kind: "select" });
-await waitFor(() => screen.shell?.screen === "play" || screen.shell?.screen === "startCard", "the start");
-if (screen.shell?.screen === "startCard") {
+await waitFor(() => shell()?.screen === "play" || shell()?.screen === "startCard", "the start");
+if (shell()?.screen === "startCard") {
     person.nav({ kind: "select" });
 }
 console.warn("Started Same Page.");
 const answered: Set<string> = new Set();
 const seen: Set<string> = new Set();
-while (screen.shell?.gameOver !== true) {
+while (shell()?.gameOver !== true) {
     const box: Control | undefined = person.view?.controls.find((control: Control) => control.type === "textInput");
     if (box?.type === "textInput" && answered.has(box.id) === false) {
         answered.add(box.id);
