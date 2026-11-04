@@ -7,6 +7,7 @@ import type { Cartridge, CartridgePlayer, LegalAction, Step } from "../../shared
 import type { Control } from "../../shared/controls.ts";
 import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
+import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 
@@ -41,6 +42,8 @@ const TEXT_CHARACTER_LIMIT: number = 300;
 export interface QuizQuestion {
     question: string;
     answer: string;
+    /** The site it was checked against, when web search found one. */
+    source?: string;
 }
 
 /** Original general-knowledge questions used when the model can't supply any. */
@@ -72,6 +75,7 @@ export interface QuizmasterState {
     scores: Record<string, number>;
     /** The answer to the question before the current one, shown once it has been revealed. */
     lastAnswer: string;
+    lastSource: string;
 }
 
 /**
@@ -79,7 +83,7 @@ export interface QuizmasterState {
  * @param text whatever the model wrote, ideally a JSON array.
  * @returns the usable questions found, possibly none.
  */
-export function parseQuestions(text: string): QuizQuestion[] {
+export function parseQuestions(text: string, sources: string[] = []): QuizQuestion[] {
     const start: number = text.indexOf("[");
     const end: number = text.lastIndexOf("]");
     if (start === -1 || end <= start) {
@@ -96,11 +100,12 @@ export function parseQuestions(text: string): QuizQuestion[] {
     }
     const found: QuizQuestion[] = [];
     for (const item of parsed as unknown[]) {
-        const entry: { question?: unknown; answer?: unknown } = typeof item === "object" && item !== null ? item : {};
+        const entry: { question?: unknown; answer?: unknown; source?: unknown } = typeof item === "object" && item !== null ? item : {};
         const question: string = typeof entry.question === "string" ? entry.question.trim() : "";
         const answer: string = typeof entry.answer === "string" ? entry.answer.trim() : "";
         if (question !== "" && answer !== "" && question.length <= TEXT_CHARACTER_LIMIT && answer.length <= TEXT_CHARACTER_LIMIT) {
-            found.push({ question, answer });
+            const source: string = typeof entry.source === "string" ? sourceName(entry.source, sources) : "";
+            found.push({ question, answer, ...(source === "" ? {} : { source }) });
         }
     }
     return found.filter((question: QuizQuestion) => givesItAway(question) === false).slice(0, QUESTION_COUNT);
@@ -165,17 +170,18 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
      */
     const advance = (state: QuizmasterState, why: string): Step<QuizmasterState> => {
         const answer: string = state.questions[state.index]?.answer ?? "";
+        const source: string = state.questions[state.index]?.source ?? "";
         const reveal: string = `${why} The answer to that question was: ${answer}. Tell them the answer.`;
         const nextIndex: number = state.index + 1;
         if (nextIndex >= state.questions.length || state.players.length === 0) {
-            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer };
+            const finished: QuizmasterState = { ...state, phase: "end", answered: [], heard: [], lastAnswer: answer, lastSource: source };
             const board: string = state.players.map((player) => `${player.name} ${scoreOf(state, player.playerId)}`).join(", ");
             const winners: string = leaders(finished).map((player) => player.name).join(" and ");
             const verdict: string = winners === "" ? "Nobody scored." : `Winner: ${winners}.`;
             const text: string = `${reveal} That was the last question. Final scores: ${board}. ${verdict} Announce them.`;
             return { state: finished, facts: [publicFact("game-over", text)], nextPhaseId: "end" };
         }
-        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer };
+        const next: QuizmasterState = { ...state, index: nextIndex, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: answer, lastSource: source };
         return {
             state: next,
             facts: [publicFact("question", `${reveal} Then ${readInstruction(next)}`)],
@@ -216,7 +222,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
         manifest: QUIZMASTER_MANIFEST,
 
         init(players: CartridgePlayer[]): Step<QuizmasterState> {
-            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "" };
+            const state: QuizmasterState = { phase: "topic", players, topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, scores: {}, lastAnswer: "", lastSource: "" };
             return { state, facts: [publicFact("ask-topic", "Welcome them to the quiz and ask what topic they would like to be quizzed on.")], nextPhaseId: "topic" };
         },
 
@@ -238,7 +244,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
 
         apply(state: QuizmasterState, _playerId: string, actionId: string): Step<QuizmasterState> {
             if (state.phase === "question" && actionId === "changeTopic") {
-                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "" };
+                const fresh: QuizmasterState = { ...state, phase: "topic", topic: "", questions: [], index: 0, answered: [], heard: [], speaking: [], gotGrace: false, lastAnswer: "", lastSource: "" };
                 return { state: fresh, facts: [publicFact("ask-topic", "They want a new topic. Scores stay. Ask what topic they would like next.")], nextPhaseId: "topic" };
             }
             if (state.phase !== "question" || actionId !== "skip") {
@@ -276,7 +282,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 return { state: { ...state, speaking, heard: eligible === true ? [...state.heard, event.playerId] : state.heard }, facts: [] };
             }
             if (event.type === "contentReady" && state.phase === "preparing") {
-                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text));
+                const questions: QuizQuestion[] = completeQuestions(parseQuestions(event.text, event.sources));
                 const next: QuizmasterState = { ...state, phase: "question", questions, index: 0, answered: [], heard: [] };
                 return {
                     state: next,
@@ -297,11 +303,11 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                     `Write ${QUESTIONS_REQUESTED} trivia questions about the topic "${topic}", pitched at general knowledge: fun for adults, none needing specialist expertise,`,
                     "each with a short answer of a few words that can be said out loud. Ask plainly, like a friendly pub quiz.",
                     "Only use facts you are sure of, and don't put the answer in the question.",
-                    "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field.",
+                    "Reply with only a JSON array of objects, each with a \"question\" field and an \"answer\" field, plus a \"source\" field with the address of the page it came from if you looked it up.",
                 ].join(" ");
                 const next: QuizmasterState = { ...state, phase: "preparing", topic };
                 const fact: ScopedFact = publicFact("preparing", `The topic is ${topic}. Say you are writing the questions now, in one short line.`);
-                return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request };
+                return { state: next, facts: [fact], nextPhaseId: "preparing", contentRequest: request, contentGrounding: { usable: (text: string) => parseQuestions(text).length >= QUESTION_COUNT, cacheable: true } };
             }
             if (state.phase === "question" && (event.ruling === "right" || event.ruling === "close" || event.ruling === "wrong")) {
                 return score(state, event.ruling, event.playerId);
@@ -323,7 +329,7 @@ export function createQuizmaster(): Cartridge<QuizmasterState> {
                 count: scoreOf(state, player.playerId),
                 ...(state.phase === "end" && winners.includes(player.playerId) === true ? { highlight: true } : {}),
             }));
-            const last: SceneBlock[] = state.lastAnswer === "" ? [] : [{ type: "text", text: `Last answer: ${state.lastAnswer}`, emphasis: "whisper" }];
+            const last: SceneBlock[] = state.lastAnswer === "" ? [] : [{ type: "text", text: `Last answer: ${state.lastAnswer}${state.lastSource === "" ? "" : ` · Source: ${state.lastSource}`}`, emphasis: "whisper" }];
             if (state.phase === "end") {
                 const board: SceneBlock[] = [{ type: "title", text: "Quizmaster", kicker: "Final scores" }, { type: "tally", title: "Scores", rows }, ...last];
                 return { mood: winners.length > 0 ? "victory" : "neutral", transition: "fade", blocks: board };
