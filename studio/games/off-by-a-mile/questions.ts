@@ -163,7 +163,7 @@ export const QUESTIONS: EstimateQuestion[] = [
     },
     {
         id: "liberty",
-        prompt: "How tall is the Statue of Liberty from the base of the statue to the tip of the torch, in metres?",
+        prompt: "How tall is the Statue of Liberty from the ground to the tip of the torch, in metres?",
         unit: "metres",
         answer: 93,
         min: 0,
