@@ -24,7 +24,7 @@ const STAGE_NAMES: string[] = ["normal", "no new paintings", "captions only", "s
  * not be confirmed, so the figure is padded by half. Search: $2.50 per thousand queries as reported for Spark 1.1, doubled since the tokens it reads aren't all visible.
  * Transcribe: $0.18 an audio hour, from the hackathon notes. Image: about a cent, from probes,
  * padded to 1.5. Jev: $0.0011 a decision, the higher of two quotes. Voice: ElevenLabs Flash at $0.11
- * per thousand characters, a low paid-plan overage rate rounded up, and the same is used for OpenAI's voice.
+ * per thousand characters, a low paid-plan overage rate rounded up.
  */
 export const PRICES = {
     sparkInputPerToken: 1.875 / 1_000_000,

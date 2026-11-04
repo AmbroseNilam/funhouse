@@ -94,8 +94,7 @@ Your keys pay for your games. Nothing is billed through this project. Providers 
 | Key | Needed? | What it does | Without it |
 | --- | --- | --- | --- |
 | `META_MODEL_API_KEY` | **Required** for real play | Host, questions, hearing, paintings, search | The server starts and rooms open, but the host can't reply. Use the demo instead. |
-| `ELEVENLABS_API_KEY` | Recommended | The host's voice | OpenAI's voice is used. |
-| `OPENAI_API_KEY` | Recommended | Stands in for any line ElevenLabs can't start, and is the voice with no ElevenLabs key | With neither voice key, the host's lines show as captions, with no sound. |
+| `ELEVENLABS_API_KEY` | Recommended | The host's voice | The host's lines show as captions, with no sound. The same happens for any line ElevenLabs can't start. |
 | `JEV_API_KEY` | Optional | Quick judgments, such as whether two answers match | Code fallbacks are used. |
 
 Create the Meta key at [dev.meta.ai](https://dev.meta.ai). Pictures cost about a cent each, with at most 40 per room. Other costs depend on how much your group talks, and we haven't measured a typical night, so watch your provider dashboards the first time.
@@ -129,7 +128,7 @@ flowchart LR
     phones["Phones<br/>private view and mic"] <-->|WebSocket| room
     tv["TV page<br/>public stage and voice"] <-->|WebSocket| room
     room["Room server<br/>rules, timeline, visibility"] --> meta["Meta<br/>Muse models"]
-    room --> voice["ElevenLabs, or OpenAI"]
+    room --> voice["ElevenLabs, optional"]
     room --> jev["TypeSafe AI<br/>Jev"]
 ```
 
@@ -146,7 +145,6 @@ Every fact has a visibility scope, so a secret role reaches only its owner's pho
 | Meta | Muse Wonder 1.0 | Offline only: fact-checks the built-in question banks, run by hand | `tools/fact-check.ts` |
 | TypeSafe AI | Jev 1.14.0 | Quick judgments a wrong answer can't hurt, with code to fall back on. Never a win, score, vote or secret. | `room/decide.ts` |
 | ElevenLabs | Text to speech | The host's voice. Meta has no speech output. | `providers/elevenlabs/` |
-| OpenAI | Text to speech, Realtime | Voice fallback, and the voice with no ElevenLabs key | `providers/openai/` |
 
 Paintings and the host's words and voice are AI-generated. The lantern, icons and share image are drawn in code.
 

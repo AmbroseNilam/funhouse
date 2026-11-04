@@ -24,7 +24,7 @@ import { followVoice } from "./talkGlow.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
 /**
- * The small "I have a judge code" entry. The code goes in a POST body, never the address bar.
+ * The small "Have a code?" entry. The code goes in a POST body, never the address bar.
  * @returns the entry.
  */
 function JudgeCode(): ReactElement {
@@ -32,7 +32,7 @@ function JudgeCode(): ReactElement {
     const [code, setCode] = useState<string>("");
     const [result, setResult] = useState<string>("");
     if (open === false) {
-        return <button type="button" className="judge-link" onClick={() => { setOpen(true); }}>I have a judge code</button>;
+        return <button type="button" className="judge-link" onClick={() => { setOpen(true); }}>Have a code?</button>;
     }
     return (
         <form className="judge-form" onSubmit={(event: FormEvent) => {
@@ -41,7 +41,7 @@ function JudgeCode(): ReactElement {
                 setResult(response.ok === true ? "You're in. Marlowe's awake for you today." : "That code didn't work.");
             }, () => { setResult("That didn't go through. Try again."); });
         }}>
-            <input aria-label="Judge code" type="password" autoComplete="off" value={code} onChange={(event: { target: HTMLInputElement }) => { setCode(event.target.value); }} />
+            <input aria-label="Have a code?" type="password" autoComplete="off" value={code} onChange={(event: { target: HTMLInputElement }) => { setCode(event.target.value); }} />
             <button type="submit">Use code</button>
             {result !== "" ? <p role="status">{result}</p> : null}
         </form>

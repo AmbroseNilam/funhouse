@@ -16,7 +16,6 @@ services:
             META_MODEL_API_KEY: ${META_MODEL_API_KEY:-}
             META_BASE_URL: ${META_BASE_URL:-https://api.meta.ai/v1}
             ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
-            OPENAI_API_KEY: ${OPENAI_API_KEY:-}
             JEV_API_KEY: ${JEV_API_KEY:-}
             AGENTS_ON: ${AGENTS_ON:-}
             GUESTS_OFF: ${GUESTS_OFF:-}
