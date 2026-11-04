@@ -531,23 +531,16 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
                     { type: "title", text: `${nameOf(state, upId(state))} says a word`, kicker: `Round ${state.round} of ${decisions.rounds}. It's ${state.category}` },
                     { type: "timer", seconds: decisions.clueSeconds, label: "to say it", running: true },
                 ];
-                for (let round = 1; round <= state.round; round += 1) {
-                    const words: string = state.said.filter((line: Said) => line.round === round).map((line: Said) => `${line.name}: ${titleCase(line.word)}`).join("   ");
-                    if (words !== "") {
-                        blocks.push({ type: "text", text: words });
-                    }
-                }
-                return { mood: "tense", transition: "fade", blocks };
+                return { mood: "tense", transition: "fade", blocks: [...blocks, ...saidBlocks(state)] };
             }
             if (state.phase === "vote" || state.phase === "guess") {
-                const words: string = state.said.map((line: Said) => `${line.name}: ${titleCase(line.word)}`).join("   ");
                 const head: SceneBlock = state.phase === "vote"
                     ? { type: "title", text: "Who is the stray?", kicker: "Vote on your phone" }
                     : { type: "title", text: `${nameOf(state, state.strayId)} is the stray`, kicker: "One guess" };
                 const tail: SceneBlock = state.phase === "vote"
                     ? { type: "timer", seconds: decisions.voteSeconds, label: "to vote", running: true }
                     : { type: "timer", seconds: decisions.guessSeconds, label: "to name the word", running: true };
-                return { mood: "tense", transition: "fade", blocks: [head, { type: "text", text: words }, tail] };
+                return { mood: "tense", transition: "fade", blocks: [head, ...saidBlocks(state), tail] };
             }
             const kickers: Record<OddWordResult, string> = { caught: "Caught", namedIt: "Caught, and named the word", slipped: "Got away with it", strayLeft: "The stray left", emptied: "Too few left" };
             const blocks: SceneBlock[] = [
@@ -628,6 +621,16 @@ export function createOddWordGame(givenBox: Box, givenDecisions: OddWordDecision
             return results[state.result ?? "emptied"];
         },
     };
+
+    /**
+     * The words said so far for the TV, one line per round, each word beside who said it.
+     * @param state the state.
+     * @returns the text blocks.
+     */
+    function saidBlocks(state: OddWordState): SceneBlock[] {
+        const rounds: number[] = [...new Set(state.said.map((line: Said) => line.round))];
+        return rounds.map((round: number): SceneBlock => ({ type: "text", text: state.said.filter((line: Said) => line.round === round).map((line: Said) => `${line.name}: ${titleCase(line.word)}`).join(" · ") }));
+    }
 
     return {
         cartridge,
