@@ -1,10 +1,10 @@
 # Studio integration
 
-Branch `studio-integration` (off master 2de0d6f): waves 1, 2, 3 (host, clue) and 4 merged. All of these
+Branch `studio-integration` (off master 2de0d6f): waves 1, 2, 3 (host, clue) and 4 merged, with master merged in on 2026-11-04. All of these
 sit on the `?studio=1` shelf only; a normal room shows the default shelf. Start any of them by opening a
 room at `/screen/?studio=1` and picking the game from the shelf by its name.
 
-Last full check: `npm run check` passes (333 tests, warnings are line lengths). Scenarios ran with
+Last full check: `npm run check` passes (585 tests, warnings are line lengths). Scenarios ran with
 `ROOM_STUDIO=1` against a text-only room. "Stub" means the stand-in model in `tools/stub-model.ts` or
 `tools/stub-meta.ts`; nothing here has been played with the real host, a real phone or a real TV.
 
@@ -20,7 +20,16 @@ Last full check: `npm run check` passes (333 tests, warnings are line lengths). 
 | Stray Word | everyone but one holds the word; one word each in order | 4 to 10 | passed with stub model |
 | Painted Whispers | write a line, the host paints it, next player describes the painting | 3 to 8 | passed with stub image model |
 | Clue Gallery | storyteller clues one painting, others play matching ones, vote | 3 to 6 | passed with stub image model |
-| Twenty Doors, Leading Questions | existing | 2+ / 4 to 8 | need real host keys; passed earlier on the merged tree |
+| Under the Cup | hidden dice under a cup; bid on the total, challenge a bid (tap only) | 3 to 8 | passed; visible on the shelf (tap only, no model) |
+| Magpie Pockets | everyone secretly draws or stays; a repeated trinket busts (tap only) | 3 to 8 | passed; visible on the shelf (tap only, no model) |
+| Name Tag | each player wears a name tag only the others see and finds out who they are by asking | 3 to 8 | passed with stub model; held back, no run with the real host yet |
+| Cold Read | the table hides a thing and the host asks yes/no questions to guess it | 2 to 8 | passed (win and lose plans) with a stand-in host in `tools/stub-host-model.ts`; held back, no run with the real host yet |
+| Blank Verdict | dealt cards fill a prompt's gap, a rotating judge picks | 3 to 8 | scenario FAILED on the merged tree in 4 runs on a timing check (a phone is read before it updates; the unmerged branch fails the same way); rules covered by unit tests and rehearsal; held back |
+| Lonely Clues | one-word clues cancel when they match; the guesser sees only the survivors | 3 to 8 | passed with stub model on rerun (first run failed once on seat order, a join-order race in the scenario); held back, no run with the real host yet |
+| Pantomime Panic | one player acts a prompt in silence, the rest shout guesses | 3 to 10 | passed with stub model; held back, no run with the real host yet |
+| Blank Truth | a real fact with a blank; write fakes, then pick the true one | 3 to 8 | passed with stand-in model (`tools/fake-meta.ts`); held back, no run with the real host yet |
+| Ghost Writer | answer a prompt in secret; the host writes one more; vote for the machine | 3 to 8 | passed with stand-in model (`tools/fake-meta.ts`); held back, no run with the real host yet |
+| Twenty Doors, Leading Questions | existing | 2+ / 4 to 8 | need real host keys; with the stub model they time out waiting for the host to speak |
 
 Not tested on any device. Not played at a table. Image cost and latency are unmeasured.
 
@@ -31,9 +40,8 @@ Not tested on any device. Not played at a table. Image cost and latency are unme
 
 ## Still to land
 
-Hidden dice, push your luck, who am I, host guesses (studio-wave1, being built one after another); bluff
-trivia and spot the bot (studio-wave2-text; wire to `mergeAnswers` once Main merges `jev-integration`); spy
-and others as they report.
+All of waves 1 and 2 are merged (above). Spy and others as they report. The bluff and bot kits could
+adopt `mergeAnswers` from master later; they keep their own matching for now.
 
 ## Housekeeping found while merging
 
@@ -83,3 +91,14 @@ Any new game that passes goes here until a human or real-host run clears it, exc
   was not exercised (none failed).
 - Two Takes: did not pass at 22fe2ec because of two scenario faults (a race in the refused-line step and a
   literal "Answer A:" the real host does not say). Both fixed at 299a97e; one more real-key run pending.
+
+## How to start the newest games
+
+Open `/screen/?studio=1` and pick the game by name. Under the Cup and Magpie Pockets (and Who Fits) are on
+the shelf. Name Tag, Cold Read, Blank Verdict, Lonely Clues, Pantomime Panic, Blank Truth and Ghost Writer
+are in `HELD_BACK`, so the room server must be started with `STUDIO_SHOW_HELD=1` to show them. Each is
+held with the reason "no run with the real host yet" until someone plays it with the real host.
+
+Scenarios in `tools/scenarios/`: games on the stub model use `tools/stub-model.ts` (Cold Read needs
+`tools/stub-host-model.ts` with `STUB_PLAN=win` or `lose`; Blank Truth, Ghost Writer and Two Takes use
+`tools/fake-meta.ts`). Blank Verdict and Lonely Clues take about five minutes on real clocks.
