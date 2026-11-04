@@ -1277,7 +1277,7 @@ export function App(): ReactElement {
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
-                    <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
+                    <div className="sheet" data-scrolls role="dialog" aria-modal="true" aria-label="Your menu">
                         {menu === "open" ? (
                             <>
                                 {invited !== "" ? <p className="invited">{invited}</p> : null}
