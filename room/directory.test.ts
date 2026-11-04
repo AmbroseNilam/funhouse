@@ -16,8 +16,8 @@ describe("room directory shelves", () => {
         const plain = directory.create();
         const studio = directory.create(false, false, false, true);
         assert.ok(plain !== null && studio !== null);
-        assert.equal(plain.brief().includes("leadingQuestions"), false);
-        assert.equal(studio.brief().includes("leadingQuestions"), true);
+        assert.equal(plain.brief().includes("pastTheGate"), false);
+        assert.equal(studio.brief().includes("pastTheGate"), true);
         assert.equal(plain.brief().includes("twentyDoors"), true);
         plain.close();
         studio.close();
@@ -27,7 +27,7 @@ describe("room directory shelves", () => {
         const directory: InstanceType<typeof RoomDirectory> = new RoomDirectory("http://localhost:8740", GAMES);
         const room = directory.create(false, false, false, true);
         assert.ok(room !== null);
-        assert.equal(room.brief().includes("leadingQuestions"), false);
+        assert.equal(room.brief().includes("pastTheGate"), false);
         room.close();
     });
 

@@ -1,6 +1,7 @@
 {
     "id": "coldRead",
     "kit": "hostGuess",
-    "level": "visible",
+    "level": "held",
+    "reason": "Ambrose: not a game people would play; kept as a possible demo piece",
     "order": 180
 }
