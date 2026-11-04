@@ -245,7 +245,7 @@ export function matchManifest(box: Box): CartridgeManifest {
                 id: "end",
                 hostBrief: [
                     "You'll be told the final scores, who won, and whether the hat cost anyone points. In about 25 words, with the scores left to the screen:",
-                    "name the winner or winners, say the hat's cost plainly and kindly if it applied, and offer another game. Warm, not salesy. Always speak here, never reply (quiet).",
+                    "name the winner or winners, say the hat's cost plainly and kindly only if you were told one applied, and offer another game. Warm, not salesy. Always speak here, never reply (quiet).",
                 ].join(" "),
                 listening: { "*": "holdToTalk" },
                 hostMayInterject: true,
@@ -356,9 +356,10 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
         const best: number = state.scores[ranked[0]?.playerId ?? ""] ?? 0;
         const winners: string = ranked.filter((player: CartridgePlayer) => (state.scores[player.playerId] ?? 0) === best).map((player: CartridgePlayer) => player.name).join(" and ");
         const scores: string = ranked.map((player: CartridgePlayer) => `${player.name} ${state.scores[player.playerId] ?? 0}`).join(", ");
-        const hat: string = state.hatLoser === null ? "The hat cost nobody anything." : `The hat ended with ${nameOf(state, state.hatLoser)}, which cost ${decisions.hatPenalty} ${ofCount(decisions.hatPenalty, "point", "points")}.`;
+        const hat: string = state.hatLoser === null ? "" : ` The hat ended with ${nameOf(state, state.hatLoser)}, which cost ${decisions.hatPenalty} ${ofCount(decisions.hatPenalty, "point", "points")}.`;
+        const hatAsk: string = state.hatLoser === null ? "" : " the hat in a kind word,";
         const lead: string = state.result === "tooFew" ? "Too few people were left to go on. " : "";
-        return `${lead}The game is over. Final scores: ${scores}. Most points: ${winners}. ${whyWon(state, scoreRows(state))} ${hat} Say who won and why, the hat in a kind word, and offer another game.`;
+        return `${lead}The game is over. Final scores: ${scores}. Most points: ${winners}. ${whyWon(state, scoreRows(state))}${hat} Say who won and why,${hatAsk} and offer another game.${state.hatInPlay === true ? "" : " There is no hat at this table, so never mention one."}`;
     };
 
     /**
@@ -643,7 +644,7 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
                 `Write ${total} prompts for a party game in which everyone types a short answer and tries to match the rest of the table.`,
                 "One prompt for each stem below, in order, one per line, no numbering, no quotation marks, nothing else.",
                 "Each prompt is one sentence of at most ten words that has many plausible short answers, where the most popular answer is easy to guess. No real people, no named brands, no politics, no religion, nothing sexual.",
-                "Don't start them all the same way, and make them a little funny.",
+                "Write each as a plain, natural question or phrase a friend would say out loud, a little funny. Keep the grammar simple.",
                 ...drawn.map((stem: PromptStem, place: number) => `Stem ${place + 1}${stem.kind === "room" ? " (about the people at this table, as a group)" : ""}: ${stem.stem}`),
             ].join("\n");
             return { state, facts: [], nextPhaseId: "choosing", contentRequest: request, timers: { choose: CHOOSE_SECONDS } };
