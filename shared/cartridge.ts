@@ -73,6 +73,11 @@ export interface Step<State> {
     timers?: Record<string, number>;
     /** Asks the host's model to write content, such as a secret; it returns as contentReady. */
     contentRequest?: string;
+    /**
+     * Asks which answers say the same thing, such as "the moon" and "luna". It returns as an
+     * answersMerged event with this id. Only filtered text, and no player names.
+     */
+    mergeRequest?: { id: string; question: string; answers: string[] };
     /** Pictures to draw ahead of need; each returns as drawingReady, or never if drawing fails. */
     draws?: { id: string; prompt: string }[];
 }

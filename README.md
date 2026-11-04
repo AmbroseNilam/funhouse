@@ -34,6 +34,8 @@ The host only hosts. It doesn't play, and the game rules are code that it can't 
 Meta has no speech output, so the host's voice comes from a third-party text-to-speech
 provider, ElevenLabs. OpenAI's text-to-speech steps in for any line ElevenLabs can't start, and its Realtime API used only as a reader is the voice on a server with no ElevenLabs key, behind a small interface in `providers/openai/speech.ts`.
 
+Quick judgments that a wrong answer can't hurt, such as whether two typed answers say the same thing, go to TypeSafe AI's Jev through `room/decide.ts`, with code to fall back on. A win, a score, a vote or a secret is never decided that way, and Muse Spark stays the content filter.
+
 ## Credits
 
 Paintings are AI-generated with Meta's Muse Image. The host's words and voice are AI too. The

@@ -20,6 +20,8 @@ export interface GameStage {
     changed(): void;
     /** Asks the host's model for content the rules need; the result arrives as contentReady. */
     requestContent(prompt: string): void;
+    /** Asks which answers say the same thing; the result arrives as answersMerged. */
+    requestMerge(id: string, question: string, answers: string[]): void;
     /** Draws a picture; the result arrives as drawingReady. */
     requestDrawing(id: string, prompt: string): void;
     /** Records something that happened on the room's timeline. */
@@ -44,6 +46,8 @@ export interface RunningGame {
     hostMayInterject(): boolean;
     /** True when players are mostly talking to each other, not the host. */
     hostMostlyQuiet(): boolean;
+    /** True when this player could take this action right now. */
+    hasAction(playerId: string, actionId: string): boolean;
     /** What the host needs to know right now, safe for it to act on. */
     brief(): string;
     scene(): Scene;
@@ -140,6 +144,16 @@ export class GameSession<State> implements RunningGame {
      */
     public allowsRuling(ruling: string): boolean {
         return this.phase()?.hostRulings?.[ruling] !== undefined;
+    }
+
+    /**
+     * Whether a player could take an action right now.
+     * @param playerId who.
+     * @param actionId the action.
+     * @returns true when the rules offer it.
+     */
+    public hasAction(playerId: string, actionId: string): boolean {
+        return this.state !== null && this.cartridge.legalActions(this.state, playerId).some((action) => action.actionId === actionId);
     }
 
     /**
@@ -298,6 +312,9 @@ export class GameSession<State> implements RunningGame {
         }
         if (step.contentRequest !== undefined) {
             this.stage.requestContent(step.contentRequest);
+        }
+        if (step.mergeRequest !== undefined) {
+            this.stage.requestMerge(step.mergeRequest.id, step.mergeRequest.question, step.mergeRequest.answers);
         }
         for (const draw of step.draws ?? []) {
             this.stage.requestDrawing(draw.id, draw.prompt);
