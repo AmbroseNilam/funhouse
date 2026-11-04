@@ -13,7 +13,7 @@ import type { Scene, SceneBlock, TallyRow as SceneTallyRow } from "../../../shar
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { Turn } from "../../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../../shared/visibility.ts";
-import { boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
+import { HOST_LINE_RULES, SAY_IT_ALOUD, boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box, type HiddenValue, type KitGame } from "../../kit/kit.ts";
 import { because, frozenCopy, pick, spend, tally, type Budget, type Spent, type Tally } from "../../kit/primitives.ts";
 
 /** Everything a creator may choose for a host-guess game. */
@@ -147,6 +147,14 @@ const RULING_BRIEFS: Record<string, string> = {
     guess: "you name what you think it is. Write [[guess: your guess]] first, with just the thing inside the brackets, then say your guess aloud in one sentence with a flourish. Only when you're fairly sure or nearly out of questions. You'll be told when a guess is your final one.",
 };
 
+/** A different way to put each next question, so they don't all come out as a reaction and then a question. */
+const QUESTION_SHAPES: readonly string[] = [
+    "This time, just ask, with no reaction first.",
+    "This time, think aloud about what you've ruled out, then ask.",
+    "This time, tease the table in a few words, then ask.",
+    "This time, ask first, then add a few words after the question.",
+];
+
 /**
  * Checks a host-guess game's decisions.
  * @param decisions the decisions.
@@ -252,7 +260,8 @@ export function hostGuessManifest(box: Box, decisions: HostGuessDecisions): Cart
         {
             id: "asking",
             hostBrief: [
-                "You're the contestant. Each time you're told an answer, give one short reaction to it, then your next question or a guess.",
+                "You're the contestant. Each time you're told an answer, say your next question or a guess, with a few words of your own around it.",
+                "Change the shape every time: sometimes just ask, sometimes think aloud first, sometimes tease the table. Never echo their answer back as a short opener like \"Got it\" or \"Noted\".",
                 "Make exactly one ruling per reply. If a question is open, or you're told to wait, reply exactly (quiet).",
                 "Don't count questions out loud unless you're told to warn them.",
             ].join(" "),
@@ -275,7 +284,7 @@ export function hostGuessManifest(box: Box, decisions: HostGuessDecisions): Cart
         {
             id: "end",
             hostBrief: [
-                "The round is over and you've been told how it went. React with flair in two or three sentences.",
+                "The round is over and you've been told how it went. React with flair in about 25 words. Always speak here, never reply (quiet).",
                 "If you were right, take a small bow and say what gave it away. If you were wrong, be gracious and openly impressed, and ask what it was if they haven't said.",
                 "Then ask if they want another game.",
             ].join(" "),
@@ -294,6 +303,7 @@ export function hostGuessManifest(box: Box, decisions: HostGuessDecisions): Cart
             "You don't know what it is, you can't hear them while they decide, and you must never pretend you do.",
             `You ask yes-or-no questions and they answer on their phones: most taps wins, and a tie counts as Sometimes. You have ${decisions.questions} questions.`,
             "The game keeps the count, and you're always shown the board of everything asked so far. Trust it over your own memory.",
+            HOST_LINE_RULES,
             "Ask sharp questions. Each should cut what's left roughly in half, given every answer so far. Start wide for the category (alive or made, real or invented, bigger than a person, indoors or out, known for what) and only get specific once the answers have narrowed it.",
             "Use the whole board. Never repeat a question, never ask what an earlier answer already settled, never ask two things at once. Sometimes means the question was fuzzy or the answer depends, so sharpen it rather than treating it as a no. Keep a shortlist in mind, and when it's down to two or three, ask the question that splits them.",
             "Guess when you're fairly sure, or when the questions are nearly gone. A wrong guess before the last costs a question, and you only get a few.",
@@ -381,7 +391,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
      */
     const finish = (state: HostGuessState, won: boolean, guess: string, passed: boolean, text: string, decision: string): Step<HostGuessState> => {
         const next: HostGuessState = { ...state, phase: "end", pending: null, judging: null, won, lastGuess: guess, passed, armed: "" };
-        return { state: next, facts: because(publicFact("game-over", text), decision), nextPhaseId: "end" };
+        return { state: next, facts: because(publicFact("game-over", `${text} ${SAY_IT_ALOUD}`), decision), nextPhaseId: "end" };
     };
 
     /**
@@ -432,7 +442,8 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
         const next: HostGuessState = { ...state, asked: [...state.asked, exchange], count: spent.budget, pending: null, nudges: 0 };
         const tie: string = answered > 0 && counted.tied === true ? " The table split evenly, so it counts as Sometimes." : "";
         const verdict: string = winning === "none" ? "Nobody answered, so there's nothing to go on" : `The answer is ${ANSWER_LABELS[winning]} (${split})`;
-        const text: string = `You asked "${pending.question}". ${verdict}.${tie} ${yourTurn(next)}`;
+        const shape: string = QUESTION_SHAPES[next.asked.length % QUESTION_SHAPES.length] ?? "";
+        const text: string = `You asked "${pending.question}". ${verdict}.${tie} ${yourTurn(next)} ${shape}`;
         return awaitHost(next, because(publicFact("answer", text), HOST_GUESS_DECISIONS.answerSeconds));
     };
 
@@ -449,7 +460,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
         }
         const counted: Tally = tally(judging.votes, ["right", "wrong"]);
         const right: boolean = counted.leaders.length === 1 && counted.leaders[0] === "right";
-        const used: string = plural(state.count.used, "question");
+        const used: string = plural(state.asked.length, "question");
         if (right === true) {
             const text: string = `They say you were right: it was ${judging.guess}. You got it after ${used}. React with flair: take a small bow and say what gave it away.`;
             return finish(state, true, judging.guess, false, text, HOST_GUESS_DECISIONS.verdictSeconds);
@@ -566,7 +577,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
             return { state, facts: [] };
         }
         if (state.nudges >= NUDGE_LIMIT) {
-            return finish(state, false, "", true, `You never made a move, so the round is called off after ${plural(state.count.used, "question")}. Say sorry to the table and ask if they want to play again.`, HOST_GUESS_DECISIONS.hostSeconds);
+            return finish(state, false, "", true, `You never made a move, so the round is called off after ${plural(state.asked.length, "question")}. Say sorry to the table and ask if they want to play again.`, HOST_GUESS_DECISIONS.hostSeconds);
         }
         const armed: { state: HostGuessState; timers: Record<string, number> } = arm({ ...state, nudges: state.nudges + 1 }, "host", decisions.hostSeconds);
         const text: string = `The table is waiting. ${yourTurn(state)}`;
@@ -831,7 +842,7 @@ export function createHostGuessGame(givenBox: Box, givenDecisions: HostGuessDeci
             if (state.passed === true) {
                 return "The host never made its final guess.";
             }
-            return state.won === true ? `The host guessed it after ${plural(state.count.used, "question")}.` : `The host was stumped after ${plural(state.count.used, "question")}.`;
+            return state.won === true ? `The host guessed it after ${plural(state.asked.length, "question")}.` : `The host was stumped after ${plural(state.asked.length, "question")}.`;
         },
     };
 
