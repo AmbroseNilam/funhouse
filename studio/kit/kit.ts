@@ -33,6 +33,11 @@ export interface HiddenValue {
      * name beside "Plant". For values that are fine on their own but give a secret away together.
      */
     near?: string;
+    /**
+     * When true, the value only counts as seen as a whole word, spaced, punctuated or reversed, so
+     * a short everyday word such as "hen" is not found inside "when". Ignored when near is set.
+     */
+    wholeWord?: boolean;
 }
 
 /** A running kit game, with what a rehearsal needs to check it. */

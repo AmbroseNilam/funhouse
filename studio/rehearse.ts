@@ -159,7 +159,8 @@ export function findLeaks(viewer: string, seen: readonly string[], hidden: reado
     for (const value of hidden) {
         const near: string | undefined = value.near;
         const lines: readonly string[] = near === undefined ? seen : [...seen, ...together].filter((line: string) => squash(line).includes(squash(near)) === true);
-        const found: boolean = near === undefined ? appears(seen, value.text) : appearsAsWord(lines, value.text);
+        const whole: boolean = near !== undefined || value.wholeWord === true;
+        const found: boolean = whole === false ? appears(seen, value.text) : appearsAsWord(lines, value.text);
         if (value.seenBy.includes(viewer) === false && found === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }

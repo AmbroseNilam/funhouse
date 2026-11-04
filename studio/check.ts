@@ -5,11 +5,14 @@
 import type { Blueprint, TapBlueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
+import { createEstimateGame, type EstimateState } from "./kits/estimate.ts";
+import { createGateGame, type GateState } from "./kits/gate.ts";
+import { createLineGame, type LineState } from "./kits/line.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
 import { createFitsGame, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
 import { createWitGame, type WitState } from "./kits/wit.ts";
-import { fitsPersonas, fitsTapCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { estimatePersonas, fitsPersonas, fitsTapCheck, gatePersonas, guessingPersonas, linePersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
@@ -34,6 +37,18 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "wit") {
         const makeWit = (seed: number): KitGame<WitState> => createWitGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearseMany(makeWit, witPersonas(), CHECK_SEEDS, options);
+    }
+    if (blueprint.kit === "gate") {
+        const makeGate = (seed: number): KitGame<GateState> => createGateGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearseMany(makeGate, gatePersonas(), CHECK_SEEDS, options);
+    }
+    if (blueprint.kit === "estimate") {
+        const makeEstimate = (seed: number): KitGame<EstimateState> => createEstimateGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearseMany(makeEstimate, estimatePersonas(blueprint.decisions), CHECK_SEEDS, options);
+    }
+    if (blueprint.kit === "line") {
+        const makeLine = (seed: number): KitGame<LineState> => createLineGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearseMany(makeLine, linePersonas(blueprint.decisions), CHECK_SEEDS, options);
     }
     const fits: TapBlueprint & { decisions: FitsDecisions } = { ...blueprint, decisions: blueprint.decisions };
     const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);
