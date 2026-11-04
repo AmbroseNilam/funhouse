@@ -8,6 +8,7 @@ import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, PLANT_GIVE_UP_ACTION, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions } from "./kits/tap-fits.ts";
+import { createWitGame, witBlueprintProblems, type WitDecisions } from "./kits/wit.ts";
 
 /** A guessing game: a secret the host holds, a judge, a count. */
 export interface GuessingBlueprint {
@@ -33,8 +34,16 @@ export interface TapBlueprint {
     decisions: TapDecisions;
 }
 
+/** A wit game: two players answer one prompt in secret and the room votes. */
+export interface WitBlueprint {
+    kit: "wit";
+    box: Box;
+    decisions: WitDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | TapBlueprint | WitBlueprint;
+
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -55,6 +64,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "plant") {
         return plantBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "wit") {
+        return witBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -71,6 +83,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "plant") {
         return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "wit") {
+        return erase(createWitGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createFitsGame(blueprint.box, blueprint.decisions));
 }
