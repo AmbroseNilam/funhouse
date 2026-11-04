@@ -24,6 +24,8 @@ export interface Seat {
     name: string;
     role: Role;
     alive: boolean;
+    /** True when they left the table, which ends their game without announcing their role. */
+    left?: boolean;
 }
 
 /** Which special roles the village will have. */
@@ -107,6 +109,9 @@ export const NIGHT_SECONDS: number = 45;
 
 /** Seconds a night holds after the last choice, so a change of mind works and timing gives little away. */
 export const NIGHT_SETTLE_SECONDS: number = 6;
+
+/** Seconds to choose again when someone leaving undoes a night's choices. */
+export const NIGHT_RECHOOSE_SECONDS: number = 20;
 
 /** Seconds for the dawn announcement before discussion opens. */
 export const DAWN_SECONDS: number = 12;
@@ -570,6 +575,9 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      */
     const onPlayerLeft = (state: WerewolfState, playerId: string): Step<WerewolfState> => {
         const leaver: Seat | undefined = seatOf(state, playerId);
+        if (state.phase === "hunter" && state.hunterId === playerId) {
+            return resolveShot(state, null);
+        }
         if (leaver === undefined || leaver.alive === false || state.phase === "end") {
             return { state, facts: [] };
         }
@@ -581,7 +589,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             }
             return { state: { ...state, seats, setup: state.setupChanged === true ? state.setup : presetSetup(seats.length) }, facts };
         }
-        const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false } : seat));
+        const seats: Seat[] = state.seats.map((seat) => (seat.playerId === playerId ? { ...seat, alive: false, left: true } : seat));
         const kept = (choices: Record<string, string>): Record<string, string> => {
             return Object.fromEntries(Object.entries(choices).filter(([voter, target]) => voter !== playerId && target !== playerId));
         };
@@ -596,13 +604,16 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
             readyToVote: state.readyToVote.filter((voter: string) => voter !== playerId),
             tappedThrough: state.tappedThrough.filter((voter: string) => voter !== playerId),
         };
-        if (state.phase === "hunter" && state.hunterId === playerId) {
-            const shot: Step<WerewolfState> = resolveShot(next, null);
-            return { ...shot, facts: [...facts, ...shot.facts] };
+        // The hunter's shot can still change who wins, and resolving it checks for a winner.
+        if (state.phase === "hunter") {
+            return { state: next, facts };
         }
         const over: Step<WerewolfState> | null = finishIfOver(next, facts);
         if (over !== null) {
             return over;
+        }
+        if (state.phase === "night" && next.nightSettled === true && nightComplete(next) === false) {
+            return { state: { ...next, nightSettled: false }, facts, timers: { night: NIGHT_RECHOOSE_SECONDS } };
         }
         if (state.phase === "night") {
             const settled: Step<WerewolfState> = afterNightChoice(next);
@@ -1017,7 +1028,7 @@ export function createWerewolf(random: () => number = Math.random): Cartridge<We
      */
     function ghostControls(state: WerewolfState, seat: Seat, actions: LegalAction[]): Control[] {
         const stillIn: string = alive(state).map((candidate) => candidate.name).join(", ");
-        const outNames: Seat[] = state.seats.filter((candidate) => candidate.alive === false && candidate.playerId !== seat.playerId);
+        const outNames: Seat[] = state.seats.filter((candidate) => candidate.alive === false && candidate.left !== true && candidate.playerId !== seat.playerId);
         const known: string = state.variants.revealOnDeath === true
             ? outNames.map((candidate) => `${candidate.name} was ${withArticle(candidate.role)}.`).join(" ")
             : "";

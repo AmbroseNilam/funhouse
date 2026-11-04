@@ -339,6 +339,52 @@ describe("werewolf for the eliminated", () => {
     });
 });
 
+describe("werewolf when someone leaves", () => {
+    it("waits for the hunter's shot before calling a winner", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 6, ["hunter"]);
+        const hunter: string = holder(night, "hunter");
+        const wolf: string = holder(night, "werewolf");
+        const villagers: string[] = night.seats.filter((seat) => seat.role === "villager").map((seat) => seat.playerId);
+        const aiming: WerewolfState = { ...night, phase: "hunter", hunterId: hunter, seats: night.seats.map((seat) => (seat.playerId === hunter || seat.role === "seer" || seat.playerId === villagers[0] ? { ...seat, alive: false } : seat)) };
+        const left: Step<WerewolfState> = game.onEvent(aiming, { type: "playerLeft", at: 0, playerId: villagers[1] ?? "" });
+        assert.equal(left.state.phase, "hunter");
+        assert.equal(game.apply(left.state, hunter, `shoot:${wolf}`).state.winner, "villagers");
+    });
+
+    it("moves on if the hunter leaves while aiming", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 6, ["hunter"]);
+        const hunter: string = holder(night, "hunter");
+        const shot: WerewolfState = playNight(game, night, hunter).state;
+        assert.equal(game.onEvent(shot, { type: "playerLeft", at: 0, playerId: hunter }).state.phase, "dawn");
+    });
+
+    it("doesn't show the dead a role nobody announced", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 6);
+        const villager: string = holder(night, "villager");
+        const seer: string = holder(night, "seer");
+        const dawn: WerewolfState = playNight(game, night, villager).state;
+        const left: WerewolfState = game.onEvent(dawn, { type: "playerLeft", at: 0, playerId: seer }).state;
+        assert.equal(JSON.stringify(game.privateControls(left, villager)).includes("was the seer"), false);
+    });
+
+    it("gives the night time again when someone leaving undoes its choices", () => {
+        const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
+        const night: WerewolfState = toFirstNight(game, 6);
+        const wolf: string = holder(night, "werewolf");
+        const seer: string = holder(night, "seer");
+        const villager: string = holder(night, "villager");
+        const seen: WerewolfState = game.apply(night, seer, `see:${wolf}`).state;
+        const settled: WerewolfState = game.apply(seen, wolf, `kill:${villager}`).state;
+        assert.equal(settled.nightSettled, true);
+        const left: Step<WerewolfState> = game.onEvent(settled, { type: "playerLeft", at: 0, playerId: villager });
+        assert.equal(left.state.nightSettled, false);
+        assert.equal(left.timers?.night, 20);
+    });
+});
+
 describe("werewolf leak checks", () => {
     it("never shows a living player's secret to the TV, the host or another phone", () => {
         const game: Cartridge<WerewolfState> = createWerewolf(FIXED_RANDOM);
