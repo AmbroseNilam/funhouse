@@ -4,8 +4,9 @@
 // remembers its seat, so a refresh, a locked screen or a network blip returns to the same seat.
 
 import type { PhoneTurn } from "../../shared/turn.ts";
-import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import { listeningAllowsTalk, type Control, type PhoneView } from "../../shared/controls.ts";
+import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import { FOREGROUND_ANSWER_LIMIT_MILLISECONDS, parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
@@ -29,6 +30,9 @@ interface SavedSeat {
     name: string;
     roomCode: string;
 }
+
+/** How long the phone buzzes as the clock starts to warm. */
+const DRAIN_WARM_BUZZ_MILLISECONDS: number = 40;
 
 /** Storage key for the saved seat. */
 const SEAT_KEY: string = "gameroom.seat";
@@ -492,6 +496,24 @@ function SliderCard(props: { control: Extract<Control, { type: "slider" }>; send
 }
 
 /**
+ * The bar that drains over a question, matching the TV's. Leaving the screen, as in a pause, holds its
+ * place. As it warms, a phone that can buzz gives one small pulse.
+ * @param props which clock, and how long it runs.
+ * @returns the bar.
+ */
+function DrainBar({ clock, seconds }: { clock: string; seconds: number }): ReactElement {
+    const [gone] = useState<number>(() => drainShown(clock));
+    useEffect(() => () => { drainHidden(clock); }, [clock]);
+    const onStart = (event: AnimationEvent): void => {
+        if (event.animationName === "drain-warm" && readSettings().vibration === true && "vibrate" in navigator) {
+            navigator.vibrate(DRAIN_WARM_BUZZ_MILLISECONDS);
+        }
+    };
+    const style = { "--drain-seconds": `${seconds}s`, "--drain-gone": `${-gone}s`, "--drain-warm-at": `${seconds - DRAIN_WARM_SECONDS - gone}s` } as CSSProperties;
+    return <div className="drain" role="timer" aria-label={`${seconds} seconds`} style={style}><i onAnimationStart={onStart} /></div>;
+}
+
+/**
  * Renders one private control as a paper card. Waiting lines go on the surface instead.
  * @param control the control.
  * @param index its index, sent back with input.
@@ -501,6 +523,9 @@ function SliderCard(props: { control: Extract<Control, { type: "slider" }>; send
 function renderControl(control: Control, index: number, send: (message: PhoneMessage) => void): ReactElement | null {
     if (control.type === "waiting") {
         return null;
+    }
+    if (control.type === "drain") {
+        return <DrainBar key={control.key} clock={control.key} seconds={control.seconds} />;
     }
     if (control.type === "roleCard") {
         return control.secret === true

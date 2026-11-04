@@ -31,6 +31,8 @@ export type Control =
     | { type: "numberInput"; id: string; prompt: string; min: number; max: number; step?: number; note?: string }
     | { type: "slider"; id: string; prompt: string; min: number; max: number; step?: number; lowLabel?: string; highLabel?: string; note?: string }
     | { type: "waiting"; text: string }
+    /** The same draining bar the TV shows. The key names this one clock. */
+    | { type: "drain"; seconds: number; key: string }
     | { type: "notice"; text: string; tone: "info" | "warning" | "secret" };
 
 /** A selectable option; the id is what the phone sends back. */

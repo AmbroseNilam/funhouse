@@ -156,7 +156,7 @@ describe("Quizmaster's four answers", () => {
         const stale = game.apply(lit.state, "a", `answer:0:${right}`);
         assert.equal(stale.state, lit.state, "a tap during the reveal does nothing");
         const reaction = game.onEvent(lit.state, { type: "timerFired", at: 0, timerId: "reveal-react" });
-        assert.match(JSON.stringify(reaction.facts), /Sam got it right/);
+        assert.match(JSON.stringify(reaction.facts), /Sam got it/);
         assert.match(JSON.stringify(reaction.facts), /Right0/);
         const moved = game.onEvent(reaction.state, { type: "timerFired", at: 0, timerId: "reveal-next" });
         assert.equal(moved.state.index, 1);
@@ -231,6 +231,24 @@ describe("Quizmaster's four answers", () => {
         assert.equal(started.state.questionSeconds, 30);
     });
 
+    it("shows the clock, nudges near the end, and says when time ran out", () => {
+        const { game, state } = inQuestion();
+        assert.match(JSON.stringify(game.publicScene(state)), /"drain"/);
+        assert.match(JSON.stringify(game.privateControls(state, "a")), /"drain"/);
+        const nudge = game.onEvent(state, { type: "timerFired", at: 0, timerId: "hurry-0" });
+        assert.match(JSON.stringify(nudge.facts), /seconds left/);
+        const talking = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
+        assert.deepEqual(game.onEvent(talking, { type: "timerFired", at: 0, timerId: "hurry-0" }).facts, [], "it doesn't talk over anyone");
+        const right: number = state.questions[0]?.choices?.indexOf("Right0") ?? -1;
+        const tapped = game.apply(state, "a", `answer:0:${right}`).state;
+        const late = game.onEvent(tapped, { type: "timerFired", at: 0, timerId: "question-0" }).state;
+        const lit = game.onEvent(late, { type: "timerFired", at: 0, timerId: "reveal-build" }).state;
+        assert.match(JSON.stringify(game.publicScene(lit)), /Sam got it! Alex ran out of time\./);
+        assert.match(JSON.stringify(game.privateControls(lit, "b")), /Time ran out\./);
+        const nobody = game.onEvent(game.onEvent(state, { type: "timerFired", at: 0, timerId: "question-0" }).state, { type: "timerFired", at: 0, timerId: "reveal-build" }).state;
+        assert.match(JSON.stringify(game.publicScene(nobody)), /Time ran out\./);
+    });
+
     it("with No timer, waits for everyone and offers Reveal now", () => {
         const game = createQuizmaster("Movies", () => 0.4);
         const setup = game.onEvent(game.init(players, {}).state, { type: "timerFired", at: 0, timerId: "setup-wait" }).state;
@@ -243,7 +261,7 @@ describe("Quizmaster's four answers", () => {
         const items = Array.from({ length: 7 }, (_unused: unknown, index: number) => ({ question: `Q${index} what?`, answer: `Right${index}`, wrong: [`Bad${index}a`, `Bad${index}b`, `Bad${index}c`] }));
         const begun = game.onEvent(state, { type: "contentReady", at: 0, text: JSON.stringify(items) });
         assert.deepEqual(begun.timers ?? {}, {});
-        assert.equal(JSON.stringify(game.publicScene(begun.state)).includes('"timer"'), false);
+        assert.equal(JSON.stringify(game.publicScene(begun.state)).includes('"drain"'), false);
         assert.match(JSON.stringify(game.privateControls(begun.state, "a")), /Reveal now/);
         assert.equal(game.phaseOf(game.apply(begun.state, "a", "reveal-now").state), "lockedIn");
         const left = game.onEvent(game.apply(begun.state, "a", "answer:0:0").state, { type: "playerLeft", at: 0, playerId: "b" });

@@ -2,8 +2,9 @@
 // said. It draws what it is told and plays what it is sent. The phones do all the driving.
 
 import { versionLine } from "../../shared/build-info.ts";
+import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import type { Turn } from "../../shared/turn.ts";
-import { useEffect, useReducer, useRef, useState, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type ReactElement } from "react";
 import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
@@ -24,6 +25,9 @@ const COUNT_UP_DELAY_MILLISECONDS: number = 900;
 
 /** How long a score takes to count up. */
 const COUNT_UP_MILLISECONDS: number = 700;
+
+/** What the drain bar sends when it starts to warm. */
+const DRAIN_WARM_EVENT: string = "funhouse-drain-warm";
 
 /** How long the TV's drumroll lasts: the same as the game's build. */
 const DRUMROLL_SECONDS: number = 4;
@@ -141,6 +145,24 @@ function Countdown(props: { seconds: number; running: boolean; label?: string })
 }
 
 /**
+ * The bar that drains over a question. CSS runs it and a pause holds it. As it warms, it tells the App,
+ * which plays one soft sound.
+ * @param props which clock, and how long it runs.
+ * @returns the bar.
+ */
+function DrainBar({ clock, seconds }: { clock: string; seconds: number }): ReactElement {
+    const [gone] = useState<number>(() => drainShown(clock));
+    useEffect(() => () => { drainHidden(clock); }, [clock]);
+    const onStart = (event: AnimationEvent): void => {
+        if (event.animationName === "drain-warm") {
+            window.dispatchEvent(new Event(DRAIN_WARM_EVENT));
+        }
+    };
+    const style = { "--drain-seconds": `${seconds}s`, "--drain-gone": `${-gone}s`, "--drain-warm-at": `${seconds - DRAIN_WARM_SECONDS - gone}s` } as CSSProperties;
+    return <div className="drain" role="timer" aria-label={`${seconds} seconds`} style={style}><i onAnimationStart={onStart} /></div>;
+}
+
+/**
  * A score counting up to where it landed, after a beat, so it lands after the answer lights.
  * @param props where it counts from and to.
  * @returns the number.
@@ -197,6 +219,9 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     }
     if (block.type === "roster") {
         return <ul key={index} className="roster">{block.players.map((player) => <li key={player.playerId} className={`${player.speaking === true ? "speaking" : ""} ${player.badge === "out" ? "out" : ""}`}>{player.name}{player.badge !== undefined ? <small>{player.badge}</small> : null}</li>)}</ul>;
+    }
+    if (block.type === "drain") {
+        return <DrainBar key={block.key} clock={block.key} seconds={block.seconds} />;
     }
     if (block.type === "timer") {
         return <Countdown key={`${index}-${block.label ?? ""}`} seconds={block.seconds} running={block.running} {...(block.label !== undefined ? { label: block.label } : {})} />;
@@ -443,6 +468,12 @@ export function App(): ReactElement {
         }
         // Only the moment it connects matters; start reads everything else when it runs.
     }, [connected, started]);
+
+    useEffect(() => {
+        const hurry = (): void => { soundsRef.current?.hurry(); };
+        window.addEventListener(DRAIN_WARM_EVENT, hurry);
+        return () => { window.removeEventListener(DRAIN_WARM_EVENT, hurry); };
+    }, []);
 
     // The reveal's sounds follow the scene, so a TV that comes back mid-reveal joins in without a false start.
     const choicesBlock = state.scene?.blocks.find((block: SceneBlock) => block.type === "choices");

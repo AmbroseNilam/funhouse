@@ -149,6 +149,11 @@ export class ConsoleSounds {
         }
     }
 
+    /** Time running short: one soft low note, easy to miss if you're already answering. */
+    public hurry(): void {
+        this.tone(330, 294, 0.3, 0.5, "sine");
+    }
+
     /** The answer lighting up: two bright notes. */
     public reveal(): void {
         this.tone(784, 784, 0.16, 0.8, "triangle");
