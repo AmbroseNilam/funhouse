@@ -2,6 +2,8 @@
 // writing text. Used for quick judgments where a wrong answer costs little; see room/decide.ts.
 // Nothing here logs or quotes what it is asked, since that can be what a player said.
 
+import { charge, mayCharge, PRICES } from "../meter.ts";
+
 /** Where Jev is. */
 const JEV_URL: string = process.env.JEV_URL ?? "https://api.typesafe.ai/v1/systemone";
 
@@ -37,6 +39,10 @@ export function jevConfigured(): boolean {
  * never quotes the request or the response.
  */
 export const askJev: JevAsk = async (state: string, question: JevQuestion, timeoutMilliseconds: number): Promise<JevAnswer> => {
+    if (mayCharge("jev") === false) {
+        throw new Error("The spending limit has been reached.");
+    }
+    charge("jev", PRICES.jevPerCall, { calls: 1 });
     const response: Response = await fetch(JEV_URL, {
         method: "POST",
         signal: AbortSignal.timeout(timeoutMilliseconds),

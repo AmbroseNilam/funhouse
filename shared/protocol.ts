@@ -9,7 +9,7 @@ import type { Scene } from "./scene.ts";
 import type { NavAction, ShellView } from "./shell.ts";
 
 /** Why the room turned a stage away. */
-export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree" | "roomClosed";
+export type RejectedReason = "unknownRoom" | "roomFull" | "noRoomsFree" | "roomClosed" | "resting";
 
 /** Phone to room. */
 export type PhoneMessage =

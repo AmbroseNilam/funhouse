@@ -264,3 +264,9 @@
 @keyframes drain-warm {
     to { background: var(--lamp); }
 }
+
+/* The quiet "I have a judge code" entry. */
+.judge-link { background: none; border: 0; color: inherit; text-decoration: underline; font: inherit; opacity: 0.8; padding: 12px; }
+.judge-form { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.judge-form input { flex: 1; min-width: 10ch; font: inherit; padding: 10px; }
+.judge-form button { font: inherit; padding: 10px 14px; }

@@ -3,6 +3,7 @@
 // another voice so the game never goes quiet. This model takes no delivery direction, so a line's
 // style isn't used here; moods still show on the lantern.
 
+import { charge, PRICES } from "../meter.ts";
 import type { SpeechRequest, SpeechVoice, TextToSpeech } from "../openai/speech.ts";
 
 /** Environment variable holding the ElevenLabs key. */
@@ -77,6 +78,7 @@ export class ElevenLabsSpeech implements TextToSpeech {
      */
     private async open(request: SpeechRequest): Promise<ReadableStream<Uint8Array> | null> {
         const limit: AbortSignal = AbortSignal.timeout(LINE_TIME_LIMIT_MILLISECONDS);
+        charge("voice", request.text.length * PRICES.voicePerCharacter);
         try {
             const response: Response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${request.voice === WARM_SPEECH_VOICE ? WARM_VOICE_ID : VOICE_ID}/stream?output_format=pcm_24000`, {
                 method: "POST",

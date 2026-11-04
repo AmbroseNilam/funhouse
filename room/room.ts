@@ -30,6 +30,7 @@ import { groundedContent } from "./grounded-content.ts";
 import type { SearchedText } from "../providers/meta/search.ts";
 import { BUDGET, RateWindow } from "./limits.ts";
 import { recordedLine } from "./lineBank.ts";
+import { holdsOwnerPass, stageOf, withPayer } from "../providers/meter.ts";
 import { drawImage, type Drawing } from "../providers/meta/image.ts";
 import { FAST_SPARK_MODEL, streamSpark } from "../providers/meta/spark.ts";
 import type { NavAction, PadView, Seat, ShelfGame } from "../shared/shell.ts";
@@ -437,6 +438,12 @@ function guestPick(persona: GuestPersona): { name: string; label: string } {
 /** The room runtime. One instance per live room. */
 export class Room implements HostStage, AgentHost {
     public readonly code: string;
+    /** Who this room's spending is charged to: whoever opened it. */
+    public readonly payer: string;
+    /** The last time a person did something here. Guests and agents don't count, so they can't keep a room spending. */
+    private lastPersonAt: number = Date.now();
+    /** True once someone joined from where paintings can't be offered. */
+    private paintingsStopped: boolean = false;
     private readonly joinUrl: string;
     private readonly players: Map<string, Player> = new Map();
     private readonly screens: Set<WebSocket> = new Set();
@@ -556,7 +563,8 @@ export class Room implements HostStage, AgentHost {
      * @param tapToTalk true when phones offer the Talk button.
      * @param fastReplies true when the room was opened to try the faster reply model.
      */
-    public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false) {
+    public constructor(code: string, publicUrl: string, games: InstalledGame[], livelyRoom: boolean = false, tapToTalk: boolean = false, fastReplies: boolean = false, payer: string = "") {
+        this.payer = payer;
         this.code = code;
         this.publicUrl = publicUrl;
         this.games = [...games];
@@ -624,16 +632,48 @@ export class Room implements HostStage, AgentHost {
     }
 
     /** Tells every screen and phone the room is gone, so none of them waits on it or tries to come back. */
-    public turnEveryoneAway(): void {
+    public turnEveryoneAway(resting: boolean = false): void {
+        const screenReason: "resting" | "roomClosed" = resting === true ? "resting" : "roomClosed";
         for (const screen of this.screens) {
-            this.sendToScreen(screen, { type: "rejected", reason: "roomClosed" });
-            screen.close(4004, "roomClosed");
+            this.sendToScreen(screen, { type: "rejected", reason: screenReason });
+            screen.close(4004, screenReason);
         }
-        const rejected: RoomToPhoneMessage = { type: "rejected", reason: "unknownRoom" };
+        const phoneReason: "resting" | "unknownRoom" = resting === true ? "resting" : "unknownRoom";
+        const rejected: RoomToPhoneMessage = { type: "rejected", reason: phoneReason };
         for (const phone of this.phones) {
             phone.send(JSON.stringify(rejected));
-            phone.close(4004, "unknownRoom");
+            phone.close(4004, phoneReason);
         }
+    }
+
+    /**
+     * Runs a callback on the account of whoever opened this room.
+     * @param callback the callback.
+     * @returns the same callback, charged correctly.
+     */
+    private onAccount<Arguments extends unknown[]>(callback: (...values: Arguments) => void): (...values: Arguments) => void {
+        return (...values: Arguments): void => { withPayer(this.payer, () => { callback(...values); }); };
+    }
+
+    /** Keeps this room from painting from now on; games already carry on without a picture. */
+    public stopPaintings(): void {
+        this.paintingsStopped = true;
+    }
+
+    /**
+     * Whether this room has run out of allowance.
+     * @returns true at the stopping stage.
+     */
+    public isOutOfAllowance(): boolean {
+        return stageOf(this.payer) === 3;
+    }
+
+    /**
+     * How long since a person last did anything here. The owner's pass keeps a room open for recording.
+     * @returns the time, or 0 with the pass.
+     */
+    public idleMilliseconds(): number {
+        return holdsOwnerPass(this.payer) === true ? 0 : Date.now() - this.lastPersonAt;
     }
 
     /** Silences the host and releases the room's voice connection. */
@@ -700,12 +740,13 @@ export class Room implements HostStage, AgentHost {
         let lit: boolean = false;
         const unlitTimer: NodeJS.Timeout = setTimeout(() => { socket.close(4008, "never lit"); }, UNLIT_SCREEN_MILLISECONDS);
         socket.on("close", () => { clearTimeout(unlitTimer); });
-        socket.on("message", (data: WebSocket.RawData) => {
+        socket.on("message", this.onAccount((data: WebSocket.RawData) => {
             const message: ScreenMessage | null = parseMessage<ScreenMessage>(rawDataToText(data));
             if (message?.type !== "ready" || lit === true) {
                 return;
             }
             lit = true;
+            this.lastPersonAt = Date.now();
             clearTimeout(unlitTimer);
             this.wake();
             if (message.resumed === true) {
@@ -713,7 +754,7 @@ export class Room implements HostStage, AgentHost {
             }
             const line: string = this.players.size === 0 ? "(The big screen just came on and nobody has joined yet. Welcome the room and invite people to scan the code.)" : "(The big screen came back on.)";
             this.noticeIfAnyoneIsThere(line, WAKE_DELAY_MILLISECONDS.screen);
-        });
+        }));
         this.sendToScreen(socket, { type: "scene", scene: this.currentScene(), joinUrl: this.joinUrl, roomCode: this.code, turn: this.game?.turn() ?? null });
         this.sendToScreen(socket, this.hostStateMessage());
         this.sendToScreen(socket, { type: "shell", view: this.shell.view() });
@@ -730,12 +771,13 @@ export class Room implements HostStage, AgentHost {
         let lastRenameAt: number = 0;
         const textRate: RateWindow = new RateWindow(TEXT_MESSAGES_PER_SECOND, 1000);
         const audioRate: RateWindow = new RateWindow(AUDIO_FRAMES_PER_SECOND, 1000);
-        socket.on("message", (data: WebSocket.RawData, isBinary: boolean) => {
+        socket.on("message", this.onAccount((data: WebSocket.RawData, isBinary: boolean) => {
             if ((isBinary === true ? audioRate : textRate).allow() === false) {
                 socket.close(1008, "too many messages");
                 return;
             }
             if (isBinary === true) {
+                this.lastPersonAt = Date.now();
                 if (player !== null) {
                     this.onAudioFrame(player, Buffer.isBuffer(data) ? data : Buffer.from(rawDataToText(data)));
                 }
@@ -746,6 +788,9 @@ export class Room implements HostStage, AgentHost {
                 return;
             }
             const message: PhoneMessage = parsed;
+            if (message.type !== "presence") {
+                this.lastPersonAt = Date.now();
+            }
             if (message.type === "hello" && player === null) {
                 player = this.seat(socket, message);
                 return;
@@ -832,13 +877,13 @@ export class Room implements HostStage, AgentHost {
                 return;
             }
             this.onControl(player, message.input.value.slice(0, MAX_INPUT_CHARACTERS), message.input.controlIndex);
-        });
-        socket.on("close", (code: number) => {
+        }));
+        socket.on("close", this.onAccount((code: number) => {
             if (player === null || player.socket !== socket) {
                 return;
             }
             this.onDisconnect(player, code);
-        });
+        }));
     }
 
     /**
@@ -2407,7 +2452,7 @@ export class Room implements HostStage, AgentHost {
      * @param prompt what to draw.
      */
     private draw(id: string, prompt: string): void {
-        if (DRAWING_ON === false || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
+        if (DRAWING_ON === false || this.paintingsStopped === true || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
             return;
         }
         this.drawingsAsked += 1;

@@ -5,7 +5,7 @@
 import { versionLine } from "../../shared/build-info.ts";
 import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import type { Turn } from "../../shared/turn.ts";
-import { useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type ReactElement } from "react";
+import { useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
@@ -51,6 +51,7 @@ interface ScreenState {
     started: boolean;
     turnedAway: boolean;
     roomClosed: boolean;
+    resting: boolean;
     shell: ShellView | null;
 }
 
@@ -61,7 +62,8 @@ type ScreenAction =
     | { type: "connection"; connected: boolean }
     | { type: "started" }
     | { type: "turnedAway" }
-    | { type: "roomClosed" };
+    | { type: "roomClosed" }
+    | { type: "resting" };
 
 /** True on a plug-in console with no mouse: it lights itself, and the browser must allow autoplay. */
 const ON_CONSOLE: boolean = new URLSearchParams(location.search).get("console") === "1";
@@ -91,7 +93,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, turn: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, shell: null };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, turn: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, resting: false, shell: null };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -105,6 +107,9 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     }
     if (action.type === "turnedAway") {
         return { ...state, turnedAway: true };
+    }
+    if (action.type === "resting") {
+        return { ...state, resting: true };
     }
     if (action.type === "roomClosed") {
         return { ...state, roomClosed: true };
@@ -396,7 +401,7 @@ export function App(): ReactElement {
                 if (message.type === "rejected") {
                     stopped = true;
                     speakerRef.current?.cancel();
-                    dispatch({ type: message.reason === "roomClosed" ? "roomClosed" : "turnedAway" });
+                    dispatch({ type: message.reason === "resting" ? "resting" : message.reason === "roomClosed" ? "roomClosed" : "turnedAway" });
                     return;
                 }
                 if (message.type === "scene" && new URLSearchParams(location.search).get("room") !== message.roomCode) {
@@ -590,6 +595,28 @@ export function App(): ReactElement {
             <main className="phone-gate">
                 <h1>Every table's taken.</h1>
                 <p>Try again in a few minutes.</p>
+            </main>
+        );
+    }
+
+    if (state.resting === true) {
+        return (
+            <main className="phone-gate">
+                <h1>Marlowe needs rest.</h1>
+                <p>Come back tomorrow.</p>
+                <form className="judge-form" onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                    event.preventDefault();
+                    const entered: FormDataEntryValue | null = new FormData(event.currentTarget).get("code");
+                    const code: string = typeof entered === "string" ? entered : "";
+                    void fetch("/pass", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) }).then((response: Response) => {
+                        if (response.ok === true) {
+                            location.assign("/screen/");
+                        }
+                    });
+                }}>
+                    <input name="code" aria-label="Judge code" type="password" autoComplete="off" placeholder="I have a judge code" />
+                    <button type="submit">Use code</button>
+                </form>
             </main>
         );
     }

@@ -3,6 +3,8 @@
 // The room opens one of these per phone, so speaker identity comes from the session,
 // never from diarization. Protocol reference: dev.meta.ai/docs/speech-to-text.
 
+import { AsyncLocalStorage } from "node:async_hooks";
+import { charge, mayCharge, PRICES } from "../meter.ts";
 import WebSocket from "ws"; // Node's built-in WebSocket drops this endpoint with code 1006; ws does not.
 import { readMetaKey } from "./client.ts";
 
@@ -53,6 +55,9 @@ export const FRAME_MILLISECONDS: number = 80;
 export type TurnMode = "PUSH_TO_TALK" | "ENDPOINTING" | "DIARIZATION";
 
 /** Events the session reports, mirroring the server's event types. */
+/** 16-bit mono at 24 kHz. */
+const BYTES_PER_SECOND: number = 48000;
+
 /** Most frames held while the session opens: six seconds of audio. */
 const EARLY_FRAME_LIMIT: number = 75;
 
@@ -105,8 +110,10 @@ export class TranscribeSession {
         this.listener = listener;
         const url: string = options.sessionId === undefined ? TRANSCRIBE_URL : `${TRANSCRIBE_URL}?sessionId=${encodeURIComponent(options.sessionId)}`;
         this.socket = new WebSocket(url);
-        this.socket.on("message", (data: WebSocket.RawData) => { this.handleMessage(rawDataToText(data)); });
-        this.socket.on("close", (code: number, reason: Buffer) => { this.listener.onClose?.(code, reason.toString()); });
+        // What the words set off is charged to whoever's account opened this session.
+        const onAccount = AsyncLocalStorage.snapshot();
+        this.socket.on("message", (data: WebSocket.RawData) => { onAccount(() => { this.handleMessage(rawDataToText(data)); }); });
+        this.socket.on("close", (code: number, reason: Buffer) => { onAccount(() => { this.listener.onClose?.(code, reason.toString()); }); });
         // The server answers our close with status 1005, which ws reports as an error; harmless.
         this.socket.on("error", () => { /* surfaced through onClose */ });
     }
@@ -162,6 +169,11 @@ export class TranscribeSession {
      * @param frame audio bytes, normally FRAME_BYTES long.
      */
     public sendFrame(frame: Uint8Array): void {
+        if (mayCharge("transcribe") === false) {
+            return;
+        }
+        const seconds: number = frame.length / BYTES_PER_SECOND;
+        charge("transcribe", seconds * PRICES.transcribePerSecond, { seconds });
         if (this.acknowledged === true) {
             this.socket.send(frame);
             return;

@@ -3,6 +3,7 @@
 // phones, each with a ?room= code. A screen without a known code opens a new room.
 
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -15,7 +16,9 @@ import { showcaseShelf } from "../studio/shelf.ts";
 import { serveAgent } from "./agent.ts";
 import { RoomDirectory } from "./directory.ts";
 import { roomOptions, type RoomOptions } from "./room-options.ts";
-import { AddressLimits, BUDGET } from "./limits.ts";
+import { flushSpend, isOwnerCode, payerOf, redeemPass, spendSummary, stageOf, withPayer } from "../providers/meter.ts";
+import { cameThroughTunnel, REFUSED_PAGE, regionRule } from "./geo.ts";
+import { AddressLimits, BUDGET, RateWindow } from "./limits.ts";
 import type { Room } from "./room.ts";
 
 /** Port the room listens on inside its pod. */
@@ -107,8 +110,100 @@ setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
  * @returns the address.
  */
 function addressOf(request: IncomingMessage): string {
+    const direct: string = request.socket.remoteAddress ?? "unknown";
     const forwarded: string | string[] | undefined = request.headers["cf-connecting-ip"];
-    return typeof forwarded === "string" ? forwarded : request.socket.remoteAddress ?? "unknown";
+    return cameThroughTunnel(direct) === true && typeof forwarded === "string" && isIP(forwarded) !== 0 ? forwarded : direct;
+}
+
+/** Requests refused since the last log line, by country. No addresses, nothing else. */
+const refusedCounts: Map<string, number> = new Map();
+
+/** How often those counts are logged. */
+const REFUSED_LOG_MILLISECONDS: number = 3600000;
+
+setInterval(() => {
+    if (refusedCounts.size > 0) {
+        console.warn(`${new Date().toISOString()} [geo] refused: ${[...refusedCounts].map(([country, count]) => `${country} ${count}`).join(", ")}`);
+    }
+    refusedCounts.clear();
+}, REFUSED_LOG_MILLISECONDS).unref();
+
+/**
+ * Whether this request is from somewhere the site can't be offered, counting it if so.
+ * @param request the request.
+ * @returns true when it must be turned away.
+ */
+function isRefusedRegion(request: IncomingMessage): boolean {
+    const { rule, country } = regionRule(request.headers, request.socket.remoteAddress);
+    if (rule !== "refused") {
+        return false;
+    }
+    refusedCounts.set(country, (refusedCounts.get(country) ?? 0) + 1);
+    return true;
+}
+
+/** Tries at a code each address gets per hour. */
+const PASS_TRIES_PER_HOUR: number = 10;
+
+/** Longest code body accepted. */
+const PASS_BODY_BYTES: number = 512;
+
+/** Tries at a code, by address (an IPv6 /64 counts as one). Kept across rooms and tabs; a restart forgets them. Codes must be long enough that this barely matters. */
+const passTries: Map<string, RateWindow> = new Map();
+setInterval(() => { passTries.clear(); }, 3600000).unref();
+
+/**
+ * Takes a judge or owner code from a POST body, so it never sits in a URL or a log. It lifts the
+ * address that sent it and, when a room is named, whoever opened that room.
+ * @param request the request.
+ * @param response the response.
+ */
+function servePass(request: IncomingMessage, response: ServerResponse): void {
+    const address: string = addressOf(request);
+    const tries: RateWindow = passTries.get(payerOf(address)) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
+    passTries.set(payerOf(address), tries);
+    const fromElsewhere: boolean = request.headers.origin !== undefined && request.headers.origin !== PUBLIC_ORIGIN;
+    if (fromElsewhere === true || tries.allow() === false) {
+        response.writeHead(429).end();
+        return;
+    }
+    let body: string = "";
+    request.on("data", (chunk: Buffer) => {
+        body += chunk.toString("utf8");
+        if (body.length > PASS_BODY_BYTES) {
+            request.destroy();
+        }
+    });
+    request.on("end", () => {
+        const parsed: { code?: unknown; room?: unknown } | null = (() => {
+            try {
+                return JSON.parse(body) as { code?: unknown; room?: unknown } | null;
+            } catch {
+                return null;
+            }
+        })();
+        const room: Room | undefined = typeof parsed?.room === "string" ? directory.find(parsed.room) : undefined;
+        const payers: string[] = [payerOf(address), ...(room === undefined ? [] : [room.payer])];
+        const pass: string | null = typeof parsed?.code === "string" ? redeemPass(parsed.code, payers) : null;
+        response.writeHead(pass === null ? 403 : 200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: pass !== null }));
+    });
+}
+
+/**
+ * Shows the owner today's spending. The code goes in a header, which Cloudflare and this server don't log.
+ * @param request the request.
+ * @param response the response.
+ */
+function serveOwnerSpend(request: IncomingMessage, response: ServerResponse): void {
+    const code: string | string[] | undefined = request.headers["x-owner-code"];
+    const address: string = addressOf(request);
+    const tries: RateWindow = passTries.get(payerOf(address)) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
+    passTries.set(payerOf(address), tries);
+    if (typeof code !== "string" || tries.allow() === false || isOwnerCode(code) === false) {
+        response.writeHead(404).end();
+        return;
+    }
+    response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(spendSummary(), null, 2));
 }
 
 /**
@@ -141,7 +236,8 @@ function openRoom(address: string, lively: boolean, tapToTalk: boolean, fastRepl
     if (within === false || BUDGET.hasRoom() === false) {
         return null;
     }
-    const room: Room | null = directory.create(lively, tapToTalk, fastReplies, testing);
+    const payer: string = payerOf(address);
+    const room: Room | null = withPayer(payer, () => directory.create(lively, tapToTalk, fastReplies, testing, payer));
     if (room !== null) {
         limits.roomOpened(address, room.code);
     }
@@ -183,6 +279,10 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
     }
     const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/([0-9a-f]+)$/.exec(url.pathname);
     if (drawing !== null) {
+        if (regionRule(request.headers, request.socket.remoteAddress).rule === "noPaintings") {
+            response.writeHead(404).end();
+            return;
+        }
         const found: Drawing | undefined = directory.find(drawing[1] ?? "")?.drawing(drawing[2] ?? "");
         if (found === undefined) {
             response.writeHead(404).end();
@@ -221,6 +321,20 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
         response.writeHead(301, { location: `${PUBLIC_ORIGIN}${request.url ?? "/"}` }).end();
         return;
     }
+    if (isRefusedRegion(request) === true) {
+        response.setHeader("content-security-policy", "default-src 'none'");
+        response.writeHead(451, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(REFUSED_PAGE);
+        return;
+    }
+    const path: string = (request.url ?? "/").split("?")[0] ?? "/";
+    if (path === "/pass" && request.method === "POST") {
+        servePass(request, response);
+        return;
+    }
+    if (path === "/owner/spend") {
+        serveOwnerSpend(request, response);
+        return;
+    }
     serveAgent(request, response, PUBLIC_URL, addressOf(request), limits).then((served: boolean) => (served === true ? undefined : serveStatic(request, response))).catch((error: unknown) => {
         console.error("static serve failed:", error instanceof Error ? error.message : String(error));
         response.writeHead(500).end();
@@ -231,7 +345,7 @@ const sockets: WebSocketServer = new WebSocketServer({
     server,
     maxPayload: MAX_MESSAGE_BYTES,
     // Scripts send no Origin and could fake one anyway, and they're held to the same limits. This stops other websites using their visitors' browsers.
-    verifyClient: (info: { origin?: string }) => info.origin === undefined || info.origin === PUBLIC_ORIGIN,
+    verifyClient: (info: { origin?: string; req: IncomingMessage }) => isRefusedRegion(info.req) === false && (info.origin === undefined || info.origin === PUBLIC_ORIGIN),
 });
 
 /** Sockets that answered the last heartbeat. */
@@ -262,6 +376,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         return;
     }
     socket.on("close", () => { limits.closeSocket(address); });
+    const noPaintings: boolean = regionRule(request.headers, request.socket.remoteAddress).rule === "noPaintings";
     const url: URL | null = URL.canParse(request.url ?? "/", "http://room") === true ? new URL(request.url ?? "/", "http://room") : null;
     if (url === null) {
         socket.close(1008, "bad address");
@@ -276,10 +391,17 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         }
         const showHeld: boolean = mayShowHeldGames(url);
         const options: RoomOptions = roomOptions(url.searchParams);
+        if (existing === undefined && stageOf(payerOf(address)) === 3) {
+            turnAway(socket, "resting");
+            return;
+        }
         const room: Room | null = existing ?? openRoom(address, options.lively, options.tapToTalk, options.fastReplies, showHeld);
         if (room === null) {
             turnAway(socket, "noRoomsFree");
             return;
+        }
+        if (noPaintings === true) {
+            room.stopPaintings();
         }
         room.attachScreen(socket);
         return;
@@ -290,6 +412,9 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "unknownRoom");
             return;
         }
+        if (noPaintings === true) {
+            existing.stopPaintings();
+        }
         existing.attachPhone(socket);
         return;
     }
@@ -299,6 +424,12 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
 // One room's bug must not end every other room's game.
 process.on("uncaughtException", (error: Error) => { console.error("uncaught:", error.stack ?? error.message); });
 process.on("unhandledRejection", (reason: unknown) => { console.error("unhandled:", reason instanceof Error ? reason.stack ?? reason.message : String(reason)); });
+
+// A release stops the container this way; the day's totals go to disk first.
+process.on("SIGTERM", () => {
+    flushSpend();
+    process.exit(0);
+});
 
 server.listen(PORT, () => {
     console.warn(`listening on http://localhost:${PORT}  public: ${PUBLIC_URL}  build: ${BUILD.commit} ${BUILD.builtAt}`);

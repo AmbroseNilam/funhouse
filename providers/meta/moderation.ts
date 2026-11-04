@@ -2,6 +2,7 @@
 // Guard aren't offered through the Meta Model API (requests return 404, Nov 2026), so Spark does the
 // job, constrained to a yes-or-no answer. The text goes in as data, inside JSON.
 
+import { chargeChatEstimate, mayCharge } from "../meter.ts";
 import { postJson } from "./client.ts";
 import { FAST_SPARK_MODEL } from "./spark.ts";
 
@@ -31,6 +32,10 @@ const NICKNAME_POLICY: string = "This line is a nickname a player chose. Ordinar
  * @throws Error when the model can't answer, which callers treat as no.
  */
 export async function isFitForRoom(text: string, kind: "line" | "nickname" = "line"): Promise<boolean> {
+    if (mayCharge("moderation") === false) {
+        throw new Error("The spending limit has been reached.");
+    }
+    const settle: (usage: unknown) => void = chargeChatEstimate("moderation", POLICY.length + text.length);
     const response: Response = await postJson("/chat/completions", {
         model: FAST_SPARK_MODEL,
         reasoning_effort: "minimal",
@@ -45,7 +50,8 @@ export async function isFitForRoom(text: string, kind: "line" | "nickname" = "li
             },
         },
     }, AbortSignal.timeout(CHECK_TIME_LIMIT_MILLISECONDS));
-    const body = await response.json() as { choices?: { message?: { content?: unknown } }[] };
+    const body = await response.json() as { choices?: { message?: { content?: unknown } }[]; usage?: unknown };
+    settle(body.usage);
     const content: unknown = body.choices?.[0]?.message?.content;
     return typeof content === "string" && (JSON.parse(content) as { verdict?: unknown }).verdict === "allow";
 }

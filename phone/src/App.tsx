@@ -23,6 +23,31 @@ import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { followVoice } from "./talkGlow.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
+/**
+ * The small "I have a judge code" entry. The code goes in a POST body, never the address bar.
+ * @returns the entry.
+ */
+function JudgeCode(): ReactElement {
+    const [open, setOpen] = useState<boolean>(false);
+    const [code, setCode] = useState<string>("");
+    const [result, setResult] = useState<string>("");
+    if (open === false) {
+        return <button type="button" className="judge-link" onClick={() => { setOpen(true); }}>I have a judge code</button>;
+    }
+    return (
+        <form className="judge-form" onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            void fetch("/pass", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, room: ROOM_CODE }) }).then((response: Response) => {
+                setResult(response.ok === true ? "You're in. Marlowe's awake for you today." : "That code didn't work.");
+            }, () => { setResult("That didn't go through. Try again."); });
+        }}>
+            <input aria-label="Judge code" type="password" autoComplete="off" value={code} onChange={(event: { target: HTMLInputElement }) => { setCode(event.target.value); }} />
+            <button type="submit">Use code</button>
+            {result !== "" ? <p role="status">{result}</p> : null}
+        </form>
+    );
+}
+
 /** What the phone remembers about its seat, across reloads. */
 interface SavedSeat {
     playerId: string;
@@ -337,6 +362,7 @@ function CodeScreen(): ReactElement {
             <small className="room-tag">{PRODUCT_NAME}</small>
             <form className="place-card" onSubmit={(event) => { event.preventDefault(); openRoom(code); }}>
                 <label htmlFor="code-field">What's the code on the TV?</label>
+                {search.has("resting") === true ? <p className="place-warning" role="alert">Marlowe needs rest. Come back tomorrow.</p> : null}
                 {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
                 {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
                 {closed !== null ? <p className="place-warning" role="alert">Room {closed} has closed. Enter the new code to rejoin.</p> : null}
@@ -357,6 +383,7 @@ function CodeScreen(): ReactElement {
                 <button className="primary" type="submit" disabled={code.length !== ROOM_CODE_LENGTH}>Sit down</button>
                 {"mediaDevices" in navigator === false ? null : <button className="plain" type="button" onClick={() => { setScanNote(""); setScanning(true); }}>Scan the code</button>}
             </form>
+            <JudgeCode />
             <p className="fine">Hosting? Open this site on a TV or laptop.</p>
         </main>
     );
@@ -791,6 +818,10 @@ export function App(): ReactElement {
                     stopped = true;
                     const wasSeated: boolean = seatInThisRoom() !== null;
                     clearSeat();
+                    if (message.reason === "resting") {
+                        location.assign("/phone/?resting=1");
+                        return;
+                    }
                     if (message.reason === "unknownRoom" && wasSeated === true) {
                         location.assign(`/phone/?closed=${encodeURIComponent(ROOM_CODE)}`);
                         return;
