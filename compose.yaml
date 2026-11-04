@@ -1,0 +1,41 @@
+# Runs Funhouse on your own machine. Works with `docker compose up` and `podman compose up`.
+# Copy .env.example to .env for real keys, or add compose.demo.yaml to play with none. See README.md.
+services:
+    funhouse:
+        build:
+            context: .
+            dockerfile: deploy/Containerfile
+        image: localhost/funhouse:local
+        init: true
+        restart: unless-stopped
+        ports:
+            - "${PORT:-8740}:8740"
+        # Only what the room reads. Keys come from .env or your shell, and never enter the image.
+        environment:
+            PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8740}
+            META_MODEL_API_KEY: ${META_MODEL_API_KEY:-}
+            META_BASE_URL: ${META_BASE_URL:-https://api.meta.ai/v1}
+            ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+            OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+            JEV_API_KEY: ${JEV_API_KEY:-}
+            AGENTS_ON: ${AGENTS_ON:-}
+            GUESTS_OFF: ${GUESTS_OFF:-}
+            WEB_SEARCH_OFF: ${WEB_SEARCH_OFF:-}
+            QUIZ_OPEN_ANSWERS: ${QUIZ_OPEN_ANSWERS:-}
+            JEV_DECISIONS_OFF: ${JEV_DECISIONS_OFF:-}
+            STUDIO_SHOW_HELD: ${STUDIO_SHOW_HELD:-}
+            GAME_ROOM_TEXT_ONLY: ${GAME_ROOM_TEXT_ONLY:-}
+            GAME_ROOM_DRAW: ${GAME_ROOM_DRAW:-}
+        # Rooms live in memory, so the server writes nothing to disk.
+        read_only: true
+        tmpfs:
+            - /tmp
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        healthcheck:
+            test: ["CMD", "node", "-e", "fetch('http://localhost:8740/version').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+            interval: 30s
+            timeout: 5s
+            start_period: 10s
