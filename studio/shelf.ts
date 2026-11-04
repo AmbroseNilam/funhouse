@@ -8,13 +8,14 @@ import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
 import { blueprintPauseActions, blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
+import { COLD_READ_BLUEPRINT } from "./games/cold-read.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, WHO_FITS_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, WHO_FITS_BLUEPRINT, COLD_READ_BLUEPRINT];
 
 /**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
