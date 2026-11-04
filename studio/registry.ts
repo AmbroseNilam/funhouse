@@ -9,6 +9,7 @@ import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantState } from "./kits/plant.ts";
 import { createDiceGame, diceBlueprintProblems, type DiceDecisions, type DiceState } from "./kits/tap-dice.ts";
+import { createPushGame, pushBlueprintProblems, type PushDecisions, type PushState } from "./kits/tap-push.ts";
 import { createFitsGame, fitsBlueprintProblems, type FitsDecisions, type FitsState } from "./kits/tap-fits.ts";
 import { createWitGame, witBlueprintProblems, type WitState } from "./kits/wit.ts";
 import { createGateGame, gateBlueprintProblems, type GateState } from "./kits/gate.ts";
@@ -20,7 +21,7 @@ import { createOddWordGame, oddWordBlueprintProblems, type OddWordState } from "
 import { createChainGame, chainBlueprintProblems, type ChainState } from "./kits/chain.ts";
 import { createGalleryGame, galleryBlueprintProblems, type GalleryState } from "./kits/gallery.ts";
 import { PLANT_GIVE_UP_ACTION } from "./kits/plant.ts";
-import { chainPersonas, dicePersonas, diceSecrecyCheck, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck } from "./personas.ts";
+import { chainPersonas, dicePersonas, diceSecrecyCheck, pushChoiceCheck, pushPersonas, clueBoardContent, clueBoardPersonas, estimatePersonas, fitsPersonas, fitsTapCheck, galleryPersonas, gatePersonas, guessingPersonas, linePersonas, oddWordPersonas, oddWordRoleCheck, plantPersonas, plantRoleCheck, strangerPersonas, strangerRoleCheck } from "./personas.ts";
 import { witPersonas } from "./personas-text.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
@@ -72,11 +73,17 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
             if (blueprint.decisions.style === "dice") {
                 return diceBlueprintProblems(blueprint.box, blueprint.decisions);
             }
+            if (blueprint.decisions.style === "push") {
+                return pushBlueprintProblems(blueprint.box, blueprint.decisions);
+            }
             return fitsBlueprintProblems(blueprint.box, blueprint.decisions);
         },
         create(blueprint: TapBlueprint, random: () => number): AnyKitGame {
             if (blueprint.decisions.style === "dice") {
                 return erase(createDiceGame(blueprint.box, blueprint.decisions, random));
+            }
+            if (blueprint.decisions.style === "push") {
+                return erase(createPushGame(blueprint.box, blueprint.decisions, random));
             }
             return erase(createFitsGame(blueprint.box, blueprint.decisions));
         },
@@ -85,6 +92,11 @@ export const KITS: { [Name in Blueprint["kit"]]: KitDefinition<Extract<Blueprint
                 const dice: DiceDecisions = blueprint.decisions;
                 const makeDice = (seed: number): KitGame<DiceState> => createDiceGame(blueprint.box, dice, seededRandom(seed));
                 return rehearseMany(makeDice, dicePersonas(dice), CHECK_SEEDS, { ...options, roleCheck: diceSecrecyCheck(blueprint.box, dice) });
+            }
+            if (blueprint.decisions.style === "push") {
+                const push: TapBlueprint<PushDecisions> = { ...blueprint, decisions: blueprint.decisions };
+                const makePush = (seed: number): KitGame<PushState> => createPushGame(push.box, push.decisions, seededRandom(seed));
+                return rehearseMany(makePush, pushPersonas(), CHECK_SEEDS, { ...options, roleCheck: pushChoiceCheck(push) });
             }
             const fits: TapBlueprint<FitsDecisions> = { ...blueprint, decisions: blueprint.decisions };
             const makeFits = (): KitGame<FitsState> => createFitsGame(fits.box, fits.decisions);

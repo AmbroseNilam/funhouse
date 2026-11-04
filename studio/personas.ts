@@ -16,6 +16,7 @@ import { LINK_PREFIX, type ChainState } from "./kits/chain.ts";
 import { ballotLetter, CLUE_PREFIX, type GalleryState, VOTE_PREFIX as BALLOT_PREFIX } from "./kits/gallery.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
+import { createPushGame, PUSH_PREFIX, type PushDecisions, type PushState } from "./kits/tap-push.ts";
 import { BACK_ACTION, CHALLENGE_ACTION, createDiceGame, FACE_PREFIX, QUANTITY_PREFIX, type DiceDecisions, type DiceState } from "./kits/tap-dice.ts";
 import type { Box, KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
@@ -1274,6 +1275,96 @@ export function diceSecrecyCheck(box: Box, decisions: DiceDecisions): RoleCheck<
                 return owner === seat ? (value + 0.5) % 1 : value;
             };
             return createDiceGame(box, decisions, draw);
+        },
+        script,
+    };
+}
+
+/**
+ * The push-your-luck personas: a table that always stays, one that always draws until it busts,
+ * one that draws to a different number each, one where somebody never chooses, one where
+ * someone leaves mid-round, and one where nobody ever chooses.
+ * @returns the personas.
+ */
+export function pushPersonas(): Persona<PushState>[] {
+    /**
+     * The next chooser who hasn't chosen, choosing by their rule, or a wait for the clock.
+     * @param glimpse what the persona sees.
+     * @param wants decides, from the cards in a chooser's pocket and their seat,, whether to draw.
+     * @param skip choosers who never choose.
+     * @returns the move.
+     */
+    const chooseNext = (glimpse: Glimpse<PushState>, wants: (cards: number, seat: number) => boolean, skip: readonly string[] = []): Move => {
+        if (glimpse.phase !== "choosing") {
+            return { kind: "wait", seconds: 10 };
+        }
+        const chooser: CartridgePlayer | undefined = glimpse.players.find((player: CartridgePlayer) => {
+            return glimpse.legal(player.playerId).length > 0 && skip.includes(player.playerId) === false;
+        });
+        if (chooser === undefined) {
+            return { kind: "wait", seconds: 10 };
+        }
+        const cards: number = (glimpse.state.hands[chooser.playerId] ?? []).length;
+        const seat: number = glimpse.players.indexOf(chooser);
+        const wanted: string = `${PUSH_PREFIX}${wants(cards, seat) === true ? "draw" : "stay"}`;
+        const action: LegalAction | undefined = glimpse.legal(chooser.playerId).find((candidate: LegalAction) => candidate.actionId === wanted);
+        return { kind: "press", playerId: chooser.playerId, actionId: action?.actionId ?? wanted };
+    };
+    return [
+        { name: "the cautious table", move: (glimpse: Glimpse<PushState>): Move => chooseNext(glimpse, (): boolean => false) },
+        { name: "the greedy table", move: (glimpse: Glimpse<PushState>): Move => chooseNext(glimpse, (): boolean => true) },
+        { name: "the mixed table", move: (glimpse: Glimpse<PushState>): Move => chooseNext(glimpse, (cards: number, seat: number): boolean => cards < 2 + (seat % 3)) },
+        { name: "the one who never chooses", move: (glimpse: Glimpse<PushState>): Move => chooseNext(glimpse, (cards: number): boolean => cards < 3, [glimpse.players[0]?.playerId ?? ""]) },
+        {
+            name: "the one who leaves",
+            move(glimpse: Glimpse<PushState>): Move {
+                const leaver: string | undefined = glimpse.players[1]?.playerId;
+                if (glimpse.phase === "choosing" && glimpse.state.round === 1 && leaver !== undefined && glimpse.players.length > 3) {
+                    return { kind: "leave", playerId: leaver };
+                }
+                return chooseNext(glimpse, (cards: number): boolean => cards < 3);
+            },
+        },
+        { name: "the table that never chooses", move: (): Move => ({ kind: "wait", seconds: 15 }) },
+    ];
+}
+
+/**
+ * The push-your-luck secrecy check: the same script is played with one player's choice reversed,
+ * and nothing anyone else sees may change before the flip. Only two players choose, so the beat
+ * stays open at any table size.
+ * @param blueprint the game.
+ * @returns the check.
+ */
+export function pushChoiceCheck(blueprint: TapBlueprint<PushDecisions>): RoleCheck<PushState> {
+    const script: TraceEvent[] = [
+        { type: "contentReady", at: 0, text: "" },
+        { type: "input", playerId: "paper1", actionId: `${PUSH_PREFIX}draw` },
+        { type: "input", playerId: "paper2", actionId: `${PUSH_PREFIX}stay` },
+    ];
+    return {
+        deal(seat: number, players: readonly CartridgePlayer[]): KitGame<PushState> {
+            const game: KitGame<PushState> = createPushGame(blueprint.box, blueprint.decisions, seededRandom(7));
+            const changer: string | undefined = players[seat]?.playerId;
+            /**
+             * The changed player's choice, reversed.
+             * @param playerId who chose.
+             * @param actionId what they chose.
+             * @returns the choice to play.
+             */
+            const changed = (playerId: string, actionId: string): string => {
+                if (playerId !== changer) {
+                    return actionId;
+                }
+                return actionId === `${PUSH_PREFIX}draw` ? `${PUSH_PREFIX}stay` : `${PUSH_PREFIX}draw`;
+            };
+            return {
+                cartridge: {
+                    ...game.cartridge,
+                    apply: (state: PushState, playerId: string, actionId: string) => game.cartridge.apply(state, playerId, changed(playerId, actionId)),
+                },
+                hidden: (state: PushState) => game.hidden(state),
+            };
         },
         script,
     };

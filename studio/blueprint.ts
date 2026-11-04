@@ -17,6 +17,7 @@ import type { GuessingDecisions } from "./kits/guessing.ts";
 import type { PlantDecisions } from "./kits/plant.ts";
 import type { DiceDecisions } from "./kits/tap-dice.ts";
 import type { FitsDecisions } from "./kits/tap-fits.ts";
+import type { PushDecisions } from "./kits/tap-push.ts";
 import type { WitDecisions } from "./kits/wit.ts";
 import { KITS, type KitDefinition } from "./registry.ts";
 
@@ -35,7 +36,7 @@ export interface PlantBlueprint {
 }
 
 /** The tap games, each its own style on the tap kit. */
-export type TapDecisions = FitsDecisions | DiceDecisions;
+export type TapDecisions = FitsDecisions | DiceDecisions | PushDecisions;
 
 /** A tap game: people play by tapping their phones, and the host only talks. */
 export interface TapBlueprint<Decisions extends TapDecisions = TapDecisions> {
