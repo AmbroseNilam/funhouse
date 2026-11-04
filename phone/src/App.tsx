@@ -244,9 +244,13 @@ function writeLearned(learned: Set<string>): void {
  * @returns the headline and a smaller line under it.
  */
 function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean, talkButton: boolean): { big: string; small: string } {
-    const talkHint: string = talkButton === true ? "Tap Talk to speak" : "Press and hold to talk";
+    // The Talk button says this itself, so the surface only teaches holding.
+    const talkHint: string = talkButton === true ? "" : "Hold to talk";
+    if (pad.pausedBy !== "") {
+        return { big: `Paused by ${pad.pausedBy}`, small: pad.canDrive === true ? "Slide to see more, tap to choose" : `Only ${pad.driverName} can resume` };
+    }
     if (pad.watching === true) {
-        return { big: "You're watching this game", small: canTalk === true ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
+        return { big: "You're watching this game", small: canTalk === true && talkHint !== "" ? `You'll be in the next one. ${talkHint}.` : "You'll be in the next one" };
     }
     if (pad.canDrive === true && pad.axis !== null && learned.has("slide") === false) {
         return { big: "Slide your thumb", small: "Watch the TV" };
@@ -254,8 +258,8 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (pad.canSelect === true && pad.axis !== null && learned.has("tap") === false) {
         return { big: "Tap to choose", small: "Anywhere on this screen" };
     }
-    if (canTalk === true && micOff === false && learned.has("hold") === false) {
-        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
+    if (canTalk === true && micOff === false && talkButton === false && learned.has("hold") === false) {
+        return { big: talkHint, small: `${HOST_NAME} hears you while you hold` };
     }
     if (waiting !== "") {
         return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
@@ -1057,7 +1061,7 @@ export function App(): ReactElement {
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
                     <button className="primary" type="submit">Sit down</button>
                 </form>
-                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap Talk or hold to talk.</p>
+                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
             </main>
         );
     }
@@ -1129,7 +1133,7 @@ export function App(): ReactElement {
     const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
-    const status: string = problem !== "" ? problem : view?.status === line.big ? "" : view?.status ?? "";
+    const status: string = problem !== "" ? problem : view?.status === line.big || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
@@ -1142,9 +1146,18 @@ export function App(): ReactElement {
                 <span className="who">{view?.playerName ?? ""}</span>
                 <button className="corner" aria-label="Your menu" aria-expanded={menu !== "closed"} onClick={() => { setMenu("open"); }}>···</button>
             </header>
-            {turn !== null ? <p className="turn-line">{turn.line}</p> : null}
+            {turn !== null && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
-            {hasPrivate === true ? <section className="private" data-scrolls>{privateControls}</section> : null}
+            {pad?.confirmEnd === true ? (
+                <section className="private">
+                    <section className="paper choices">
+                        <p className="prompt">End the game for everyone?</p>
+                        <button onClick={() => { send({ type: "nav", action: { kind: "choose", index: 1 } }); }}>End for everyone</button>
+                        <button onClick={() => { send({ type: "nav", action: { kind: "choose", index: 0 } }); }}>Keep playing</button>
+                    </section>
+                </section>
+            ) : null}
+            {hasPrivate === true && pad?.pausedBy === "" ? <section className="private" data-scrolls>{privateControls}</section> : null}
             <div className="surface" ref={surfaceRef}>
                 <div className="bands" aria-hidden="true"><i /><i /><i /></div>
                 <div className="thumb" aria-hidden="true" />
@@ -1153,7 +1166,7 @@ export function App(): ReactElement {
                         ? micSilent === "stopped"
                             ? <><strong>Can't hear your mic</strong><small>{tapping === true ? "Stop and try again" : "Let go and try again"}</small></>
                             : micSilent === "quiet" && view?.hearing === ""
-                                ? <><strong>Listening</strong><small>Nothing yet. Speak up.</small></>
+                                ? <><strong>Listening</strong><small>Nothing yet. Try a bit louder.</small></>
                             : view?.hearing !== undefined && view.hearing !== ""
                                 ? <p className="hearing">{view.hearing.slice(-90)}</p>
                                 : <><strong>Listening</strong>{tapping === true ? <small>Tap Stop when you're done</small> : null}</>
@@ -1169,7 +1182,7 @@ export function App(): ReactElement {
                     {tapping === true ? <button onClick={() => { stopTalking("stop"); }}>Stop</button> : null}
                 </div>
             ) : null}
-            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Talk"}</button> : null}
+            {tapping === false && state.holding === false && view?.tapToTalk === true && settings.talkButton === true && canTalk === true ? <button className="tap-talk" disabled={view.talkWaiting === true} onClick={startTapping}>{view.talkWaiting === true ? "Wait" : "Tap to talk"}</button> : null}
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>

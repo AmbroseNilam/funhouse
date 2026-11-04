@@ -93,7 +93,7 @@ export function PhoneCard(): ReactElement {
         <div className="phone">
             <div className="phone-top"><span /><strong>{NAMES.owner}</strong><span>···</span></div>
             <div className="peek"><em>Press and hold to peek</em></div>
-            <div className="touch-surface"><span>Press and hold to talk</span></div>
+            <div className="touch-surface"><span>Tap to talk</span></div>
         </div>
     );
 }

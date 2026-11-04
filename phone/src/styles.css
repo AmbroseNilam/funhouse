@@ -96,7 +96,7 @@
     .tap-talk:disabled { opacity: 0.45; }
     .tap-talk { position: absolute; font-weight: 600; box-shadow: 4px 4px 0 #000; }
     .tap-talk:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
-    .tap-talk { left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); width: 112px; height: 112px; margin-left: -56px; border-radius: 50%; background: var(--paper); color: var(--paper-ink); font-size: 26px; }
+    .tap-talk { left: 50%; translate: -50% 0; bottom: calc(52px + env(safe-area-inset-bottom)); min-height: 48px; padding: 0 22px; border-radius: 24px; background: var(--paper); color: var(--paper-ink); font-size: 18px; white-space: nowrap; }
     .thumb { position: absolute; left: var(--thumb-x); top: var(--thumb-y); width: 72px; height: 72px; margin: -36px 0 0 -36px; border-radius: 50%; background: color-mix(in srgb, var(--paper) 22%, transparent); opacity: 0; transform: scale(0.7); transition: opacity 80ms ease-out, transform 80ms ease-out; pointer-events: none; }
     .touched .thumb { opacity: 1; transform: scale(1); }
     .talking .thumb { opacity: 0; }

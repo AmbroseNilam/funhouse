@@ -44,7 +44,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
   30pt, then one per 70pt, and reversing steps back. No wrap. Tap: release under 300ms and under
   10pt. Hold: 300ms still, then movement is ignored while talking.
 - **Tap on the pad never locks the mic.** Tap on the pad always means select. A separate Talk button is
-  the default way to talk: it starts recording and Stop ends it, and holding still works. It shows a live
+  the default way to talk, a small chip labelled "Tap to talk": it starts recording and Stop ends it, and holding still works. It shows a live
   scrolling waveform, live words and a small Stop, and stops itself on silence, at a time limit, or when
   the page is hidden. It waits while the host speaks. A phone can choose Tap or Hold in its settings, kept
   in that browser, and `?tap=0` or `?hold=1` opens a room with holding only.
@@ -58,7 +58,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 - **Vibration is a bonus only.** iPhones can't be relied on. Feedback comes from the TV.
 - **Slow choices may look down.** Secret roles and votes appear on the phone as paper cards, with
   the touch surface below them. Instructions always stay on the TV.
-- **Teach during join, one gesture per moment, answered by the TV:** slide, then tap, then Talk.
+- **Teach during join, one gesture per moment, answered by the TV:** slide, then tap, then talk.
   Hints never look tappable, and each disappears once it's been done.
 
 ## The TV

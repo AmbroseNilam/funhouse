@@ -20,7 +20,7 @@ const MISSING_ROOM: string | null = new URLSearchParams(location.search).get("mi
 const FULL_ROOM: string | null = new URLSearchParams(location.search).get("full");
 
 /** What the mic does; the same line wherever it comes up. */
-const MIC_LINE: string = "Your phone only sends sound while you talk: tap Talk to start, and it stops when you tap Stop or go quiet.";
+const MIC_LINE: string = "Your phone only sends sound while you talk: tap to talk, and it stops when you tap Stop or go quiet.";
 
 /** Where to watch a game and read the code. Empty until they exist; nothing shows until then. */
 const PROOF: { video: string; code: string } = { video: "", code: "" };
