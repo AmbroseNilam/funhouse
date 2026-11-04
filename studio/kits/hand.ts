@@ -747,7 +747,7 @@ export function createHandGame(givenBox: Box, givenDecisions: HandDecisions, ran
                 return { kind: "everyone", playerIds: ids, doneIds: state.plays.map((play: Play) => play.playerId).filter((id: string) => ids.includes(id) === true), label: "Play a card on your phone" };
             }
             if (state.phase === "judging") {
-                return { kind: "one", playerId: state.judgeId, label: state.reading === true ? "Listen up, then" : "Choosing:" };
+                return { kind: "one", playerId: state.judgeId, label: "Judging:" };
             }
             return null;
         },
@@ -908,7 +908,7 @@ export function createHandGame(givenBox: Box, givenDecisions: HandDecisions, ran
             }
             if (state.phase === "judging") {
                 if (playerId === state.judgeId) {
-                    return [{ type: "choice", prompt: state.reading === true ? `Listen to the host. ${prompt}` : `Pick the best. ${prompt}`, options: pickOptions(state), multiple: false }];
+                    return [{ type: "choice", prompt: state.reading === true ? `${prompt} Listen to the host read the plays.` : `${prompt} Pick the best.`, options: pickOptions(state), multiple: false }];
                 }
                 const mine: Play | undefined = state.plays.find((play: Play) => play.playerId === playerId);
                 const line: string = mine === undefined ? "Watching the judging." : `Your play is in. ${nameOf(state, state.judgeId)} is choosing.`;
