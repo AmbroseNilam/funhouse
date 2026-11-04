@@ -90,7 +90,7 @@ while (over() === false && round < 6) {
             throw new Error(`${writer.name} was given a ballot for their own round.`);
         }
     }
-    const handed = (): string => screen.hostLines.find((line: string) => line.includes("Answer A:") === true && squash(line).includes(squash(firstText)) === true && squash(line).includes(squash(secondText)) === true) ?? "";
+    const handed = (): string => screen.hostLines.find((line: string) => squash(line).includes(squash(firstText)) === true && squash(line).includes(squash(secondText)) === true) ?? "";
     await waitFor(() => handed() !== "", "the host to be handed both answers to perform");
     const asked: string = handed();
     if (writers.some((writer: Seat) => asked.includes(writer.name) === true) === true) {

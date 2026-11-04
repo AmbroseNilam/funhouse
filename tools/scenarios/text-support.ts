@@ -178,7 +178,8 @@ export async function typeInto(seat: Seat, text: string): Promise<void> {
  */
 export async function typeRefused(seat: Seat, text: string, label: string, screen: FakeScreen, seats: Seat[]): Promise<void> {
     await typeInto(seat, text);
-    await waitFor(() => boxIn(seat.phone.view)?.note !== undefined, `the refusal of ${label}`);
+    await pause(400);
+    await waitFor(() => boxIn(seat.phone.view)?.note !== undefined || seat.phone.view?.controls.some((control) => control.type === "notice" && control.text === "Sent.") === true, `the result for ${label}`);
     await pause(400);
     if (boxIn(seat.phone.view) === null) {
         throw new Error(`${label} was accepted.`);
