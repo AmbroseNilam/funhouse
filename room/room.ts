@@ -513,6 +513,8 @@ export class Room implements HostStage, AgentHost {
     private readonly writingGuest: Set<string> = new Set();
     /** Each person's unused agent link, by their seat. */
     private readonly agentLinks: Map<string, string> = new Map();
+    /** The name of the agent each person brought last, by their seat, so their phone can say it sat down. */
+    private readonly agentJoined: Map<string, string> = new Map();
     /** The site's address, for the links this room gives out. */
     private readonly publicUrl: string;
 
@@ -1103,12 +1105,18 @@ export class Room implements HostStage, AgentHost {
      * @param name which guest to seat, by name; the next free one if not said.
      * @param text a person's description of a guest.
      */
-    private onGuestRequest(player: Player, action: "add" | "remove" | "inviteAgent" | "create", playerId: string | undefined, name?: string, text?: string): void {
+    private onGuestRequest(player: Player, action: "add" | "remove" | "inviteAgent" | "cancelAgent" | "create", playerId: string | undefined, name?: string, text?: string): void {
         if (player.guest !== null || player.agent !== null) {
             return;
         }
         if (action === "inviteAgent") {
             this.inviteAgent(player);
+            return;
+        }
+        if (action === "cancelAgent") {
+            endUnusedAgentLink(this, player.playerId);
+            this.agentLinks.delete(player.playerId);
+            this.refreshPhones();
             return;
         }
         if (action === "create") {
@@ -1295,13 +1303,14 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
-     * Makes a person a new link for their agent. Each new link ends the one before.
+     * Gives a person the link for their agent. Asking again gives the same one.
      * @param player who's asking.
      */
     private inviteAgent(player: Player): void {
         if (this.mayInviteAgent() === false) {
             return;
         }
+        this.agentJoined.delete(player.playerId);
         const key: string | null = issueAgentLink(this, player.playerId);
         if (key === null) {
             this.setHint(player, "No more agents right now. Try again later.");
@@ -1341,6 +1350,7 @@ export class Room implements HostStage, AgentHost {
         const player: Player = { ...this.newSeat(playerId, name, socket as unknown as WebSocket), agent: seat };
         this.players.set(playerId, player);
         this.agentLinks.delete(ownerId);
+        this.agentJoined.set(ownerId, name);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined as an agent`);
         this.shell.seatsChanged();
@@ -1547,9 +1557,9 @@ export class Room implements HostStage, AgentHost {
         const machines: Player[] = [...this.players.values()].filter((seat: Player) => seat.guest !== null || seat.agent !== null);
         const seated: GuestTable["seated"] = machines.map((guest: Player) => ({ playerId: guest.playerId, name: guest.name, style: guest.guestStyle, agent: guest.agent !== null }));
         const person: boolean = player.guest === null && player.agent === null;
-        const agents: GuestTable["agents"] = AGENTS_ON === false || person === false ? null : { canInvite: this.mayInviteAgent(), link: this.agentLinks.get(player.playerId) ?? "", games: this.agentGames() };
+        const agents: GuestTable["agents"] = AGENTS_ON === false || person === false ? null : { canInvite: this.mayInviteAgent(), link: this.agentLinks.get(player.playerId) ?? "", games: this.agentGames(), joined: this.agentJoined.get(player.playerId) ?? "" };
         const picks: GuestTable["picks"] = person === true && this.mayAddGuest() === true ? this.freePresets().map(guestPick) : [];
-        return { seated, canAdd: person === true && this.mayAddGuest() === true, canRemove: person === true && this.game === null && seated.length > 0, agents, picks, prompt: this.guestPrompts.get(player.playerId) ?? null, writing: this.writingGuest.has(player.playerId) };
+        return { seated, people: this.people().map((person: Player) => person.name), canAdd: person === true && this.mayAddGuest() === true, canRemove: person === true && this.game === null && seated.length > 0, agents, picks, prompt: this.guestPrompts.get(player.playerId) ?? null, writing: this.writingGuest.has(player.playerId) };
     }
 
     /**
@@ -2262,6 +2272,12 @@ export class Room implements HostStage, AgentHost {
         }
         this.agentLinks.delete(player.playerId);
         this.guestPrompts.delete(player.playerId);
+        this.agentJoined.delete(player.playerId);
+        for (const [ownerId, name] of this.agentJoined) {
+            if (name === player.name) {
+                this.agentJoined.delete(ownerId);
+            }
+        }
         endUnusedAgentLink(this, player.playerId);
         const lastGuest: Player | undefined = this.people().length === 0 ? [...this.players.values()][0] : undefined;
         if (lastGuest !== undefined) {

@@ -22,8 +22,8 @@ export const MAX_AGENTS_PER_ROOM: number = 2;
 /** Most agents and open invitations on the whole server. */
 const MAX_LINKS_ON_SERVER: number = 200;
 
-/** How long a link waits for its agent to sit down. */
-const INVITE_MILLISECONDS: number = 600000;
+/** Most links waiting for an agent in one room. An unused link lives as long as its person, so this keeps one room from taking them all. */
+const MAX_OPEN_LINKS_PER_ROOM: number = 4;
 
 /** How long an agent may go without looking before the table is told it's away. */
 export const AGENT_AWAY_MILLISECONDS: number = 60000;
@@ -147,8 +147,6 @@ export interface AgentHost {
 interface AgentLink {
     room: AgentHost;
     ownerId: string;
-    /** When an unused link stops working. */
-    expiresAt: number;
     seat: AgentSeat | null;
     rate: RateWindow;
     /** A line about the last move, kept until the page after it is shown. */
@@ -162,22 +160,27 @@ const LINKS: Map<string, AgentLink> = new Map();
 const ADDRESS_RATES: Map<string, RateWindow> = new Map();
 
 /**
- * Makes a link for someone at a table, ending any unused one they already hold.
+ * Gives someone at a table their link: the one they already hold if it's unused, so asking twice never
+ * makes two. It lasts until an agent takes it, they cancel it, they leave, or the room closes.
  * @param room their room.
  * @param ownerId who's asking.
- * @returns the link's key, or null when the server has too many.
+ * @returns the link's key, or null when too many are open.
  */
 export function issueAgentLink(room: AgentHost, ownerId: string): string | null {
+    let openInRoom: number = 0;
     for (const [key, link] of LINKS) {
-        if (link.room === room && link.ownerId === ownerId && link.seat === null) {
-            LINKS.delete(key);
+        if (link.room === room && link.seat === null) {
+            openInRoom += 1;
+            if (link.ownerId === ownerId) {
+                return key;
+            }
         }
     }
-    if (LINKS.size >= MAX_LINKS_ON_SERVER) {
+    if (LINKS.size >= MAX_LINKS_ON_SERVER || openInRoom >= MAX_OPEN_LINKS_PER_ROOM) {
         return null;
     }
     const key: string = randomBytes(16).toString("base64url");
-    LINKS.set(key, { room, ownerId, expiresAt: Date.now() + INVITE_MILLISECONDS, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "" });
+    LINKS.set(key, { room, ownerId, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "" });
     return key;
 }
 
@@ -210,11 +213,7 @@ export function endUnusedAgentLink(room: AgentHost, ownerId: string): void {
 setInterval(() => {
     ADDRESS_RATES.clear();
     const rooms: Set<AgentHost> = new Set();
-    for (const [key, link] of LINKS) {
-        if (link.seat === null && Date.now() > link.expiresAt) {
-            LINKS.delete(key);
-            continue;
-        }
+    for (const link of LINKS.values()) {
         rooms.add(link.room);
     }
     rooms.forEach((room: AgentHost) => { room.agentSweep(); });
@@ -622,7 +621,7 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
         return true;
     }
     const link: AgentLink | undefined = LINKS.get(key ?? "");
-    if (link === undefined || (link.seat === null && Date.now() > link.expiresAt)) {
+    if (link === undefined) {
         limits.codeMissed(address);
         send(response, 404, "text/plain", LINK_ENDED);
         return true;
@@ -646,7 +645,7 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     }
     const body: Record<string, unknown> = posted;
     // The link may have ended while the body arrived, and nothing here may outlive that.
-    if (LINKS.get(key ?? "") !== link || (link.seat === null && Date.now() > link.expiresAt)) {
+    if (LINKS.get(key ?? "") !== link) {
         send(response, 404, "text/plain", LINK_ENDED);
         return true;
     }
