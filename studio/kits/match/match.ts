@@ -397,7 +397,9 @@ export function createMatchGame(givenBox: Box, givenDecisions: MatchDecisions, r
     const askSpark = (state: MatchState, doubts: Doubt[]): Step<MatchState> => {
         const texts = textsOf(state);
         const lines: string[] = doubts.map(([first, second]: Doubt, place: number) => {
-            const [one, other] = doubtedTexts(texts(state.stacks[first] ?? []), texts(state.stacks[second] ?? [])) ?? ["", ""];
+            const firstTexts: string[] = texts(state.stacks[first] ?? []);
+            const secondTexts: string[] = texts(state.stacks[second] ?? []);
+            const [one, other] = doubtedTexts(firstTexts, secondTexts) ?? [standIn(firstTexts), standIn(secondTexts)];
             return `${state.round}.${place + 1} ${quoted(one)} and ${quoted(other)}`;
         });
         const request: string = [
