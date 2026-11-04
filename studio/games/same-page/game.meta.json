@@ -4,5 +4,6 @@
     "level": "visible",
     "guests": "model",
     "agents": true,
+    "agentDecisions": { "writeSeconds": 75 },
     "order": 220
 }

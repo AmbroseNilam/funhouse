@@ -45,6 +45,8 @@ export interface InstalledGame {
      * @param pick the id of what was chosen before it began, if anything.
      */
     create(stage: GameStage, pick?: string): RunningGame;
+    /** The same game with a slower clock, for a table with someone's agent, if it has one. */
+    createForAgents?: (stage: GameStage, pick?: string) => RunningGame;
 }
 
 /** The installed games, in shelf order. */

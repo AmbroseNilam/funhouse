@@ -1259,7 +1259,8 @@ export class Room implements HostStage, AgentHost {
             roomOpen: true,
             gameName: this.game?.manifest.name ?? null,
             watching: seat !== null && this.game !== null && this.gamePlayerIds.has(seat.playerId) === false,
-            tv: sceneLines(this.currentScene()),
+            // Between games the TV shows how to join, which is no business of a seat already invited.
+            tv: sceneLines(this.currentScene()).filter((line: string) => line.includes(this.joinUrl) === false && line.startsWith("Room ") === false),
             games: this.agentGames(),
             name: player?.name ?? this.agentNameFor(ownerId),
             mayTalk: player !== undefined && this.agentMayTalk(player),
@@ -1902,7 +1903,8 @@ export class Room implements HostStage, AgentHost {
         if (chosen !== undefined) {
             this.lastPicks.set(installed.manifest.id, chosen);
         }
-        this.game = installed.create(this.gameStage(), chosen);
+        // An agent that works through a browser needs longer than a thumb. The TV and host are told the same clock.
+        this.game = this.agents().length > 0 && installed.createForAgents !== undefined ? installed.createForAgents(this.gameStage(), chosen) : installed.create(this.gameStage(), chosen);
         this.lastActivityAt = Date.now();
         this.lastLullAt = 0;
         this.lullsThisGame = 0;

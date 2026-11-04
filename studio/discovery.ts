@@ -25,6 +25,8 @@ export interface GameMeta {
     guests?: GuestPlay;
     /** True when someone's own agent may sit in; left out, agents are told they can't. */
     agents?: boolean;
+    /** Decisions that differ when an agent is at the table, such as a longer clock for one working through a browser. */
+    agentDecisions?: Record<string, number>;
     /** Why the game is not yet visible; required for testing and held. */
     reason?: string;
     /** Where it stands on the shelf, lowest first; games without one come last, by id. */
@@ -115,6 +117,9 @@ function gameMetaOf(raw: Record<string, unknown>, folder: string): GameMeta {
     }
     if (raw.agents === true) {
         meta.agents = true;
+    }
+    if (typeof raw.agentDecisions === "object" && raw.agentDecisions !== null) {
+        meta.agentDecisions = raw.agentDecisions as Record<string, number>;
     }
     if (typeof raw.reason === "string") {
         meta.reason = raw.reason;

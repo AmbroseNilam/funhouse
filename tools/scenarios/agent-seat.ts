@@ -88,8 +88,8 @@ const card = screen.shell?.seats.find((seat) => seat.agent === true);
 check(card?.guest === true && card.driving === false, "The agent is marked as a machine and never holds the controller.");
 check(person.view?.guests.seated.some((seat) => seat.agent === true) === true, "The phone's list shows the agent.");
 
-const doors: number = screen.shell?.games.findIndex((game) => game.id === "twentyDoors") ?? -1;
-check((screen.shell?.games[doors]?.blocked ?? "").includes("Agents can't join") === true, "A game without agents says so.");
+const barred: number = screen.shell?.games.findIndex((game) => game.id === "werewolf") ?? -1;
+check((screen.shell?.games[barred]?.blocked ?? "").includes("Agents can't join") === true, "A game without agents says so.");
 
 person.guest("add");
 await waitFor(() => screen.shell?.seats.length === 3, "a built-in guest");

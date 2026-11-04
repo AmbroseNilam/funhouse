@@ -148,6 +148,8 @@ interface AgentLink {
     expiresAt: number;
     seat: AgentSeat | null;
     rate: RateWindow;
+    /** A line about the last move, kept until the page after it is shown. */
+    note: string;
 }
 
 /** The links in use on this server. A link is random and can't be guessed from a room code. */
@@ -172,7 +174,7 @@ export function issueAgentLink(room: AgentHost, ownerId: string): string | null 
         return null;
     }
     const key: string = randomBytes(16).toString("base64url");
-    LINKS.set(key, { room, ownerId, expiresAt: Date.now() + INVITE_MILLISECONDS, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000) });
+    LINKS.set(key, { room, ownerId, expiresAt: Date.now() + INVITE_MILLISECONDS, seat: null, rate: new RateWindow(REQUESTS_PER_SECOND, 1000), note: "" });
     return key;
 }
 
@@ -561,7 +563,16 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
     const raw: unknown = body.text ?? body.value ?? url.searchParams.get("text") ?? undefined;
     const value: string | number | undefined = typeof raw === "string" || typeof raw === "number" ? raw : undefined;
     const played: string = action === undefined || action === "" || prefetch === true ? "" : playMove(link, action, rest, value);
-    const note: string = played === "" ? link.seat?.note ?? "" : played;
+    const moved: boolean = action !== undefined && action !== "" && prefetch === false;
+    // A page that came from a move goes on to the plain address, so reloading it can't play the move again.
+    if (moved === true && format !== "json" && action !== "leave") {
+        link.note = played;
+        response.setHeader("cache-control", "no-store");
+        response.writeHead(303, { location: `${base}?n=${randomBytes(4).toString("hex")}${format === "text" ? "&format=text" : ""}`, "referrer-policy": "no-referrer" }).end();
+        return true;
+    }
+    const note: string = [played, link.note, link.seat?.note ?? ""].find((line: string) => line !== "") ?? "";
+    link.note = "";
     if (link.seat !== null) {
         link.seat.note = "";
     }
