@@ -15,6 +15,12 @@ const END_GAME: string = "End the game";
 /** The question before a game ends for everyone. The safe answer comes first. */
 const CONFIRM_END_MENU: string[] = ["Keep playing", "End for everyone"];
 
+/** How long the question about ending waits for an answer before it goes away. */
+const END_QUESTION_MILLISECONDS: number = 8000;
+
+/** How long after the question is answered a further tap is taken as the same tap, not a choice on the next screen. */
+const ANSWER_SETTLE_MILLISECONDS: number = 600;
+
 /** How long a start pick waits for a choice before taking the highlighted one. */
 const PICK_MILLISECONDS: number = 15000;
 
@@ -68,6 +74,8 @@ export class Shell {
     private freeTimer: NodeJS.Timeout | null = null;
     private pickTimer: NodeJS.Timeout | null = null;
     private pausedBy: string = "";
+    private endQuestionTimer: NodeJS.Timeout | null = null;
+    private endAnsweredAt: number = 0;
     /** What was chosen for the game about to begin. */
     private chosen: string | undefined = undefined;
     /** Games whose how-to card this room has seen, so a replay gets straight on with it. */
@@ -87,7 +95,11 @@ export class Shell {
      * @param action what.
      */
     public act(playerId: string, action: NavAction): void {
-        if (this.claimDrive(playerId) === false) {
+        const takingTheQuestion: boolean = this.screen === "confirmEnd" && this.driverId !== playerId;
+        if (this.claimDrive(playerId) === false || takingTheQuestion === true) {
+            return;
+        }
+        if ((action.kind === "select" || action.kind === "choose") && Date.now() - this.endAnsweredAt < ANSWER_SETTLE_MILLISECONDS) {
             return;
         }
         if (action.kind === "back") {
@@ -120,6 +132,7 @@ export class Shell {
 
     /** The game ended; back to its place on the shelf. */
     public gameEnded(): void {
+        this.stopEndQuestionTimer();
         if (this.isPausedScreen() === true) {
             this.stage.paused(false);
         }
@@ -133,6 +146,7 @@ export class Shell {
 
     /** The running game was decided, so its result takes over the screen. */
     public gameDecided(): void {
+        this.stopEndQuestionTimer();
         if (this.isPausedScreen() === true) {
             this.stage.paused(false);
         }
@@ -149,8 +163,10 @@ export class Shell {
             return;
         }
         const hadDriver: boolean = this.driverId !== null;
-        const next: Omit<Seat, "driving"> | undefined = seats.find((seat) => seat.connected === true) ?? seats[0];
+        const here: Omit<Seat, "driving">[] = seats.filter((seat) => seat.connected === true);
+        const next: Omit<Seat, "driving"> | undefined = here.find((seat) => seat.watching === false && seat.out === false) ?? here.find((seat) => seat.watching === false) ?? here[0] ?? seats[0];
         this.driverId = next?.playerId ?? null;
+        this.dropEndQuestion();
         if (hadDriver === true && next !== undefined) {
             this.stage.driverChanged(next.name);
         }
@@ -281,6 +297,9 @@ export class Shell {
         }
         const changedHands: boolean = this.driverId !== playerId;
         this.driverId = playerId;
+        if (changedHands === true) {
+            this.dropEndQuestion();
+        }
         this.lastDriveAt = Date.now();
         if (this.freeTimer !== null) {
             clearTimeout(this.freeTimer);
@@ -523,6 +542,7 @@ export class Shell {
     /** Stops anything still waiting, as the room closes. */
     public close(): void {
         this.stopPickTimer();
+        this.stopEndQuestionTimer();
     }
 
     /**
@@ -557,6 +577,11 @@ export class Shell {
         if (row === END_GAME) {
             this.screen = "confirmEnd";
             this.focus = 0;
+            this.endQuestionTimer = setTimeout(() => {
+                this.dropEndQuestion();
+                this.stage.changed();
+            }, END_QUESTION_MILLISECONDS);
+            this.endQuestionTimer.unref();
             this.stage.changed();
             return;
         }
@@ -576,11 +601,30 @@ export class Shell {
      * @param playerId who answered.
      */
     private selectOnConfirmEnd(playerId: string): void {
+        this.stopEndQuestionTimer();
+        this.endAnsweredAt = Date.now();
         if (this.focus === 1) {
             this.stage.endGame();
             return;
         }
         this.back(playerId);
+    }
+
+    /** Takes the question about ending away, leaving the game paused, since only the person who asked can answer it. */
+    private dropEndQuestion(): void {
+        this.stopEndQuestionTimer();
+        if (this.screen === "confirmEnd") {
+            this.screen = "pause";
+            this.focus = 0;
+        }
+    }
+
+    /** Stops the wait for an answer about ending. */
+    private stopEndQuestionTimer(): void {
+        if (this.endQuestionTimer !== null) {
+            clearTimeout(this.endQuestionTimer);
+            this.endQuestionTimer = null;
+        }
     }
 
     /** Play again, or back to the shelf, once a game is decided. */
@@ -618,6 +662,7 @@ export class Shell {
      */
     private back(playerId: string): void {
         this.stopPickTimer();
+        this.stopEndQuestionTimer();
         const parent: ShellScreen | null = this.parentScreen();
         if (parent === null) {
             return;

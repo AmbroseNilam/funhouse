@@ -12,6 +12,10 @@ interface Told {
     pausedNow: boolean;
     pickLines: string[];
     over: boolean;
+    /** Who's at the table, when a test changes it. */
+    seats?: Omit<Seat, "driving">[];
+    /** Who the room was told has the controller now. */
+    driverNames?: string[];
 }
 
 const GAME: ShelfGame = {
@@ -28,23 +32,32 @@ const GAME: ShelfGame = {
 };
 
 /**
+ * Makes one seat, connected and playing.
+ * @param playerId who.
+ * @param name their name.
+ * @returns the seat.
+ */
+function seat(playerId: string, name: string): Omit<Seat, "driving"> {
+    return { playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false };
+}
+
+/**
  * Makes a console with three people, and a game that starts when told to.
  * @param told filled with what it asks of the room.
  * @returns the console.
  */
 function shellWith(told: Told): Shell {
-    const seat = (playerId: string, name: string): Omit<Seat, "driving"> => ({ playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false });
     let shell: Shell | null = null;
     const stage: ShellStage = {
         games: () => [GAME],
-        seats: () => [seat("a", "Ana"), seat("b", "Ben"), seat("c", "Cy")],
+        seats: () => told.seats ?? [seat("a", "Ana"), seat("b", "Ben"), seat("c", "Cy")],
         startGame: (gameId: string, pick?: string) => { told.started.push({ gameId, pick }); shell?.gameStarted(gameId); },
         pickOpened: (line: string) => { told.pickLines.push(line); },
         endGame: () => { told.ended += 1; shell?.gameEnded(); },
         gameOver: () => told.over,
         focusChanged: () => undefined,
         refused: () => undefined,
-        driverChanged: () => undefined,
+        driverChanged: (name: string) => { told.driverNames?.push(name); },
         steppedOut: () => false,
         paused: (paused: boolean) => { told.pausedNow = paused; },
         gameAction: () => undefined,
@@ -191,9 +204,119 @@ describe("the console", () => {
         shell.act("a", { kind: "choose", index: 0 });
         assert.equal(shell.view().screen, "pause");
         assert.equal(told.ended, 0);
+        mock.timers.tick(1000);
         shell.act("a", { kind: "choose", index: row });
         shell.act("a", { kind: "choose", index: 1 });
         assert.equal(told.ended, 1);
+    });
+
+    /**
+     * Takes a running game to the question about ending it, with Ana being asked.
+     * @param shell the console.
+     */
+    function askToEnd(shell: Shell): void {
+        startGame(shell);
+        shell.act("a", { kind: "back" });
+        shell.act("a", { kind: "choose", index: shell.view().menu.indexOf("End the game") });
+        assert.equal(shell.pad("a", "").confirmEnd, true);
+    }
+
+    it("stops asking about ending after about 8 s, with the game still paused", () => {
+        const shell = shellWith(told);
+        askToEnd(shell);
+        mock.timers.tick(7500);
+        assert.equal(shell.view().screen, "confirmEnd");
+        mock.timers.tick(1000);
+        assert.equal(shell.view().screen, "pause");
+        assert.equal(shell.pad("a", "").confirmEnd, false);
+        assert.equal(shell.view().pausedBy, "Ana");
+        assert.equal(told.ended, 0);
+        assert.equal(told.pausedNow, true);
+    });
+
+    it("gives the question its full time each time, and a late timer doesn't touch the shelf", () => {
+        const shell = shellWith(told);
+        askToEnd(shell);
+        mock.timers.tick(6000);
+        shell.act("a", { kind: "choose", index: 0 });
+        mock.timers.tick(1000);
+        shell.act("a", { kind: "choose", index: shell.view().menu.indexOf("End the game") });
+        mock.timers.tick(6000);
+        assert.equal(shell.view().screen, "confirmEnd");
+        shell.act("a", { kind: "choose", index: 1 });
+        assert.equal(told.ended, 1);
+        mock.timers.tick(20000);
+        assert.equal(shell.view().screen, "home");
+    });
+
+    it("doesn't pass the question on when the holder leaves mid-question", () => {
+        const shell = shellWith(told);
+        told.driverNames = [];
+        askToEnd(shell);
+        told.seats = [seat("b", "Ben"), seat("c", "Cy")];
+        shell.seatsChanged();
+        assert.equal(shell.isDriving("b"), true);
+        assert.deepEqual(told.driverNames, ["Ben"]);
+        assert.equal(shell.view().screen, "pause");
+        assert.equal(shell.pad("b", "").confirmEnd, false);
+        assert.equal(shell.pad("b", "").backLabel, "Resume");
+        assert.equal(shell.view().pausedBy, "Ana");
+    });
+
+    it("drops the question when someone takes a dropped holder's controller, and doesn't act on that touch", () => {
+        const shell = shellWith(told);
+        askToEnd(shell);
+        told.seats = [{ ...seat("a", "Ana"), connected: false }, seat("b", "Ben"), seat("c", "Cy")];
+        shell.act("b", { kind: "choose", index: 1 });
+        assert.equal(told.ended, 0);
+        assert.equal(shell.isDriving("b"), true);
+        assert.equal(shell.view().screen, "pause");
+        assert.equal(shell.pad("b", "").confirmEnd, false);
+    });
+
+    it("hands the controller to someone playing, not someone watching or out", () => {
+        const shell = shellWith(told);
+        told.driverNames = [];
+        startGame(shell);
+        told.seats = [{ ...seat("d", "Dee"), watching: true }, { ...seat("e", "Eli"), out: true }, seat("c", "Cy")];
+        shell.seatsChanged();
+        assert.equal(shell.isDriving("c"), true);
+        assert.deepEqual(told.driverNames, ["Cy"]);
+    });
+
+    it("lets only one of two phones pressing End at once be asked, once the holder has dropped", () => {
+        const shell = shellWith(told);
+        startGame(shell);
+        shell.act("a", { kind: "back" });
+        const row: number = shell.view().menu.indexOf("End the game");
+        told.seats = [{ ...seat("a", "Ana"), connected: false }, seat("b", "Ben"), seat("c", "Cy")];
+        shell.act("b", { kind: "choose", index: row });
+        shell.act("c", { kind: "choose", index: row });
+        assert.equal(shell.pad("b", "").confirmEnd, true);
+        assert.equal(shell.pad("c", "").confirmEnd, false);
+        shell.act("c", { kind: "choose", index: 1 });
+        assert.equal(told.ended, 0);
+    });
+
+    it("doesn't let a double tap on the end button carry on to the shelf", () => {
+        const shell = shellWith(told);
+        askToEnd(shell);
+        shell.act("a", { kind: "choose", index: 1 });
+        shell.act("a", { kind: "choose", index: 1 });
+        assert.equal(told.ended, 1);
+        assert.equal(shell.view().screen, "home");
+        mock.timers.tick(1000);
+        shell.act("a", { kind: "select" });
+        assert.equal(shell.view().screen, "game");
+    });
+
+    it("doesn't let a double tap on Keep playing also resume", () => {
+        const shell = shellWith(told);
+        askToEnd(shell);
+        shell.act("a", { kind: "choose", index: 0 });
+        shell.act("a", { kind: "select" });
+        assert.equal(shell.view().screen, "pause");
+        assert.equal(told.pausedNow, true);
     });
 
     it("leaves nobody stranded after a game: the shelf is anyone's at once", () => {
@@ -210,7 +333,7 @@ describe("the console", () => {
 
     it("lets someone in the game take over a pause from a holder who's only watching", () => {
         const seats = [
-            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: true },
+            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false },
             { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false },
         ];
         const shell: Shell = new Shell({
@@ -231,6 +354,7 @@ describe("the console", () => {
         });
         shell.seatsChanged();
         shell.gameStarted("doors");
+        seats[0] = { ...seats[0], watching: true } as typeof seats[number];
         assert.equal(shell.driverName(), "Ana");
         assert.equal(shell.pad("b", "").canDrive, true);
         shell.act("b", { kind: "back" });
