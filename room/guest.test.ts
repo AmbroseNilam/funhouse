@@ -11,7 +11,7 @@ import type { ScopedFact } from "../shared/visibility.ts";
 import { createKitGame } from "../studio/blueprint.ts";
 import { CATALOG, KITS } from "../studio/registry.ts";
 import { nicknameCategory } from "./content-filter.ts";
-import { askIn, fallbackMove, GuestDriver, GUEST_PERSONAS, guestPrompt, moveFrom, snapped, type Ask, type GuestModel, type GuestPersona, type GuestPlay, type GuestSeat, type Move } from "./guest.ts";
+import { askIn, fallbackMove, isStockWord, GuestDriver, GUEST_PERSONAS, guestPrompt, moveFrom, snapped, type Ask, type GuestModel, type GuestPersona, type GuestPlay, type GuestSeat, type Move } from "./guest.ts";
 
 /** A persona with no waiting, for quick tests. */
 const QUICK: GuestPersona = { ...(GUEST_PERSONAS[0] as GuestPersona), minimumDelayMilliseconds: 0, maximumDelayMilliseconds: 0 };
@@ -140,19 +140,42 @@ test("a guest that has left does nothing with a decision it was making", async (
     assert.deepEqual(played.pressed, []);
 });
 
-test("a refused typed answer gets a stock word, and then the guest goes quiet", async () => {
+test("a typed answer that keeps being refused gets the model twice, then stock words, then quiet, even if each try is a new control", async () => {
     const played: Played = { pressed: [], answered: [] };
-    const driver: GuestDriver = new GuestDriver(seatFor(played), () => Promise.resolve("meadow"));
+    let asked: number = 0;
+    const model: GuestModel = () => {
+        asked += 1;
+        return Promise.resolve("meadow");
+    };
+    const driver: GuestDriver = new GuestDriver(seatFor(played), model);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+        driver.see(viewOf([{ type: "textInput", id: `word:${attempt}`, prompt: "Your word", maxLength: 20 }]));
+        await settle();
+    }
+    assert.equal(asked, 2);
+    assert.deepEqual(played.answered.slice(0, 2), ["meadow", "meadow"]);
+    assert.equal(played.answered.length, 4);
+    assert.ok(isStockWord(String(played.answered[2])));
+    driver.see(viewOf([{ type: "waiting", text: "Look at the screen." }]));
+    driver.see(viewOf([{ type: "textInput", id: "next", prompt: "Your word", maxLength: 20 }]));
+    await settle();
+    assert.equal(asked, 3, "the next turn starts afresh");
+});
+
+test("decisions made during a pause don't use up a guest's tries at a typed answer", async () => {
+    const played: Played = { pressed: [], answered: [] };
+    let paused: boolean = true;
+    const driver: GuestDriver = new GuestDriver(seatFor(played, { paused: (): boolean => paused }), () => Promise.resolve("meadow"));
     const box: Control = { type: "textInput", id: "word", prompt: "Your word", maxLength: 20 };
+    for (let view = 0; view < 6; view += 1) {
+        driver.see(viewOf([box]));
+        await settle();
+    }
+    assert.deepEqual(played.answered, []);
+    paused = false;
     driver.see(viewOf([box]));
     await settle();
-    driver.see(viewOf([{ ...box, note: "That one won't work. Try another." }]));
-    await settle();
-    driver.see(viewOf([{ ...box, note: "Still no." }]));
-    await settle();
-    assert.equal(played.answered.length, 2);
-    assert.equal(played.answered[0], "meadow");
-    assert.notEqual(played.answered[1], "meadow");
+    assert.deepEqual(played.answered, ["meadow"]);
 });
 
 test("a seat that's only watching is asked nothing", () => {

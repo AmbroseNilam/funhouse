@@ -49,11 +49,23 @@ const NOTE_LIMIT: number = 14;
 /** Longest line a guest remembers, so one long notice can't swamp the prompt. */
 const NOTE_CHARACTER_LIMIT: number = 240;
 
-/** Tries at one typed answer before staying silent: the model, then a stock word. */
-const TEXT_TRY_LIMIT: number = 2;
+/** Tries at one typed question that may ask the model; a game can give each try a new control, so this counts the whole turn. */
+const TEXT_MODEL_TRIES: number = 2;
+
+/** Tries at one typed question before staying silent; the ones after the model's use a stock word. */
+const TEXT_TRY_LIMIT: number = 4;
 
 /** Plain words for when the model can't be asked or a typed answer was refused. */
 const STOCK_WORDS: readonly string[] = ["quiet", "bright", "round", "ordinary", "familiar", "useful", "strange", "warm", "heavy", "old"];
+
+/**
+ * Whether a typed line is one of the guests' own stock words, which need no classifier once the day's guest budget is gone.
+ * @param text the line.
+ * @returns true for a stock word.
+ */
+export function isStockWord(text: string): boolean {
+    return STOCK_WORDS.includes(text);
+}
 
 /** Slows or quickens how long guests wait before answering; scripted runs set it low. */
 const PACE: number = Number(process.env.GUEST_PACE ?? 1);
@@ -294,7 +306,8 @@ export class GuestDriver {
     private handled: string = "";
     /** Goes up whenever a decision in progress should give up. */
     private generation: number = 0;
-    private readonly textTries: Map<string, number> = new Map();
+    /** Typed answers given since the phone last stopped asking for one. */
+    private textTries: number = 0;
     private stopped: boolean = false;
     private timer: NodeJS.Timeout | null = null;
     private stopModel: AbortController | null = null;
@@ -324,6 +337,7 @@ export class GuestDriver {
         this.remember(view);
         const ask: Ask | null = askIn(view);
         const signature: string = ask === null ? "" : JSON.stringify(ask);
+        this.textTries = ask?.kind === "text" ? this.textTries : 0;
         if (signature === this.handled) {
             return;
         }
@@ -340,7 +354,7 @@ export class GuestDriver {
         this.handled = "";
         this.notes = [];
         this.shownLines = new Set();
-        this.textTries.clear();
+        this.textTries = 0;
     }
 
     /** Stops for good, when the guest leaves or the room closes. */
@@ -412,6 +426,7 @@ export class GuestDriver {
             this.seat.press(move.optionId, move.controlIndex);
         }
         if (move.kind === "answer") {
+            this.textTries += typeof move.value === "string" ? 1 : 0;
             this.seat.answer(move.controlId, move.value);
         }
     }
@@ -424,14 +439,11 @@ export class GuestDriver {
      * @returns the move.
      */
     private async moveFor(ask: Ask, generation: number): Promise<Move> {
-        const tries: number = ask.kind === "text" ? (this.textTries.get(ask.id) ?? 0) + 1 : 1;
-        if (ask.kind === "text") {
-            this.textTries.set(ask.id, tries);
-        }
+        const tries: number = ask.kind === "text" ? this.textTries + 1 : 1;
         if (tries > TEXT_TRY_LIMIT) {
             return { kind: "none" };
         }
-        if (this.seat.play() === "random" || tries > 1 || this.seat.mayAskModel() === false) {
+        if (this.seat.play() === "random" || tries > TEXT_MODEL_TRIES || this.seat.mayAskModel() === false) {
             return fallbackMove(ask, this.random);
         }
         const put: Ask = mixedUp(ask, this.random);

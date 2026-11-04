@@ -36,7 +36,7 @@ import type { GameStage, RunningGame } from "./game-session.ts";
 import { Shell, type ShellStage } from "./shell.ts";
 import type { HostMood } from "../shared/hostMood.ts";
 import type { PhoneTurn, Turn } from "../shared/turn.ts";
-import { GuestDriver, GUEST_PERSONAS, MAX_GUESTS, type GuestPersona, type GuestPlay } from "./guest.ts";
+import { GuestDriver, GUEST_PERSONAS, isStockWord, MAX_GUESTS, type GuestPersona, type GuestPlay } from "./guest.ts";
 import { GuestSocket } from "./guest-socket.ts";
 import { Host, PLACEHOLDER_PERSONA, type HostPersona, type HostStage } from "./host.ts";
 import { HostVoice, type VoiceOutput } from "./voice.ts";
@@ -1319,7 +1319,13 @@ export class Room implements HostStage {
         this.checking.add(key);
         this.refused.delete(key);
         this.refreshPhones();
-        const classify = async (line: string): Promise<boolean> => BUDGET.spend(player.guest === null ? "spark" : "guest") === true && await isFitForRoom(line);
+        // With the day's guest budget gone a guest plays on with its own stock words, which still pass the filter's local layer.
+        const classify = async (line: string): Promise<boolean> => {
+            if (BUDGET.spend(player.guest === null ? "spark" : "guest") === false) {
+                return player.guest !== null && isStockWord(line);
+            }
+            return await isFitForRoom(line);
+        };
         const result: FilterResult = await filterText(text.slice(0, limit * 2), limit, classify);
         this.checking.delete(key);
         if (this.game !== game || game === null || this.answerControl(player, controlId) === undefined) {
