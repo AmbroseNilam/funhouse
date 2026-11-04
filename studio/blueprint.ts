@@ -6,6 +6,7 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { clueBoardBlueprintProblems, createClueBoardGame, type ClueBoardDecisions } from "./kits/clueboard.ts";
+import { createStrangerGame, strangerBlueprintProblems, type StrangerDecisions } from "./kits/stranger.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -30,8 +31,15 @@ export interface ClueBoardBlueprint {
     decisions: ClueBoardDecisions;
 }
 
+/** A stranger game: everyone but one player knows the place, and they question each other in turn. */
+export interface StrangerBlueprint {
+    kit: "stranger";
+    box: Box;
+    decisions: StrangerDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | ClueBoardBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | ClueBoardBlueprint | StrangerBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -52,6 +60,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "clueboard") {
         return clueBoardBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "stranger") {
+        return strangerBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -68,6 +79,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "clueboard") {
         return erase(createClueBoardGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "stranger") {
+        return erase(createStrangerGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }

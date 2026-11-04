@@ -6,13 +6,17 @@ import type { Blueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createClueBoardGame, type ClueBoardState } from "./kits/clueboard.ts";
+import { createStrangerGame, type StrangerState } from "./kits/stranger.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { clueBoardContent, clueBoardPersonas, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { clueBoardContent, clueBoardPersonas, strangerPersonas, strangerRoleCheck, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
 export const CHECK_SEEDS: readonly number[] = [1, 2, 3, 4, 5];
+
+/** Multiplies a seed so the first draws of nearby seeds don't all land on the same seat or team. */
+const SEED_SPREAD: number = 104729;
 
 /**
  * Rehearses a blueprint the default way.
@@ -26,8 +30,12 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
         return rehearseMany(makeGuessing, guessingPersonas(blueprint.decisions), CHECK_SEEDS, options);
     }
     if (blueprint.kit === "clueboard") {
-        const makeBoard = (seed: number): KitGame<ClueBoardState> => createClueBoardGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        const makeBoard = (seed: number): KitGame<ClueBoardState> => createClueBoardGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
         return rehearseMany(makeBoard, clueBoardPersonas(), CHECK_SEEDS, { contentFor: clueBoardContent, ...options });
+    }
+    if (blueprint.kit === "stranger") {
+        const makeStranger = (seed: number): KitGame<StrangerState> => createStrangerGame(blueprint.box, blueprint.decisions, seededRandom(seed * SEED_SPREAD));
+        return rehearseMany(makeStranger, strangerPersonas(), CHECK_SEEDS, { ...options, roleCheck: strangerRoleCheck(blueprint) });
     }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
