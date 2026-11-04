@@ -3,6 +3,7 @@
 // in development that path is proxied to a plain static server over screen/public.
 
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { buildInfoFrom } from "../shared/build-info.ts";
 
@@ -11,6 +12,16 @@ export default defineConfig({
     base: "/landing/",
     plugins: [react()],
     define: { __BUILD_INFO__: JSON.stringify(buildInfoFrom(process.env)) },
-    build: { outDir: "dist", emptyOutDir: true },
+    build: {
+        outDir: "dist",
+        emptyOutDir: true,
+        rollupOptions: {
+            input: {
+                main: resolve(import.meta.dirname, "index.html"),
+                privacy: resolve(import.meta.dirname, "privacy/index.html"),
+                terms: resolve(import.meta.dirname, "terms/index.html"),
+            },
+        },
+    },
     server: { port: 5183, proxy: { "/screen/art": { target: "http://localhost:8790", rewrite: (path: string) => path.replace(/^\/screen/, "") } } },
 });

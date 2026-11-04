@@ -52,7 +52,7 @@
     /* The table: the first screen, as tall as its contents so the shelf peeks in below */
     .table { position: relative; overflow: hidden; padding: 26px var(--gutter) 22px; }
     .room-art { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: cover; opacity: 0.15; }
-    .table-inner { position: relative; max-width: var(--max); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 60fr); grid-template-areas: "heading heading" "cards product" "cards host"; column-gap: 48px; row-gap: 18px; align-items: start; }
+    .table-inner { position: relative; max-width: calc(var(--max) - 2 * var(--gutter)); margin: 0 auto; display: grid; grid-template-columns: minmax(0, 40fr) minmax(0, 60fr); grid-template-areas: "heading heading" "cards product" "cards host"; column-gap: 48px; row-gap: 18px; align-items: start; }
     .heading { grid-area: heading; display: flex; flex-direction: column; gap: 8px; }
     .heading .plain { max-width: 44em; }
     .name { color: var(--lamp); font-size: 19px; font-weight: 600; }
@@ -104,67 +104,54 @@
     .mouth { fill: #2a1a08; transform-box: fill-box; transform-origin: center; transform: scale(0.5, 0); }
     .smile { fill: none; stroke: #2a1a08; stroke-width: 5; stroke-linecap: round; }
 
-    /* The shelf: boxes of different sizes, as on a real shelf */
-    .shelf-section, .hears, .secrets, .foot { max-width: var(--max); width: 100%; box-sizing: border-box; margin: 0 auto; padding: 0 var(--gutter); }
+    /* The shelf: boxes of different sizes stand on one plank, labels hang below it */
+    .shelf-section, .agent-section, .needs, .foot { max-width: var(--max); width: 100%; box-sizing: border-box; margin: 0 auto; padding: 0 var(--gutter); }
     .install-section { padding: 0 var(--gutter); margin-bottom: 32px; }
     .install-section .install-card { box-shadow: 5px 5px 0 #000; rotate: -0.5deg; }
-    .shelf-section { display: flex; flex-direction: column; gap: 14px; }
-    .shelf { display: grid; grid-template-columns: 1.14fr 1fr 0.9fr; gap: 28px; align-items: end; margin-top: 24px; padding: 0 12px; }
-    .box { position: relative; min-width: 0; background: var(--card); box-shadow: 8px 8px 0 #000; }
-    .box:nth-child(1) { rotate: -1.2deg; }
-    .box:nth-child(2) { rotate: 0.8deg; }
-    .box:nth-child(3) { rotate: -0.6deg; }
-    .box img { width: 100%; aspect-ratio: 1; object-fit: cover; }
-    .box-label { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px 14px; background: var(--paper); color: var(--paper-ink); }
+    .shelf-section { display: flex; flex-direction: column; gap: 28px; }
+    .shelf { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-rows: auto auto; }
+    .box { display: grid; grid-row: span 2; grid-template-rows: subgrid; min-width: 0; }
+    .box-stand { display: flex; align-items: flex-end; padding: 0 12px; border-bottom: 18px solid var(--wood); box-shadow: 0 8px 0 var(--wood-dark); }
+    .box-stand img { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--card); box-shadow: 7px 0 0 #000; transform-origin: bottom center; }
+    .box:nth-child(5n + 1) .box-stand img { width: 100%; }
+    .box:nth-child(5n + 2) .box-stand img { width: 90%; rotate: 0.7deg; }
+    .box:nth-child(5n + 3) .box-stand img { width: 96%; rotate: -0.5deg; }
+    .box:nth-child(5n + 4) .box-stand img { width: 86%; }
+    .box:nth-child(5n + 5) .box-stand img { width: 94%; rotate: 0.5deg; }
+    .box-label { display: flex; flex-direction: column; gap: 6px; padding: 26px 16px 0 12px; }
     .box-label strong { font-size: 24px; font-weight: 600; line-height: 1.1; }
-    .box-label p { font-size: 16px; line-height: 1.3; }
-    .box-label small { font-size: 14px; color: #6b5a44; }
-    .plank { height: 22px; background: var(--wood); box-shadow: 0 10px 0 var(--wood-dark); }
+    .box-label p { font-size: 16px; line-height: 1.35; }
+    .box-label small { margin-top: 2px; font-size: 15px; color: var(--muted); }
 
-    /* I know who said what */
-    .hears, .secrets { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
-    .hears > *, .secrets > * { min-width: 0; }
-    .hears-copy { display: flex; flex-direction: column; gap: 16px; }
-    .mic-big { font-weight: 600; }
+    /* Bringing your own agent: a sheet of paper with the note you'd paste lying on it */
+    .agent-section { display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); gap: 48px; align-items: center; }
+    .agent-copy { display: flex; flex-direction: column; gap: 16px; }
+    .agent-steps { display: flex; flex-direction: column; gap: 8px; counter-reset: step; }
+    .agent-steps li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr); counter-increment: step; }
+    .agent-steps li::before { content: counter(step); color: var(--lamp); font-weight: 600; }
+    .agent-limits { color: var(--muted); font-size: 17px; max-width: 34em; }
+    .agent-note { box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 30px 32px; background: var(--paper); color: var(--paper-ink); font-size: 24px; line-height: 1.3; box-shadow: 10px 10px 0 #000; rotate: 1deg; }
+    .agent-link { padding-top: 12px; border-top: 3px solid var(--paper-ink); font-size: 19px; font-weight: 600; overflow-wrap: anywhere; }
 
-    /* The vote, which waits until it's on screen */
-    .exchange { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
-    .exchange .from-host { align-self: flex-end; }
-    .step-1, .step-2, .step-3, .step-4 { opacity: 0; }
-    .ballot { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; background: var(--card); box-shadow: 6px 6px 0 #000; }
-    .ballot-note { color: var(--muted); font-size: 16px; }
-    .tally-row { display: grid; grid-template-columns: 5em 1fr 1.5em; align-items: center; gap: 10px; font-size: 22px; }
-    .bar { display: block; height: 14px; width: 0; background: var(--lamp); }
-    .bar-third { background: var(--muted); }
-    .count { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .count::after { content: "0"; }
-    .playing .step-1 { animation: slip-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 200ms both; }
-    .playing .step-2 { animation: slip-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 1600ms both; }
-    .playing .step-3 { animation: slip-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 3000ms both; }
-    .playing .bar-accused { animation: fill-accused 1200ms cubic-bezier(0.2, 0.8, 0.2, 1) 3500ms both; }
-    .playing .bar-third { animation: fill-third 500ms cubic-bezier(0.2, 0.8, 0.2, 1) 3800ms both; }
-    .playing .count-accused::after { animation: count-accused 1200ms step-end 3500ms both; }
-    .playing .count-third::after { animation: count-third 500ms step-end 3800ms both; }
-    .playing .step-4 { animation: slip-in 280ms cubic-bezier(0.2, 0.8, 0.2, 1) 5200ms both; }
-
-    /* A phone, as it really looks */
-    .phone { justify-self: center; width: min(100%, 290px); box-sizing: border-box; aspect-ratio: 9 / 17; display: flex; flex-direction: column; gap: 16px; padding: 14px; background: #b5552b; box-shadow: 0 0 0 5px #000, 10px 10px 0 5px #000; }
-    .phone-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; color: var(--paper); font-size: 16px; }
-    .phone-top strong { font-weight: 600; }
-    .phone-top span:last-child { text-align: right; }
-    .peek { display: flex; align-items: center; justify-content: center; min-height: 130px; margin-top: 18px; background: var(--card); color: var(--paper); box-shadow: 4px 4px 0 #000; text-align: center; font-size: 18px; rotate: -0.6deg; }
-    .peek em { font-style: normal; }
-    .touch-surface { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--paper); font-size: 22px; font-weight: 600; line-height: 1.15; text-align: center; }
+    /* What a night needs: ruled lines, as on a score pad */
+    .needs { display: flex; flex-direction: column; gap: 22px; }
+    .needs-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 48px; margin: 0; }
+    .needs-list > div { padding: 16px 0; border-top: 2px solid var(--wood); }
+    .needs-list dt { font-size: 22px; font-weight: 600; line-height: 1.15; }
+    .needs-list dd { margin: 6px 0 0; font-size: 17px; line-height: 1.35; color: var(--muted); max-width: 32em; }
+    .meta-line { padding-top: 16px; border-top: 2px solid var(--wood); font-size: 17px; }
 
     /* Footer */
-    .foot { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; }
-    .foot .card { width: min(100%, 420px); }
-    .proof { display: flex; gap: 20px; }
-    .fine { color: var(--muted); font-size: 15px; max-width: 44em; }
+    .foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px; padding-top: 28px; padding-bottom: 8px; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-right: auto; }
+    .foot-links a { padding: 8px 0; text-underline-offset: 3px; }
+    .fine { color: var(--muted); font-size: 15px; }
+    .build-line { font-size: 13px; }
 
     @media (max-width: 1000px) {
         .table-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "host" "cards" "product"; }
-        .hears, .secrets { grid-template-columns: 1fr; gap: 32px; }
+        .agent-section { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+        .shelf { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-columns: auto; grid-template-rows: none; row-gap: 32px; }
     }
 
     @media (max-width: 600px) {
@@ -181,46 +168,20 @@
         .host-at-table { min-width: 0; }
         .host-at-table .lantern { width: 62px; height: 90px; }
         .host-at-table .slip { min-width: 0; font-size: 17px; margin-bottom: 8px; }
-        .shelf { grid-template-columns: 1fr; gap: 32px; padding: 0; }
-        .tally-row { font-size: 20px; }
+        .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px; }
+        .box-stand { padding: 0 6px; }
+        .box-label { padding: 24px 10px 0 6px; }
+        .box-label strong { font-size: 21px; }
+        .box-label p { font-size: 15px; }
+        .agent-note { padding: 22px; font-size: 20px; box-shadow: 7px 7px 0 #000; }
+        .needs-list { grid-template-columns: minmax(0, 1fr); }
+        .foot { flex-direction: column; }
         .product { grid-template-columns: minmax(0, 70fr) minmax(0, 30fr); column-gap: 14px; align-items: center; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-        .step-1, .step-2, .step-3, .step-4, .playing .step-1, .playing .step-2, .playing .step-3, .playing .step-4 { opacity: 1; animation: none; }
-        .bar-accused, .playing .bar-accused { width: 80%; animation: none; }
-        .bar-third, .playing .bar-third { width: 20%; animation: none; }
-        .count-accused::after, .playing .count-accused::after { content: "4"; animation: none; }
-        .count-third::after, .playing .count-third::after { content: "1"; animation: none; }
         .eye, .lantern-body { animation: none; transition: none; }
     }
-}
-
-@keyframes slip-in {
-    from { opacity: 0; transform: translateX(-12px); }
-    to { opacity: 1; transform: none; }
-}
-
-@keyframes fill-accused {
-    from { width: 0; }
-    to { width: 80%; }
-}
-
-@keyframes fill-third {
-    from { width: 0; }
-    to { width: 20%; }
-}
-
-@keyframes count-accused {
-    0% { content: "1"; }
-    35% { content: "2"; }
-    65% { content: "3"; }
-    100% { content: "4"; }
-}
-
-@keyframes count-third {
-    0% { content: "0"; }
-    100% { content: "1"; }
 }
 
 @keyframes blink {
