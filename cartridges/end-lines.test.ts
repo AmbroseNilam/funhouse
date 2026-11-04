@@ -53,7 +53,8 @@ describe("Twenty Doors' own topic", () => {
     const toChoosing = (): { game: Doors; started: ReturnType<Doors["init"]>; choosing: ReturnType<Doors["onEvent"]> } => {
         const game = createTwentyDoors(() => 0, "own");
         const started = game.init(players, {});
-        const choosing = game.onEvent(started.state, { type: "hostRuled", at: 0, ruling: "topic", detail: "Canadian lakes", playerId: "a" });
+        const thinking = game.onEvent(started.state, { type: "hostRuled", at: 0, ruling: "topic", detail: "Canadian lakes", playerId: "a" });
+        const choosing = game.apply(thinking.state, "a", "setup-start");
         return { game, started, choosing };
     };
 
@@ -85,7 +86,8 @@ describe("Twenty Doors' own topic", () => {
         assert.deepEqual(started.timers ?? {}, {}, "no countdown");
         const said = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "programming languages" });
         assert.deepEqual(said.timers ?? {}, {}, "nor one after someone speaks");
-        const ruled = game.onEvent(said.state, { type: "hostRuled", at: 0, ruling: "topic", detail: "programming languages", playerId: "a" });
+        const thinking = game.onEvent(said.state, { type: "hostRuled", at: 0, ruling: "topic", detail: "programming languages", playerId: "a" });
+        const ruled = game.apply(thinking.state, "a", "setup-start");
         assert.equal(game.phaseOf(ruled.state), "choosing");
         assert.match(ruled.contentRequest ?? "", /programming languages/);
     });
@@ -118,6 +120,62 @@ describe("Twenty Doors' own topic", () => {
 function pickOf(game: ReturnType<typeof createQuizmaster>, state: ReturnType<ReturnType<typeof createQuizmaster>["init"]>["state"]): GamePick | null {
     return game.setupPick?.(state) ?? null;
 }
+
+describe("Twenty Doors' setup", () => {
+    const players = [{ playerId: "a", name: "Sam" }, { playerId: "b", name: "Alex" }];
+    type Doors = ReturnType<typeof createTwentyDoors>;
+    const pickOn = (game: Doors, state: ReturnType<Doors["init"]>["state"]): GamePick | null => game.setupPick?.(state) ?? null;
+    const toThinking = (): { game: Doors; thinking: ReturnType<Doors["onEvent"]> } => {
+        const game = createTwentyDoors(() => 0, "own");
+        const thinking = game.onEvent(game.init(players, {}).state, { type: "hostRuled", at: 0, ruling: "topic", detail: "Canadian lakes", playerId: "a" });
+        return { game, thinking };
+    };
+    const reply: string = JSON.stringify({ questions: [{ question: "East or west?", options: ["East", "West"] }, { question: "Big or small?", options: ["Big", "Small"] }, { question: "A third?", options: ["A", "B"] }] });
+
+    it("asks at most two of the model's questions before any secret exists, then how hard", () => {
+        const { game, thinking } = toThinking();
+        assert.equal(thinking.state.secret, "", "nothing to leak yet");
+        assert.match(thinking.followUpRequest?.prompt ?? "", /Canadian lakes/);
+        const asked = game.onEvent(thinking.state, { type: "followUpReady", at: 0, id: "x", text: reply }).state;
+        assert.equal(asked.secret, "");
+        assert.deepEqual(asked.setup?.questions.map((question) => question.prompt), ["East or west?", "Big or small?", "How hard?"]);
+        assert.deepEqual(pickOn(game, asked)?.choices.map((choice) => choice.label), ["East", "West", "Add your own", "Just start"]);
+        let state = game.apply(asked, "b", "setup:model-0:1").state;
+        state = game.apply(state, "b", "setup-own").state;
+        const box = game.privateControls(state, "a").find((control) => control.type === "textInput");
+        assert.equal(box?.type, "textInput");
+        state = game.onEvent(state, { type: "answered", at: 0, playerId: "a", controlId: box.id, value: "Deep ones" }).state;
+        assert.equal(pickOn(game, state)?.prompt, "How hard?");
+        const choosing = game.apply(state, "b", "setup:level:hard");
+        assert.equal(game.phaseOf(choosing.state), "choosing");
+        assert.match(choosing.contentRequest ?? "", /East or west\? West Big or small\? Deep ones/);
+        assert.match(choosing.contentRequest ?? "", /less obvious/);
+        const playing = game.onEvent(choosing.state, { type: "contentReady", at: 0, text: '{"secret": "Lake Louise"}' });
+        assert.equal(game.phaseOf(playing.state), "asking");
+        assert.equal(pickOn(game, playing.state), null);
+        assert.equal(JSON.stringify(game.publicScene(playing.state)).includes("Lake Louise"), false);
+    });
+
+    it("falls back on how hard alone, and Just start always works", () => {
+        const { game, thinking } = toThinking();
+        for (const bad of ["", "junk", "{}"]) {
+            assert.equal(game.onEvent(thinking.state, { type: "followUpReady", at: 0, id: "x", text: bad }).state.setup?.questions[0]?.id, "level", bad);
+        }
+        assert.equal(game.onEvent(thinking.state, { type: "timerFired", at: 0, timerId: "setup-wait" }).state.setup?.questions[0]?.id, "level");
+        const started = game.apply(thinking.state, "a", "setup-start");
+        assert.equal(game.phaseOf(started.state), "choosing");
+        assert.match(started.contentRequest ?? "", /most adults would know/);
+    });
+
+    it("leaves Surprise me and the kinds of secret starting straight away", () => {
+        for (const chosen of ["surprise", "an animal"]) {
+            const game = createTwentyDoors(() => 0, chosen);
+            const started = game.init(players, {});
+            assert.equal(game.phaseOf(started.state), "asking", chosen);
+            assert.equal(started.followUpRequest, undefined);
+        }
+    });
+});
 
 describe("Quizmaster's four answers", () => {
     const players = [{ playerId: "a", name: "Sam" }, { playerId: "b", name: "Alex" }];

@@ -11,7 +11,7 @@ import type { RoomEvent } from "../../shared/timeline.ts";
 import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { isHostSafe, shuffled } from "../../studio/kit/text.ts";
-import { answerOwn, answerSetup, isSetupBox, parseSetupQuestions, SETUP_START, setupBlocks, setupControls, setupFinished, setupPick, setupPrompt, startSetup, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
+import { answerOwn, answerSetup, isSetupBox, parseSetupQuestions, SETUP_START, setupBlocks, setupControls, setupFinished, setupPick, setupPrompt, startSetup, toldLine, setupFactText, type SetupProgress, type SetupQuestion } from "../setup-step.ts";
 import { REVEAL_NOW } from "../../shared/controls.ts";
 import { DRAIN_WARM_SECONDS } from "../../shared/drain.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
@@ -39,6 +39,9 @@ const MOST_QUESTIONS: number = 10;
 
 /** Shortest clock worth a nudge from the host: on a quicker one he'd still be reading the question. */
 const NUDGE_FROM_SECONDS: number = 30;
+
+/** The most setup questions the model may write. */
+const MOST_SETUP_QUESTIONS: number = 3;
 
 /** How long the model gets to write its setup questions before the fixed ones carry on alone. */
 const SETUP_WAIT_SECONDS: number = 7;
@@ -302,7 +305,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
             state: { ...state, phase: "thinking", topic, setup: null, focus: "" },
             facts: [fact],
             nextPhaseId: "thinking",
-            followUpRequest: { id: `setup-${topic}`, prompt: setupPrompt(topic, "A party quiz") },
+            followUpRequest: { id: `setup-${topic}`, prompt: setupPrompt(topic, "A party quiz", "which questions get asked", MOST_SETUP_QUESTIONS) },
             timers: { "setup-wait": SETUP_WAIT_SECONDS },
         };
     };
@@ -324,7 +327,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
      */
     const finishSetup = (state: QuizmasterState): Step<QuizmasterState> => {
         const chosen: Record<string, string> = state.setup?.chosen ?? {};
-        const focus: string = (state.setup?.told ?? []).map((line) => `${line.prompt} ${line.answer}`).join(" ");
+        const focus: string = toldLine(state.setup);
         const pace: number | null | undefined = PACE_SECONDS[chosen.time ?? "none"];
         return prepare({ ...state, setup: null, focus, level: chosen.level ?? "medium", count: Number(chosen.count ?? QUESTION_COUNT), questionSeconds: pace ?? null }, state.topic);
     };
@@ -593,7 +596,7 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
                 return progress === null ? { state, facts: [] } : afterSetupAnswer(state, progress);
             }
             if (event.type === "followUpReady") {
-                return state.phase === "thinking" ? askSetup(state, parseSetupQuestions(event.text)) : { state, facts: [] };
+                return state.phase === "thinking" ? askSetup(state, parseSetupQuestions(event.text, MOST_SETUP_QUESTIONS)) : { state, facts: [] };
             }
             if (event.type === "timerFired") {
                 if (state.phase === "thinking" && event.timerId === "setup-wait") {
@@ -790,9 +793,9 @@ export function createQuizmaster(chosen?: string, random: () => number = Math.ra
         },
 
         hostFacts(state: QuizmasterState, scope: Scope): ScopedFact[] {
-            const asking: SetupQuestion | undefined = state.setup?.questions[state.setup.at];
-            if (scope.kind === "host" && state.phase === "setup" && asking !== undefined) {
-                return [{ scope: { kind: "public" }, kind: "setup-question", text: `The TV is asking: ${asking.prompt} Choices: ${asking.options.map((option) => option.label).join(", ")}.` }];
+            const asking: string | null = setupFactText(state.setup);
+            if (scope.kind === "host" && state.phase === "setup" && asking !== null) {
+                return [{ scope: { kind: "public" }, kind: "setup-question", text: asking }];
             }
             if (scope.kind !== "host" || state.phase !== "question") {
                 return [];

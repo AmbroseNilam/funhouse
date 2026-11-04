@@ -1,6 +1,7 @@
 // Twenty Doors' declarative half: the host holds a secret thing and players open doors by
 // asking yes-or-no questions out loud. The host judges each question; the rules count doors.
 
+import { SETUP_PHASES } from "../setup-step.ts";
 import type { CartridgeManifest } from "../../shared/cartridge.ts";
 
 export const TWENTY_DOORS_MANIFEST: CartridgeManifest = {
@@ -22,6 +23,7 @@ export const TWENTY_DOORS_MANIFEST: CartridgeManifest = {
                 topic: "they named a topic. Write it as [[topic: the topic in a few words]] and nothing else; you'll be told what to say next.",
             },
         },
+        ...SETUP_PHASES,
         {
             id: "choosing",
             hostBrief: "You are choosing the secret. Say one short line at most, then wait.",

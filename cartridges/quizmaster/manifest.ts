@@ -1,6 +1,7 @@
 // Quizmaster's declarative half: the host writes trivia on a topic the players choose, reads each
 // question aloud, and judges their spoken answers. The rules score them and move the game on.
 
+import { SETUP_PHASES } from "../setup-step.ts";
 import type { CartridgeManifest } from "../../shared/cartridge.ts";
 
 export const QUIZMASTER_MANIFEST: CartridgeManifest = {
@@ -26,23 +27,7 @@ export const QUIZMASTER_MANIFEST: CartridgeManifest = {
                 topic: "they named a topic. Write it as [[topic: the topic in a few words]] and nothing else; you'll be told what to say next.",
             },
         },
-        {
-            id: "thinking",
-            hostBrief: "You are having a quick think about the topic. Say one short line at most, then wait.",
-            listening: { "*": "holdToTalk" },
-            hostMayInterject: false,
-            silenceSeconds: 0,
-        },
-        {
-            id: "setup",
-            hostBrief: "The TV is asking the players a setup question, given in your facts. When anyone answers it in any words, even an answer that isn't on the list, rule it straight away and say nothing else; never ask them to choose from the list. Only stay quiet for chat that doesn't answer it.",
-            listening: { "*": "holdToTalk" },
-            hostMayInterject: false,
-            silenceSeconds: 0,
-            hostRulings: {
-                own: "someone answered the question on the TV. Write it as [[own: their answer in a few words]] and nothing else; you'll be told what to say next.",
-            },
-        },
+        ...SETUP_PHASES,
         {
             id: "preparing",
             hostBrief: "You are writing the questions. Say one short line at most, then wait.",
