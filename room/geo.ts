@@ -39,8 +39,12 @@ export function cameThroughTunnel(remoteAddress: string | undefined): boolean {
  * @returns the rule and the country, empty when not known.
  */
 export function regionRule(headers: IncomingHttpHeaders, remoteAddress: string | undefined): { rule: RegionRule; country: string } {
-    if (process.env.GEO_RULES !== "1" || cameThroughTunnel(remoteAddress) === false) {
+    if (process.env.GEO_RULES !== "1") {
         return { rule: "open", country: "" };
+    }
+    // With the rules on, the tunnel is the only way in: a direct connection has no location to check.
+    if (cameThroughTunnel(remoteAddress) === false) {
+        return { rule: "refused", country: "direct" };
     }
     const countryHeader: string | string[] | undefined = headers["cf-ipcountry"];
     const regionHeader: string | string[] | undefined = headers["cf-region-code"];

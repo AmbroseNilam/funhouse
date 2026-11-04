@@ -17,8 +17,8 @@ test("refuses restricted countries and regions, and keeps paintings off in India
     assert.equal(regionRule({}, "127.0.0.1").rule, "open");
 });
 
-test("ignores the header when it didn't come through the tunnel", () => {
-    assert.equal(regionRule({ "cf-ipcountry": "IR" }, "203.0.113.4").rule, "open");
+test("refuses anything that didn't come through the tunnel, whatever its headers say", () => {
+    assert.equal(regionRule({ "cf-ipcountry": "CA" }, "203.0.113.4").rule, "refused");
 });
 
 test("does nothing unless switched on", () => {

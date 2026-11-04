@@ -311,11 +311,13 @@ export function mayCharge(service: Service): boolean {
     }
     const allSeconds: number = Object.values(day.accounts).reduce((sum: number, one: Account) => sum + one.transcribeSeconds, 0);
     const allCalls: number = Object.values(day.accounts).reduce((sum: number, one: Account) => sum + one.jevCalls, 0);
+    // A judge answers only to their own caps, so others using up the site's can't silence them.
+    const judged: boolean = account?.pass === "judge";
     if (service === "transcribe") {
-        return (account?.transcribeSeconds ?? 0) < limits.transcribeSecondsAddress && allSeconds < limits.transcribeSecondsSite;
+        return (account?.transcribeSeconds ?? 0) < limits.transcribeSecondsAddress && (judged === true || allSeconds < limits.transcribeSecondsSite);
     }
     if (service === "jev") {
-        return (account?.jevCalls ?? 0) < limits.jevCallsAddress && allCalls < limits.jevCallsSite;
+        return (account?.jevCalls ?? 0) < limits.jevCallsAddress && (judged === true || allCalls < limits.jevCallsSite);
     }
     return true;
 }

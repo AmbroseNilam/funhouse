@@ -148,8 +148,9 @@ const PASS_TRIES_PER_HOUR: number = 10;
 /** Longest code body accepted. */
 const PASS_BODY_BYTES: number = 512;
 
-/** Each address's tries at a code. Kept across rooms and tabs; a restart forgets them. */
+/** Tries at a code, by address (an IPv6 /64 counts as one). Kept across rooms and tabs; a restart forgets them. Codes must be long enough that this barely matters. */
 const passTries: Map<string, RateWindow> = new Map();
+setInterval(() => { passTries.clear(); }, 3600000).unref();
 
 /**
  * Takes a judge or owner code from a POST body, so it never sits in a URL or a log. It lifts the
@@ -159,8 +160,8 @@ const passTries: Map<string, RateWindow> = new Map();
  */
 function servePass(request: IncomingMessage, response: ServerResponse): void {
     const address: string = addressOf(request);
-    const tries: RateWindow = passTries.get(address) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
-    passTries.set(address, tries);
+    const tries: RateWindow = passTries.get(payerOf(address)) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
+    passTries.set(payerOf(address), tries);
     const fromElsewhere: boolean = request.headers.origin !== undefined && request.headers.origin !== PUBLIC_ORIGIN;
     if (fromElsewhere === true || tries.allow() === false) {
         response.writeHead(429).end();
@@ -196,8 +197,8 @@ function servePass(request: IncomingMessage, response: ServerResponse): void {
 function serveOwnerSpend(request: IncomingMessage, response: ServerResponse): void {
     const code: string | string[] | undefined = request.headers["x-owner-code"];
     const address: string = addressOf(request);
-    const tries: RateWindow = passTries.get(address) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
-    passTries.set(address, tries);
+    const tries: RateWindow = passTries.get(payerOf(address)) ?? new RateWindow(PASS_TRIES_PER_HOUR, 3600000);
+    passTries.set(payerOf(address), tries);
     if (typeof code !== "string" || tries.allow() === false || isOwnerCode(code) === false) {
         response.writeHead(404).end();
         return;
@@ -278,6 +279,10 @@ async function serveStatic(request: IncomingMessage, response: ServerResponse): 
     }
     const drawing: RegExpExecArray | null = /^\/drawings\/([A-Z]+)\/([0-9a-f]+)$/.exec(url.pathname);
     if (drawing !== null) {
+        if (regionRule(request.headers, request.socket.remoteAddress).rule === "noPaintings") {
+            response.writeHead(404).end();
+            return;
+        }
         const found: Drawing | undefined = directory.find(drawing[1] ?? "")?.drawing(drawing[2] ?? "");
         if (found === undefined) {
             response.writeHead(404).end();
