@@ -136,7 +136,7 @@ async function typeRefused(seat: Seat, text: string, label: string, mark: string
  * @returns the seat that is up, or null.
  */
 function claimantSeat(): Seat | null {
-    return seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("You're up.") === true)) ?? null;
+    return seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone to answer") === true)) ?? null;
 }
 
 /**
@@ -273,11 +273,11 @@ for (let turn = 0; turn < count; turn += 1) {
     await screen.nextHostLine(heardBefore);
     const heardAfter: number = screen.hostLines.length;
     claimant.phone.say("There were four of us and it rained all day");
-    await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Your turn.") === true)) ?? claimant).some((line: string) => line.startsWith("Your turn.") === true), "the named player");
+    await waitFor(() => phoneNow(seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) ?? claimant).some((line: string) => line.startsWith("Hold your phone and ask") === true), "the named player");
     if (screen.hostLines.length <= heardAfter) {
         await screen.nextHostLine(heardAfter);
     }
-    const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Your turn.") === true)) as Seat;
+    const asker: Seat = seats.find((seat: Seat) => phoneNow(seat).some((line: string) => line.startsWith("Hold your phone and ask") === true)) as Seat;
     if (asker === claimant) {
         throw new Error("The claimant was named to ask themselves.");
     }
@@ -291,7 +291,7 @@ for (let turn = 0; turn < count; turn += 1) {
         throw new Error("The claimant was heard during the named player's question.");
     }
     asker.phone.say("Which street was that on exactly");
-    await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("You're up.") === true) && phoneNow(asker).some((line: string) => line.startsWith("Your turn.") === true) === false, "the claimant to answer the question");
+    await waitFor(() => phoneNow(claimant).some((line: string) => line.startsWith("Hold your phone to answer") === true) && phoneNow(asker).some((line: string) => line.startsWith("Hold your phone and ask") === true) === false, "the claimant to answer the question");
     claimant.phone.say("It was on the corner by the old bakery");
     await waitFor(() => seats.filter((seat: Seat) => seat !== claimant).every((seat: Seat) => seat.phone.options().length === 3), "a ballot on each voter's phone");
 

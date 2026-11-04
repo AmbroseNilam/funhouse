@@ -797,7 +797,6 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
                     blocks: [
                         { type: "title", text: `Which of ${nameOf(state, claimant)}'s claims is the lie?`, kicker: turnLabel(state) },
                         ...claimBlocks(),
-                        { type: "progress", label: "Votes in", current: Object.keys(state.votes).length, max: state.voters.length, marks: "card" },
                         { type: "timer", seconds: decisions.voteSeconds, label: "to vote", running: true },
                     ],
                 };
@@ -836,13 +835,13 @@ export function createClaimsGame(givenBox: Box, givenDecisions: ClaimsDecisions,
             }
             if (state.phase === "interview" || state.phase === "answer") {
                 if (playerId === claimant) {
-                    return [{ type: "notice", text: "You're up. Hold your phone to answer the host.", tone: "info" }];
+                    return [{ type: "notice", text: "Hold your phone to answer the host.", tone: "info" }];
                 }
                 return [{ type: "waiting", text: `${nameOf(state, claimant)} is on the stand. Listen, and decide which claim is the lie.` }];
             }
             if (state.phase === "challenge") {
                 if (playerId === state.askerId) {
-                    return [{ type: "notice", text: `Your turn. Hold your phone and ask ${nameOf(state, claimant)} one question.`, tone: "info" }];
+                    return [{ type: "notice", text: `Hold your phone and ask ${nameOf(state, claimant)} one question.`, tone: "info" }];
                 }
                 return [{ type: "waiting", text: `${nameOf(state, state.askerId)} is asking ${nameOf(state, claimant)} a question.` }];
             }
