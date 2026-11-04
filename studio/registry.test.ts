@@ -8,6 +8,7 @@ import { MIND_THE_GAP_BLUEPRINT } from "./games/mind-the-gap/blueprint.ts";
 import { OFF_BY_A_MILE_BLUEPRINT } from "./games/off-by-a-mile/blueprint.ts";
 import { PAST_THE_GATE_BLUEPRINT } from "./games/past-the-gate/blueprint.ts";
 import type { InstalledGame } from "../cartridges/index.ts";
+import { KITS } from "./registry.ts";
 import { BLUEPRINTS, HELD_BACK, studioShelf } from "./shelf.ts";
 
 describe("kit registry", () => {
@@ -30,6 +31,26 @@ describe("kit registry", () => {
         }
         for (const id of Object.keys(HELD_BACK)) {
             assert.equal(BLUEPRINTS.some((blueprint) => blueprint.box.id === id), true, `${id} is held but not a shipped game`);
+        }
+    });
+
+    it("has a registry entry for every shipped game's kit, and a plain reason for every held game", () => {
+        for (const blueprint of BLUEPRINTS) {
+            assert.equal(typeof KITS[blueprint.kit].create, "function", blueprint.box.id);
+            assert.equal(typeof KITS[blueprint.kit].check, "function", blueprint.box.id);
+        }
+        for (const reason of Object.values(HELD_BACK)) {
+            assert.equal(reason.length > 0, true);
+        }
+    });
+
+    it("keeps the tap-only games visible and holds the games that still need a run with the real host", () => {
+        for (const id of ["whoFits", "underTheCup", "magpiePockets"]) {
+            assert.equal(HELD_BACK[id], undefined, id);
+            assert.equal(BLUEPRINTS.some((blueprint) => blueprint.box.id === id), true, id);
+        }
+        for (const id of ["nameTag", "coldRead", "blankVerdict", "lonelyClues", "pantomimePanic", "blankTruth", "ghostWriter"]) {
+            assert.notEqual(HELD_BACK[id], undefined, id);
         }
     });
 });
