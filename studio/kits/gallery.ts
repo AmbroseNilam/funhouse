@@ -100,6 +100,8 @@ export interface GalleryState {
     hands: Record<string, string[]>;
     /** Cards not yet dealt, in order. */
     deck: string[];
+    /** The cards of the first deal in the order they are painted: the first of every hand, then the second, and so on. */
+    waves: string[][];
     pickedId: string | null;
     clue: string;
     /** The card each player has put in this round, by player id. */
@@ -500,10 +502,9 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
      * @returns the pictures to ask for.
      */
     const waveDraws = (state: GalleryState, wave: number): { id: string; prompt: string }[] => {
-        return state.players.flatMap((player: CartridgePlayer) => {
-            const cardId: string | undefined = state.hands[player.playerId]?.[wave];
+        return (state.waves[wave] ?? []).flatMap((cardId: string) => {
             const card: GalleryCard | undefined = cardOf(state, cardId);
-            return card === undefined ? [] : [{ id: `${CARD_PICTURE_PREFIX}${card.id}`, prompt: card.prompt }];
+            return card === undefined || card.src !== null ? [] : [{ id: `${CARD_PICTURE_PREFIX}${card.id}`, prompt: card.prompt }];
         });
     };
 
@@ -540,6 +541,7 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
                 cards,
                 hands,
                 deck: ids.slice(players.length * decisions.handSize),
+                waves: Array.from({ length: decisions.handSize }, (_unused: unknown, wave: number) => players.map((player: CartridgePlayer) => hands[player.playerId]?.[wave] ?? "")),
                 pickedId: null,
                 clue: "",
                 plays: {},
@@ -651,9 +653,7 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
             const [kind = "", first = "", second = ""] = event.timerId.split(":");
             const round: number = Number(first);
             if (kind === "wave" && state.phase !== "end") {
-                const unpainted = (draw: { id: string }): boolean => state.cards[draw.id.slice(CARD_PICTURE_PREFIX.length)]?.src === null;
-                const draws: { id: string; prompt: string }[] = waveDraws(state, round).filter(unpainted);
-                return { state, facts: [], draws };
+                return { state, facts: [], draws: waveDraws(state, round) };
             }
             if (kind === "clue" && round === state.round && state.phase === "clue") {
                 return score({ ...state, plays: {}, votes: {} }, true);
@@ -758,7 +758,7 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
             return [];
         }
         if (card.src !== null) {
-            return [{ type: "image", src: card.src, caption }];
+            return [{ type: "image", src: card.src, ...(caption === "" ? {} : { caption }) }];
         }
         return [{ type: "text", text: card.caption, emphasis: "large" }, { type: "text", text: "Still being painted.", emphasis: "whisper" }];
     }
@@ -802,7 +802,7 @@ export function createGalleryGame(givenBox: Box, givenDecisions: GalleryDecision
                 transition: "fade",
                 blocks: [
                     { type: "title", text: cardId === undefined ? "Vote" : `Card ${letter(state, cardId)}`, kicker: `The clue: ${quoted(state.clue)}` },
-                    ...showCard(cardOf(state, cardId), cardId === undefined ? "" : `Card ${letter(state, cardId)}`),
+                    ...showCard(cardOf(state, cardId), ""),
                     { type: "progress", label: "Votes in", current: Object.keys(state.votes).length, max: voters.length, marks: "card" },
                 ],
             };

@@ -299,6 +299,17 @@ describe("the gallery kit", () => {
         assert.equal(start(1, FOUR, everyAtOnce).steps[0]?.draws?.length, FOUR.length * CLUE_GALLERY_BLUEPRINT.decisions.handSize);
     });
 
+    it("still asks for a card's painting when it was played before its wave came", () => {
+        const run: Run = start();
+        const planned: string[] = FOUR.map((player: CartridgePlayer) => run.state.hands[player.playerId]?.[1] ?? "");
+        tell(run, "a quiet harbour");
+        playAll(run);
+        const draws = play(run, { type: "timerFired", at: 4, timerId: "wave:1" }).draws ?? [];
+        assert.deepEqual(draws.map((draw) => draw.id).sort(), planned.map((id: string) => `${CARD_PICTURE_PREFIX}${id}`).sort());
+        play(run, { type: "drawingReady", at: 6, id: `${CARD_PICTURE_PREFIX}${planned[0]}`, src: PICTURE });
+        assert.equal(play(run, { type: "timerFired", at: 8, timerId: "wave:1" }).draws?.length, FOUR.length - 1, "a card already painted is not asked for again");
+    });
+
     it("never offers the storyteller or a voter their own card, and labels cards by letter only", () => {
         const run: Run = start();
         tell(run, "a quiet harbour");
