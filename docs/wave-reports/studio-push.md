@@ -30,7 +30,7 @@ commit alone. Nothing in `room/` or the phone page core changed.
   caught. A live version is in the scenario: after one phone chooses, the TV scene and another
   phone's controls are byte-identical and no flip shows.
 - `ROOM_STUDIO=1 node tools/scenarios/magpie-pockets.ts` against `GAME_ROOM_TEXT_ONLY=1` room: PASS five
-  times on this machine, including once on the final layout. It plays whole games with four fake
+  times on this machine, including once on the final code with the shelf entry in place. It plays whole games with four fake
   phones of different nerve (one never stays), and checks that every scoreboard after a round and at
   the end equals what the phones banked by staying. The room log shows "[studio] starting blueprint
   magpiePockets on the tap kit".
