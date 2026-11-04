@@ -140,7 +140,7 @@ const INSTALLED: boolean = matchMedia("(display-mode: standalone)").matches === 
 const ROOM_CODE_LENGTH: number = 4;
 
 /** True when this phone has a share sheet. */
-const CAN_SHARE: boolean = "share" in navigator;
+const CAN_SHARE: boolean = "share" in navigator && "canShare" in navigator;
 
 /** What the credits say. */
 const CREDITS: string = `Paintings are AI-generated with Meta's Muse Image. The host's words and voice are AI too.`;
@@ -715,13 +715,23 @@ export function App(): ReactElement {
                 socketRef.current.send(JSON.stringify({ type: "presence", away: document.visibilityState !== "visible" } satisfies PhoneMessage));
             }
         };
+        /** Reconnects at once when the network returns or the page is restored, if the socket is gone. */
+        const onRestored = (): void => {
+            if (socketRef.current?.readyState !== WebSocket.OPEN) {
+                onVisible();
+            }
+        };
         connect();
+        window.addEventListener("online", onRestored);
+        window.addEventListener("pageshow", onRestored);
         document.addEventListener("visibilitychange", onVisible);
         document.addEventListener("visibilitychange", reportPresence);
         return (): void => {
             stopped = true;
             window.clearTimeout(retryTimer);
             window.clearTimeout(silenceTimer);
+            window.removeEventListener("online", onRestored);
+            window.removeEventListener("pageshow", onRestored);
             document.removeEventListener("visibilitychange", onVisible);
             document.removeEventListener("visibilitychange", reportPresence);
             socketRef.current?.close();
@@ -1144,7 +1154,7 @@ export function App(): ReactElement {
                 <small className="room-tag">{PRODUCT_NAME} · Room {state.roomCode}</small>
                 <form className="place-card" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
                     <label htmlFor="name-field">Who's sitting down?</label>
-                    <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" required />
+                    <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoCapitalize="words" required />
                     <button className="primary" type="submit">Sit down</button>
                     <button type="submit" className="quiet" onClick={() => { noMicRef.current = true; setNoMic(true); }}>Sit down without a mic</button>
                 </form>
@@ -1174,20 +1184,25 @@ export function App(): ReactElement {
     }
 
     /** Shares a link to this room, or copies it where a phone can't share. */
+    // Called straight from the tap with nothing awaited first, because iOS only allows sharing inside a tap.
     const invite = async (): Promise<void> => {
         const url: string = `${location.origin}/phone/?room=${encodeURIComponent(state.roomCode)}`;
-        try {
-            if (CAN_SHARE === true) {
-                await navigator.share({ title: PRODUCT_NAME, text: "Pull up a chair.", url });
+        const shared: ShareData = { title: PRODUCT_NAME, text: `Pull up a chair. We're playing ${PRODUCT_NAME}.`, url };
+        if (CAN_SHARE === true && navigator.canShare(shared) === true) {
+            try {
+                await navigator.share(shared);
                 setMenu("closed");
                 return;
+            } catch (error: unknown) {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                    return;
+                }
             }
+        }
+        try {
             await navigator.clipboard.writeText(url);
-            setInvited("Link copied. Send it to whoever's coming.");
-        } catch (error: unknown) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                return;
-            }
+            setInvited("Copied. Send the link to whoever's coming.");
+        } catch {
             setInvited(url);
         }
     };
@@ -1252,14 +1267,14 @@ export function App(): ReactElement {
             {turn !== null && turn.line !== "" && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
             {pad !== null && pad.startCard.length > 0 ? (
-                <section className="private">
+                <section className="private" data-scrolls>
                     <section className="paper">
                         <ol className="start-lines">{pad.startCard.map((text: string) => <li key={text}>{text}</li>)}</ol>
                     </section>
                 </section>
             ) : null}
             {pad?.confirmEnd === true ? (
-                <section className="private">
+                <section className="private" data-scrolls>
                     <section className="paper choices">
                         <p className="prompt">End the game for everyone?</p>
                         <button onClick={() => { send({ type: "nav", action: { kind: "choose", index: 1 } }); }}>End for everyone</button>
@@ -1301,10 +1316,10 @@ export function App(): ReactElement {
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
-                    <div className="sheet" role="dialog" aria-modal="true" aria-label="Your menu">
+                    <div className="sheet" data-scrolls role="dialog" aria-modal="true" aria-label="Your menu">
                         {menu === "open" ? (
                             <>
-                                {invited !== "" ? <p className="invited">{invited}</p> : null}
+                                {invited !== "" ? <p className="invited" role="status">{invited}</p> : null}
                                 {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
                                 {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>
@@ -1372,7 +1387,7 @@ export function App(): ReactElement {
                         {menu === "rename" ? (
                             <form onSubmit={rename}>
                                 <label htmlFor="new-name">What should we call you?</label>
-                                <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoFocus required />
+                                <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoCapitalize="words" autoFocus required />
                                 <button type="submit" className="primary">That's me</button>
                                 <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
                             </form>
