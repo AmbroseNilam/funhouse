@@ -17,6 +17,7 @@ import { serveAgent } from "./agent.ts";
 import { RoomDirectory } from "./directory.ts";
 import { roomOptions, type RoomOptions } from "./room-options.ts";
 import { flushSpend, isOwnerCode, payerOf, redeemPass, spendSummary, stageOf, withPayer } from "../providers/meter.ts";
+import { cameThroughTunnel, REFUSED_PAGE, regionRule } from "./geo.ts";
 import { AddressLimits, BUDGET, RateWindow } from "./limits.ts";
 import type { Room } from "./room.ts";
 
@@ -111,8 +112,34 @@ setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 function addressOf(request: IncomingMessage): string {
     const direct: string = request.socket.remoteAddress ?? "unknown";
     const forwarded: string | string[] | undefined = request.headers["cf-connecting-ip"];
-    const viaTunnel: boolean = direct === "127.0.0.1" || direct === "::1" || direct === "::ffff:127.0.0.1";
-    return viaTunnel === true && typeof forwarded === "string" && isIP(forwarded) !== 0 ? forwarded : direct;
+    return cameThroughTunnel(direct) === true && typeof forwarded === "string" && isIP(forwarded) !== 0 ? forwarded : direct;
+}
+
+/** Requests refused since the last log line, by country. No addresses, nothing else. */
+const refusedCounts: Map<string, number> = new Map();
+
+/** How often those counts are logged. */
+const REFUSED_LOG_MILLISECONDS: number = 3600000;
+
+setInterval(() => {
+    if (refusedCounts.size > 0) {
+        console.warn(`${new Date().toISOString()} [geo] refused: ${[...refusedCounts].map(([country, count]) => `${country} ${count}`).join(", ")}`);
+    }
+    refusedCounts.clear();
+}, REFUSED_LOG_MILLISECONDS).unref();
+
+/**
+ * Whether this request is from somewhere the site can't be offered, counting it if so.
+ * @param request the request.
+ * @returns true when it must be turned away.
+ */
+function isRefusedRegion(request: IncomingMessage): boolean {
+    const { rule, country } = regionRule(request.headers, request.socket.remoteAddress);
+    if (rule !== "refused") {
+        return false;
+    }
+    refusedCounts.set(country, (refusedCounts.get(country) ?? 0) + 1);
+    return true;
 }
 
 /** Tries at a code each address gets per hour. */
@@ -289,6 +316,11 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
         response.writeHead(301, { location: `${PUBLIC_ORIGIN}${request.url ?? "/"}` }).end();
         return;
     }
+    if (isRefusedRegion(request) === true) {
+        response.setHeader("content-security-policy", "default-src 'none'");
+        response.writeHead(451, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(REFUSED_PAGE);
+        return;
+    }
     const path: string = (request.url ?? "/").split("?")[0] ?? "/";
     if (path === "/pass" && request.method === "POST") {
         servePass(request, response);
@@ -308,7 +340,7 @@ const sockets: WebSocketServer = new WebSocketServer({
     server,
     maxPayload: MAX_MESSAGE_BYTES,
     // Scripts send no Origin and could fake one anyway, and they're held to the same limits. This stops other websites using their visitors' browsers.
-    verifyClient: (info: { origin?: string }) => info.origin === undefined || info.origin === PUBLIC_ORIGIN,
+    verifyClient: (info: { origin?: string; req: IncomingMessage }) => isRefusedRegion(info.req) === false && (info.origin === undefined || info.origin === PUBLIC_ORIGIN),
 });
 
 /** Sockets that answered the last heartbeat. */
@@ -339,6 +371,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         return;
     }
     socket.on("close", () => { limits.closeSocket(address); });
+    const noPaintings: boolean = regionRule(request.headers, request.socket.remoteAddress).rule === "noPaintings";
     const url: URL | null = URL.canParse(request.url ?? "/", "http://room") === true ? new URL(request.url ?? "/", "http://room") : null;
     if (url === null) {
         socket.close(1008, "bad address");
@@ -362,6 +395,9 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             turnAway(socket, "noRoomsFree");
             return;
         }
+        if (noPaintings === true) {
+            room.stopPaintings();
+        }
         room.attachScreen(socket);
         return;
     }
@@ -370,6 +406,9 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
             limits.codeMissed(address);
             turnAway(socket, "unknownRoom");
             return;
+        }
+        if (noPaintings === true) {
+            existing.stopPaintings();
         }
         existing.attachPhone(socket);
         return;

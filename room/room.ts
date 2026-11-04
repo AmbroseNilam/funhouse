@@ -442,6 +442,8 @@ export class Room implements HostStage, AgentHost {
     public readonly payer: string;
     /** The last time a person did something here. Guests and agents don't count, so they can't keep a room spending. */
     private lastPersonAt: number = Date.now();
+    /** True once someone joined from where paintings can't be offered. */
+    private paintingsStopped: boolean = false;
     private readonly joinUrl: string;
     private readonly players: Map<string, Player> = new Map();
     private readonly screens: Set<WebSocket> = new Set();
@@ -651,6 +653,11 @@ export class Room implements HostStage, AgentHost {
      */
     private onAccount<Arguments extends unknown[]>(callback: (...values: Arguments) => void): (...values: Arguments) => void {
         return (...values: Arguments): void => { withPayer(this.payer, () => { callback(...values); }); };
+    }
+
+    /** Keeps this room from painting from now on; games already carry on without a picture. */
+    public stopPaintings(): void {
+        this.paintingsStopped = true;
     }
 
     /**
@@ -2444,7 +2451,7 @@ export class Room implements HostStage, AgentHost {
      * @param prompt what to draw.
      */
     private draw(id: string, prompt: string): void {
-        if (DRAWING_ON === false || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
+        if (DRAWING_ON === false || this.paintingsStopped === true || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
             return;
         }
         this.drawingsAsked += 1;
