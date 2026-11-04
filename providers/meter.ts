@@ -225,9 +225,18 @@ export function withPayer<Result>(payer: string, work: () => Result): Result {
  * @returns the keyed hash.
  */
 export function payerOf(address: string): string {
+    return createHmac("sha256", today().salt).update(addressBlock(address)).digest("hex").slice(0, 32);
+}
+
+/**
+ * What one person's address comes to: an IPv4 address as it is, or an IPv6 address's /64, since one
+ * home or phone can use any address in its block.
+ * @param address the address.
+ * @returns the block.
+ */
+export function addressBlock(address: string): string {
     const plain: string = address.replace(/^::ffff:/, "");
-    const block: string = plain.includes(":") === true ? expandedIpv6(plain).slice(0, 4).join(":") : plain;
-    return createHmac("sha256", today().salt).update(block).digest("hex").slice(0, 32);
+    return plain.includes(":") === true ? expandedIpv6(plain).slice(0, 4).join(":") : plain;
 }
 
 /** Writes an IPv6 address out in full, so one block always hashes the same. */

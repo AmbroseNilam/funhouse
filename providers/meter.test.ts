@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, test } from "node:test";
-import { charge, flushSpend, mayCharge, payerOf, redeemPass, resetMeterForTest, spendSummary, stageOf, withPayer } from "./meter.ts";
+import { addressBlock, charge, flushSpend, mayCharge, payerOf, redeemPass, resetMeterForTest, spendSummary, stageOf, withPayer } from "./meter.ts";
 
 beforeEach(() => {
     resetMeterForTest();
@@ -103,4 +103,11 @@ test("limits off allows everything", () => {
     process.env.COST_LIMITS = "0";
     assert.equal(mayCharge("image"), true);
     assert.equal(stageOf("anyone"), 0);
+});
+
+test("every limit can count an IPv6 /64 as one address, and leaves IPv4 alone", () => {
+    assert.equal(addressBlock("2001:db8:1:2:aaaa::1"), addressBlock("2001:0db8:1:2:bbbb::9"));
+    assert.notEqual(addressBlock("2001:db8:1:2::1"), addressBlock("2001:db8:1:3::1"));
+    assert.equal(addressBlock("::ffff:203.0.113.5"), "203.0.113.5");
+    assert.equal(payerOf(addressBlock("2001:db8:1:2::1")), payerOf("2001:db8:1:2::1"));
 });

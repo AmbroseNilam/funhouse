@@ -7,10 +7,13 @@ import { log } from "./log.ts";
 import { makeRoomCode, Room } from "./room.ts";
 
 /** Most rooms open at once on this server. A room spends nothing until it's used, so open tabs mustn't lock anyone out. */
-const MAX_ROOMS: number = 32;
+const MAX_ROOMS: number = Number(process.env.ROOM_LIMIT ?? "") || 32;
 
 /** How long a room may sit with nobody in it before it closes. */
 const EMPTY_ROOM_MILLISECONDS: number = 300000;
+
+/** How long a room nobody ever sat in may stay after its screen has gone: long enough for a reload. */
+const NEVER_SEATED_MILLISECONDS: number = 60000;
 
 /** How long a screen may sit with no players before the room closes anyway; a TV left on mustn't hold one forever. */
 const NO_PLAYERS_MILLISECONDS: number = 900000;
@@ -126,7 +129,7 @@ export class RoomDirectory {
             if (room.isEmpty() === true) {
                 this.emptySince.set(code, this.emptySince.get(code) ?? now);
             }
-            const emptyLongEnough: boolean = now - (this.emptySince.get(code) ?? now) >= EMPTY_ROOM_MILLISECONDS;
+            const emptyLongEnough: boolean = now - (this.emptySince.get(code) ?? now) >= (room.neverSeated() === true ? NEVER_SEATED_MILLISECONDS : EMPTY_ROOM_MILLISECONDS);
             if (emptyLongEnough === false && now - noPlayersSince < NO_PLAYERS_MILLISECONDS) {
                 continue;
             }

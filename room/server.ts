@@ -16,7 +16,7 @@ import { showcaseShelf } from "../studio/shelf.ts";
 import { serveAgent } from "./agent.ts";
 import { RoomDirectory } from "./directory.ts";
 import { roomOptions, type RoomOptions } from "./room-options.ts";
-import { flushSpend, isOwnerCode, payerOf, redeemPass, spendSummary, stageOf, withPayer } from "../providers/meter.ts";
+import { addressBlock, flushSpend, isOwnerCode, payerOf, redeemPass, spendSummary, stageOf, withPayer } from "../providers/meter.ts";
 import { cameThroughTunnel, REFUSED_PAGE, regionRule } from "./geo.ts";
 import { AddressLimits, BUDGET, RateWindow } from "./limits.ts";
 import type { Room } from "./room.ts";
@@ -112,7 +112,8 @@ setInterval(() => { limits.sweep(); }, LIMITS_SWEEP_MILLISECONDS).unref();
 function addressOf(request: IncomingMessage): string {
     const direct: string = request.socket.remoteAddress ?? "unknown";
     const forwarded: string | string[] | undefined = request.headers["cf-connecting-ip"];
-    return cameThroughTunnel(direct) === true && typeof forwarded === "string" && isIP(forwarded) !== 0 ? forwarded : direct;
+    // Every limit counts an IPv6 /64 as one, or a single home could take every room by changing its last digits.
+    return addressBlock(cameThroughTunnel(direct) === true && typeof forwarded === "string" && isIP(forwarded) !== 0 ? forwarded : direct);
 }
 
 /** Requests refused since the last log line, by country. No addresses, nothing else. */
@@ -385,7 +386,10 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
     const existing: Room | undefined = directory.find(url.searchParams.get("room") ?? "");
     if (url.pathname === "/ws/screen") {
         // A screen asking for a room that's gone is told so, or it would end up in a new room with its phones left behind.
-        if (existing === undefined && (url.searchParams.get("room") ?? "") !== "") {
+        // Wrong codes count here as they do for phones, or this would be a free way to try every code.
+        const wantsRoom: boolean = (url.searchParams.get("room") ?? "") !== "";
+        if (wantsRoom === true && (existing === undefined || limits.isBlocked(address) === true)) {
+            limits.codeMissed(address);
             turnAway(socket, "roomClosed");
             return;
         }
