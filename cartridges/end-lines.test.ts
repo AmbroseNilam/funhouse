@@ -31,6 +31,7 @@ describe("end screens", () => {
         const started = game.init(players, {});
         const items = Array.from({ length: QUESTION_COUNT }, (_unused: unknown, index: number) => ({ question: `Q${index} what?`, answer: `A${index}` }));
         let state = game.onEvent(started.state, { type: "contentReady", at: 0, text: JSON.stringify(items) }).state;
+        state = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
         state = game.onEvent(state, { type: "speechEnded", at: 0, playerId: "a", text: "A0" }).state;
         state = game.onEvent(state, { type: "hostRuled", at: 0, ruling: "right", detail: "", playerId: "a" }).state;
         state = game.onEvent(state, { type: "hostRuled", at: 0, ruling: "wrong", detail: "", playerId: "b" }).state;
@@ -111,20 +112,24 @@ describe("Quizmaster's four answers", () => {
     it("locks a tap, scores it, and waits for everyone before moving on", () => {
         const { game, state } = inQuestion();
         const right: number = state.questions[0]?.choices?.indexOf("Right0") ?? -1;
-        const first = game.apply(state, "a", `answer:${right}`);
-        assert.equal(first.state.scores.a, 2);
+        const first = game.apply(state, "a", `answer:0:${right}`);
+        assert.equal(first.state.scores.a, undefined, "the score waits for the reveal, so it can't give the answer away");
+        assert.equal(JSON.stringify(game.publicScene(first.state)).includes("Sam 2"), false);
         assert.equal(first.state.index, 0, "still waiting for Alex");
-        const again = game.apply(first.state, "a", "answer:0");
+        const again = game.apply(first.state, "a", "answer:0:0");
         assert.deepEqual(again.state.scores, first.state.scores, "one try");
         const wrong: number = state.questions[0]?.choices?.indexOf("Bad0a") ?? -1;
-        const second = game.apply(first.state, "b", `answer:${wrong}`);
+        const second = game.apply(first.state, "b", `answer:0:${wrong}`);
         assert.equal(second.state.index, 1);
+        assert.equal(second.state.scores.a, 2);
+        const stale = game.apply(second.state, "a", `answer:0:${right}`);
+        assert.deepEqual(stale.state.answered, [], "a late tap from the last question doesn't count on this one");
         assert.match(JSON.stringify(second.facts), /Sam got it right/);
     });
 
     it("ignores a tap off the list, and shuffles the right answer's place", () => {
         const { game, state } = inQuestion();
-        assert.equal(game.apply(state, "a", "answer:9").state, state);
+        assert.equal(game.apply(state, "a", "answer:0:9").state, state);
         const spots: Set<number> = new Set();
         for (let attempt = 0; attempt < 40; attempt += 1) {
             const mixed = createQuizmaster("Movies");
@@ -132,6 +137,15 @@ describe("Quizmaster's four answers", () => {
             spots.add(after.questions[0]?.choices?.indexOf("Right0") ?? -1);
         }
         assert.equal(spots.size, 4);
+    });
+
+    it("doesn't take speech begun on the last question as an answer to this one", () => {
+        const { game, state } = inQuestion();
+        const heardLate = game.onEvent(state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
+        assert.deepEqual(heardLate.state.heard, []);
+        const started = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" });
+        const heard = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "Paris" });
+        assert.deepEqual(heard.state.heard, ["a"]);
     });
 
     it("goes back to answers out loud with the switch off", () => {
