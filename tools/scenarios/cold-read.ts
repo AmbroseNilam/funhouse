@@ -12,7 +12,7 @@
 //         guess, and the table taps that it was wrong.
 //
 // Run it against the stand-in model, which needs no key:
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 //   STUB_PLAN=win node tools/stub-host-model.ts              (STUB_PLAN=lose for SCENARIO=lose)
 //   ROOM_STUDIO=1 node tools/scenarios/cold-read.ts          (in a third terminal)
 // or against the real host on a machine with model keys, leaving out the first two commands' variables.

@@ -13,7 +13,7 @@
 // ROOM_STUDIO=1 makes the fake screen open its room with ?studio=1, the only kind of room whose
 // shelf has Lonely Clues. With model keys, the real content check and host run, and the host's
 // ruling of the spoken guess is the real model's. With no keys, run tools/stub-model.ts first and
-// start the room with META_BASE_URL=http://localhost:8750/v1 META_MODEL_API_KEY=stub, which
+// start the room with META_BASE_URL=http://localhost:8750/v1 META_MODEL_API_KEY=<any text>, which
 // stands in for both; say so when reporting the run. A pass prints PASS as its last line and takes
 // about five minutes, mostly the rounds' own clocks.
 //

@@ -10,7 +10,7 @@
 // Run it with model keys, or without them against the stand-in model:
 //   GAME_ROOM_TEXT_ONLY=1 npm run room                                                  (with keys)
 //   node tools/fake-meta.ts, then in the room's terminal:
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 //   ROOM_STUDIO=1 node tools/scenarios/blank-truth.ts                                    (in a third terminal)
 // Against the stand-in model the true answers are known to the script (giraffe, then murder); with
 // real keys they are not, so the checks that need them are skipped with a note. A pass prints PASS
