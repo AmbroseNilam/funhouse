@@ -19,7 +19,7 @@ import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
 import { bluffPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn } from "../../rehearse.ts";
-import { BLUFF_PICK_PREFIX, createBluffGame, isUsableFact, readFacts, type BluffState } from "./bluff.ts";
+import { BLUFF_PICK_PREFIX, createBluffGame, isUsableFact, readFacts, type BluffFact, type BluffState } from "./bluff.ts";
 
 /** Four at the table. */
 const FOUR: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
@@ -135,6 +135,12 @@ function truthIndex(state: BluffState): number {
 }
 
 describe("the blank truth: facts", () => {
+    it("keeps a fact's source only when the search really returned that site", () => {
+        const raw: string = "Honey never ____ | spoils | https://example.org/honey\nOctopuses have three ____ | hearts | https://made-up.example/";
+        const facts: BluffFact[] = readFacts(raw, ["https://www.example.org/other"]);
+        assert.deepEqual(facts.map((fact: BluffFact) => fact.source), ["example.org", undefined]);
+    });
+
     it("reads only facts with one blank, a short answer, clean text and no answer in the statement", () => {
         assert.deepEqual(readFacts(WRITTEN).map((fact) => fact.answer), ["giraffe", "off", "murder"]);
         assert.equal(isUsableFact({ statement: "No blank here", answer: "x" }), false);

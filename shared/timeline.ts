@@ -26,7 +26,7 @@ export type RoomEvent =
     | { type: "hostDrew"; at: number; prompt: string; src: string }
     | { type: "fact"; at: number; fact: ScopedFact }
     | { type: "hostRuled"; at: number; ruling: string; detail: string; playerId: string | null }
-    | { type: "contentReady"; at: number; text: string }
+    | { type: "contentReady"; at: number; text: string; sources?: string[] }
     | { type: "answersMerged"; at: number; id: string; groups: AnswerGroup[] }
     | { type: "drawingReady"; at: number; id: string; src: string };
 

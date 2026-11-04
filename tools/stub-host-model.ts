@@ -5,7 +5,7 @@
 // questions are gone. It is not Muse Spark: a pass against it proves the room, the shelf and the
 // game's rules and screens work together, and says nothing about the real host's questions or wording.
 //
-//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=stand-in GAME_ROOM_TEXT_ONLY=1 npm run room
+//   META_BASE_URL=http://localhost:8741/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
 //   STUB_PLAN=win node tools/stub-host-model.ts          (win: guesses right; lose: never does)
 //   ROOM_STUDIO=1 node tools/scenarios/cold-read.ts
 //

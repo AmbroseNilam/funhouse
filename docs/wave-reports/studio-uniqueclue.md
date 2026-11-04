@@ -79,7 +79,7 @@ logs no request content.
 To repeat the run:
 
     node tools/stub-model.ts &
-    META_BASE_URL=http://localhost:8750/v1 META_MODEL_API_KEY=stub GAME_ROOM_TEXT_ONLY=1 npm run room
+    META_BASE_URL=http://localhost:8750/v1 META_MODEL_API_KEY=<any text> GAME_ROOM_TEXT_ONLY=1 npm run room
     ROOM_STUDIO=1 node tools/scenarios/lonely-clues.ts
 
 On the Mac with keys, drop the stand-in and the two `META_` variables; the same scenario then runs

@@ -3,7 +3,7 @@
 // rules stay the referee. The host hears facts and may only make rulings the phase allows.
 
 import type { Turn } from "../shared/turn.ts";
-import type { Cartridge, CartridgeManifest, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
+import type { ContentGrounding, Cartridge, CartridgeManifest, CartridgePlayer, PhaseSpec, Step } from "../shared/cartridge.ts";
 import type { Control, ListeningMode } from "../shared/controls.ts";
 import type { Scene } from "../shared/scene.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
@@ -19,7 +19,7 @@ export interface GameStage {
     /** The screen or phones have something new to show. */
     changed(): void;
     /** Asks the host's model for content the rules need; the result arrives as contentReady. */
-    requestContent(prompt: string): void;
+    requestContent(prompt: string, grounding?: ContentGrounding): void;
     /** Asks which answers say the same thing; the result arrives as answersMerged. */
     requestMerge(id: string, question: string, answers: string[]): void;
     /** Draws a picture; the result arrives as drawingReady. */
@@ -311,7 +311,7 @@ export class GameSession<State> implements RunningGame {
             this.startTimer(timerId, seconds);
         }
         if (step.contentRequest !== undefined) {
-            this.stage.requestContent(step.contentRequest);
+            this.stage.requestContent(step.contentRequest, step.contentGrounding);
         }
         if (step.mergeRequest !== undefined) {
             this.stage.requestMerge(step.mergeRequest.id, step.mergeRequest.question, step.mergeRequest.answers);

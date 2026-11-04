@@ -26,7 +26,7 @@ const WARNING_DOORS: number[] = [5, 1];
 const SHOWN_QUESTION_CHARACTERS: number = 90;
 
 /** Categories, each with secrets most adults know, safe for a family table and easy to paint. */
-const CATEGORIES: { name: string; secrets: string[] }[] = [
+export const CATEGORIES: { name: string; secrets: string[] }[] = [
     { name: "an animal", secrets: ["Platypus", "Giraffe", "Penguin", "Hedgehog", "Octopus", "Armadillo", "Flamingo", "Sloth", "Chameleon", "Walrus", "Beaver", "Seahorse", "Porcupine", "Toucan", "Otter", "Camel", "Skunk", "Jellyfish", "Moose", "Goat"] },
     { name: "something in a kitchen", secrets: ["Whisk", "Colander", "Rolling pin", "Toaster", "Oven mitt", "Corkscrew", "Ladle", "Cheese grater", "Spatula", "Kettle", "Tin opener", "Egg timer", "Tongs", "Blender", "Cutting board", "Measuring cup", "Pepper grinder", "Teapot", "Frying pan", "Ice cube tray"] },
     { name: "a famous landmark", secrets: ["Eiffel Tower", "Great Wall of China", "Statue of Liberty", "Big Ben", "Taj Mahal", "Colosseum", "Stonehenge", "Golden Gate Bridge", "Leaning Tower of Pisa", "Pyramids of Giza", "Mount Rushmore", "Sydney Opera House", "Machu Picchu", "Niagara Falls", "Christ the Redeemer", "Grand Canyon", "Acropolis", "CN Tower", "Mount Fuji", "Hollywood Sign"] },

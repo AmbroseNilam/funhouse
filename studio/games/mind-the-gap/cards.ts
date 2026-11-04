@@ -100,9 +100,9 @@ export const CARDS: LineCard[] = [
     },
     {
         id: "vaccine",
-        name: "The first smallpox vaccination is given",
-        short: "the first vaccination",
-        tag: "First vaccine",
+        name: "Edward Jenner gives his first smallpox vaccination",
+        short: "Jenner's first vaccination",
+        tag: "Jenner's vaccine",
         year: 1796,
         source: "Encyclopaedia Britannica, Edward Jenner, first vaccination in May 1796",
         surprise: null,
