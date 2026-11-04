@@ -2,5 +2,6 @@
     "id": "offByAMile",
     "kit": "estimate",
     "level": "visible",
+    "guests": "model",
     "order": 80
 }

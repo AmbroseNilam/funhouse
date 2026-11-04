@@ -2,5 +2,6 @@
     "id": "underTheCup",
     "kit": "tap",
     "level": "visible",
+    "guests": "model",
     "order": 40
 }

@@ -12,6 +12,11 @@ const KEEP_PLAYING: string = "Keep playing";
 const HOW_TO_PLAY: string = "How to play";
 const LEAVE_GAME: string = "Leave this game";
 
+/** The game page's rows for AI guests, and its way back. */
+const ADD_GUEST: string = "Add an AI guest";
+const REMOVE_GUEST: string = "Remove an AI guest";
+const BACK_TO_SHELF: string = "Back to the shelf";
+
 /** Rows once a game has been decided. */
 const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
 
@@ -39,6 +44,12 @@ export interface ShellStage {
     edge(): void;
     /** Anything on the shell changed. */
     changed(): void;
+    /** Whether another AI guest could sit down now. */
+    mayAddGuest(): boolean;
+    /** Seats another AI guest. */
+    addGuest(): void;
+    /** Sends the newest AI guest home. */
+    removeGuest(): void;
 }
 
 /** One room's console. */
@@ -114,7 +125,8 @@ export class Shell {
 
     /** People came or went; makes sure someone can drive. */
     public seatsChanged(): void {
-        const seats: Omit<Seat, "driving">[] = this.stage.seats();
+        this.focus = this.screen === "game" ? Math.max(0, Math.min(this.focus, this.itemCount() - 1)) : this.focus;
+        const seats: Omit<Seat, "driving">[] = this.stage.seats().filter((seat) => seat.guest === false);
         if (seats.some((seat) => seat.playerId === this.driverId) === true) {
             return;
         }
@@ -219,10 +231,10 @@ export class Shell {
      */
     private menu(): string[] {
         if (this.screen === "game") {
-            return [this.currentGame()?.blocked === null ? "Play" : "Can't start yet", "Back to the shelf"];
+            return [this.currentGame()?.blocked === null ? "Play" : "Can't start yet", ...this.guestRows(), BACK_TO_SHELF];
         }
         if (this.screen === "players") {
-            return ["Back to the shelf"];
+            return [BACK_TO_SHELF];
         }
         if (this.screen === "pause") {
             return [KEEP_PLAYING, HOW_TO_PLAY, ...(this.currentGame()?.pauseActions ?? []).map((action) => action.label), LEAVE_GAME];
@@ -231,6 +243,17 @@ export class Shell {
             return ["Back"];
         }
         return this.isDecided() === true ? GAME_OVER_MENU : [];
+    }
+
+    /**
+     * The game page's rows for AI guests. A game that can't have them can still send them home, so
+     * the way past "remove them first" is on the same page.
+     * @returns the labels.
+     */
+    private guestRows(): string[] {
+        const seated: boolean = this.stage.seats().some((seat) => seat.guest === true);
+        const mayAdd: boolean = this.currentGame()?.guestsWelcome === true && this.stage.mayAddGuest() === true;
+        return [...(mayAdd === true ? [ADD_GUEST] : []), ...(seated === true ? [REMOVE_GUEST] : [])];
     }
 
     /**
@@ -322,8 +345,20 @@ export class Shell {
 
     /** Play, or back, on a game's page. */
     private selectOnGamePage(): void {
-        if (this.focus === 1) {
+        const row: string | undefined = this.menu()[this.focus];
+        if (row === BACK_TO_SHELF) {
             this.back();
+            return;
+        }
+        if (row === ADD_GUEST) {
+            this.stage.addGuest();
+            this.focus = this.currentGame()?.blocked === null ? 0 : this.focus;
+            this.stage.changed();
+            return;
+        }
+        if (row === REMOVE_GUEST) {
+            this.stage.removeGuest();
+            this.stage.changed();
             return;
         }
         const game: ShelfGame | undefined = this.currentGame();

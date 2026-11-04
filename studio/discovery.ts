@@ -6,6 +6,7 @@
 // naming the culprit, so one bad folder can't stop a server that also runs the plain shelf. A test holds
 // the real tree to an empty `skipped`, so a broken game fails the checks long before it reaches a server.
 
+import type { GuestPlay } from "../room/guest.ts";
 import { existsSync, readdirSync, readFileSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -20,6 +21,8 @@ export interface GameMeta {
     id: string;
     kit: string;
     level: GameLevel;
+    /** How AI guests play this game; left out, the game isn't offered to a table with guests. */
+    guests?: GuestPlay;
     /** Why the game is not yet visible; required for testing and held. */
     reason?: string;
     /** Where it stands on the shelf, lowest first; games without one come last, by id. */
@@ -101,7 +104,13 @@ function gameMetaOf(raw: Record<string, unknown>, folder: string): GameMeta {
     if (raw.order !== undefined && typeof raw.order !== "number") {
         throw new Error(`Game ${raw.id} (${folder}) has an "order" that is not a number.`);
     }
+    if (raw.guests !== undefined && raw.guests !== "model" && raw.guests !== "random") {
+        throw new Error(`Game ${raw.id} (${folder}) has "guests" that is not model or random.`);
+    }
     const meta: GameMeta = { id: raw.id, kit: raw.kit, level: raw.level as GameLevel };
+    if (raw.guests !== undefined) {
+        meta.guests = raw.guests;
+    }
     if (typeof raw.reason === "string") {
         meta.reason = raw.reason;
     }

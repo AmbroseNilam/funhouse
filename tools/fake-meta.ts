@@ -58,6 +58,9 @@ const FACT_POOL: readonly string[] = [
 /** What the stand-in "machine" writes when asked for an answer, polished on purpose so the game's style trimming has work to do. */
 export const GHOST_ANSWER: string = "Probably a goose, honestly.";
 
+/** What the stand-in types for an AI guest. */
+const GUEST_WORDS: readonly string[] = ["meadow", "button", "ribbon", "pepper", "violin", "marble", "anchor", "kettle", "pocket", "saddle", "thimble", "orchard"];
+
 /** Words the stand-in treats as meaning the same, so the game's merge step has something to find. */
 const SYNONYMS: readonly (readonly string[])[] = [["giraffe", "camelopard"], ["napoleon", "bonaparte"], ["legs", "limbs"], ["murder", "homicide"]];
 
@@ -116,6 +119,28 @@ function hostReply(user: string): string {
 }
 
 /**
+ * What an AI guest's model says: a stand-in that always gives a legal shape of answer, and now and
+ * then a useless one, so the guest's fallback gets played too.
+ * @param user the guest's prompt.
+ * @returns the reply.
+ */
+function guestReply(user: string): string {
+    if (Math.random() < 0.1) {
+        return "I would rather not say.";
+    }
+    const asked: string = user.slice(user.indexOf("YOUR MOVE"));
+    const count: number = [...asked.matchAll(/^\d+\. /gm)].length;
+    if (count > 0) {
+        return String(1 + Math.floor(Math.random() * count));
+    }
+    const range: RegExpExecArray | null = /a number from (-?[\d.]+) to (-?[\d.]+)/.exec(asked);
+    if (range !== null) {
+        return String((Number(range[1]) + Number(range[2])) / 2);
+    }
+    return GUEST_WORDS[Math.floor(Math.random() * GUEST_WORDS.length)] ?? "meadow";
+}
+
+/**
  * Answers the filter's classifier.
  * @param user the request's user message, JSON with the line.
  * @returns the reply body.
@@ -141,6 +166,15 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
             console.warn("verdict");
             response.writeHead(200, { "content-type": "application/json" });
             response.end(JSON.stringify(verdictFor(user)));
+            return;
+        }
+        if (system.includes("an AI guest playing") === true) {
+            console.warn("guest");
+            setTimeout(() => {
+                response.writeHead(200, { "content-type": "text/event-stream" });
+                response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: guestReply(user) } }] })}\n\n`);
+                response.end("data: [DONE]\n\n");
+            }, THINK_MILLISECONDS);
             return;
         }
         const writing: boolean = system.startsWith("You write content");

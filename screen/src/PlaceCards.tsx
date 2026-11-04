@@ -2,6 +2,7 @@
 // colour. The card itself says how they are, so the table stays quiet: it lifts and shows their
 // full name while they talk or touch their phone, lies flat with a tick once they've gone, and
 // fades when they're away or their phone is down. Anyone who's only watching is counted, not listed.
+// An AI guest's card always says so, whatever else its name is cut down to.
 
 import type { ReactElement } from "react";
 import type { Seat } from "../../shared/shell.ts";
@@ -49,6 +50,7 @@ export function PlaceCards(props: { seats: Seat[]; turn: Turn | null; touchedId:
                 <li key={seat.playerId} className={cardState(seat, props.turn, props.touchedId === seat.playerId)} style={{ background: seat.colour }}>
                     <span className="short-name">{seat.name.split(" ")[0]}</span>
                     <span className="full-name">{seat.name}</span>
+                    {seat.guest === true ? <small className="guest-mark">AI guest</small> : null}
                     <i className="tick" aria-hidden="true" />
                 </li>
             ))}

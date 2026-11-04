@@ -2,5 +2,6 @@
     "id": "strayWord",
     "kit": "oddword",
     "level": "visible",
+    "guests": "model",
     "order": 120
 }

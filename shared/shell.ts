@@ -20,6 +20,8 @@ export interface ShelfGame {
     pauseActions: { id: string; label: string }[];
     /** Why it can't start right now, or null when it can. */
     blocked: string | null;
+    /** True when AI guests may sit in on it. */
+    guestsWelcome: boolean;
 }
 
 /** A person at the table. */
@@ -39,6 +41,8 @@ export interface Seat {
     phoneDown: boolean;
     /** True when they joined after this game began, so they're only watching it. */
     watching: boolean;
+    /** True for an AI guest, which the TV always marks as one. */
+    guest: boolean;
 }
 
 /** Everything the TV needs to draw the console. */

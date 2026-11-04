@@ -2,5 +2,6 @@
     "id": "whoFits",
     "kit": "tap",
     "level": "visible",
+    "guests": "random",
     "order": 30
 }

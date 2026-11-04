@@ -168,6 +168,7 @@
     .place-cards li:nth-child(even) { rotate: 1deg; }
     .place-cards li.recording { outline: calc(6 * var(--u)) solid var(--lamp); }
     .place-cards .short-name { display: block; max-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
+    .place-cards .guest-mark { display: block; font-size: calc(19 * var(--u)); font-weight: 500; line-height: 1.1; white-space: nowrap; }
     .place-cards.crowded li { padding: calc(8 * var(--u)) calc(10 * var(--u)); font-size: calc(28 * var(--u)); }
     .place-cards.crowded .short-name { max-width: 6ch; }
     .place-cards .full-name { display: none; max-width: calc(620 * var(--u)); overflow: hidden; text-overflow: ellipsis; }
