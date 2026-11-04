@@ -138,6 +138,7 @@
     .pad-screen.dictating .line strong, .pad-screen.dictating .hearing { text-shadow: none; }
     .version-line { display: block; margin-top: 8px; text-align: center; color: var(--paper-ink); opacity: 0.6; font-size: 13px; }
     .update-note { position: absolute; left: 50%; top: calc(56px + env(safe-area-inset-top)); translate: -50% 0; min-height: 44px; padding: 4px 12px; background: var(--paper); color: var(--paper-ink); font-size: 15px; white-space: nowrap; z-index: 5; }
+    .mic-once { min-height: 0; padding: 8px 12px; white-space: normal; width: max-content; max-width: 90%; text-align: center; margin: 0; pointer-events: none; }
     .start-lines { margin: 0; padding-left: 22px; font-size: 18px; line-height: 1.3; }
     .start-lines li + li { margin-top: 8px; }
     .status { position: absolute; left: 20px; right: 20px; bottom: calc(18px + env(safe-area-inset-bottom)); text-align: center; font-size: 16px; line-height: 1.3; color: color-mix(in srgb, var(--paper) 85%, transparent); pointer-events: none; }
@@ -175,13 +176,13 @@
     /* While someone types, screens fit the part of the page the keyboard leaves showing (see keyboard.ts).
        A sheet with a box arrives in place: a box still sliding in from off-screen when it takes focus
        is why iOS left it under the keyboard. */
-    .sheet { max-height: 100%; overflow-y: auto; box-shadow: 0 80px 0 var(--paper); }
+    .sheet { max-height: 100%; overflow-y: auto; }
     .sheet:has(input) { animation: none; }
     [data-typing] .sheet-backdrop,
     [data-typing] .note-screen,
     [data-typing] .pad-screen:not(:has(.sheet-backdrop)) { top: var(--visible-top); bottom: auto; height: var(--visible-height); }
     [data-typing] .note-screen { justify-content: flex-start; overflow-y: auto; padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: 12px; }
-    [data-typing] .sheet { padding-bottom: 12px; overflow: visible; }
+    [data-typing] .sheet { padding-bottom: 12px; overflow: visible; box-shadow: 0 80px 0 var(--paper); }
     [data-typing] .has-private .surface,
     [data-typing] .has-private .talk-row { display: none; }
 }

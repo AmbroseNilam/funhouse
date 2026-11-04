@@ -48,7 +48,7 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
   scrolling waveform, live words and a small Stop, and stops itself on silence, at a time limit, or when
   the page is hidden. It waits while the host speaks. A phone can choose Tap or Hold in its settings, kept
   in that browser, and `?tap=0` or `?hold=1` opens a room with holding only.
-- **Pre-roll:** the mic stays open from join and keeps the last 320ms. On hold, send that first, so
+- **Pre-roll:** the mic opens on the first talk of a session, so nobody who taps or types is ever asked, then stays open and keeps the last 320ms. Nothing is sent until someone talks. On hold, send that first, so
   first words survive. Send 300ms more after release.
 - **Corners:** back top-left and phone menu top-right, 60pt. Touches starting there never swipe.
   Back goes to the parent; in a game it pauses.

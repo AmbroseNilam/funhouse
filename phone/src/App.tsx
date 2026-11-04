@@ -17,7 +17,8 @@ import { readServerBuild } from "./freshness.ts";
 import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
 import { drawWave } from "./talkWave.ts";
 import { micSteps } from "./micHelp.ts";
-import { microphoneAllowed, startMicrophone, type MicrophoneCapture } from "./microphone.ts";
+import { shouldExplainMicPrompt } from "./micHelp.ts";
+import { startMicrophone, type MicrophoneCapture } from "./microphone.ts";
 import { followVoice } from "./talkGlow.ts";
 import { keepScreenOn } from "./wakeLock.ts";
 
@@ -143,6 +144,9 @@ const ROOM_CODE_LENGTH: number = 4;
 /** True when this phone has a share sheet. */
 /** How long after a game ends the home screen offer waits. */
 const INSTALL_OFFER_DELAY_MILLISECONDS: number = 4000;
+
+/** How long the note about repeat microphone prompts stays up. */
+const MIC_NOTE_MILLISECONDS: number = 8000;
 
 const CAN_SHARE: boolean = "share" in navigator && "canShare" in navigator;
 
@@ -576,6 +580,8 @@ export function App(): ReactElement {
     const waveRef = useRef<HTMLCanvasElement>(null);
     const [tapping, setTapping] = useState<boolean>(false);
     const preRollRef = useRef<ArrayBuffer[]>([]);
+    const holdWaitingRef = useRef<boolean>(false);
+    const [micNote, setMicNote] = useState<boolean>(false);
     const tailTimerRef = useRef<number>(0);
     const surfaceRef = useRef<HTMLDivElement | null>(null);
     const padRef = useRef<PadView | null>(null);
@@ -914,6 +920,10 @@ export function App(): ReactElement {
             });
             send({ type: "micSettings", ...captureRef.current.applied() });
             dispatch({ type: "mic", mic: "ok" });
+            if (shouldExplainMicPrompt(INSTALLED) === true) {
+                setMicNote(true);
+                window.setTimeout(() => { setMicNote(false); }, MIC_NOTE_MILLISECONDS);
+            }
         } catch (error: unknown) {
             dispatch({ type: "mic", mic: error instanceof DOMException && error.name === "NotAllowedError" ? "refused" : "failed" });
         }
@@ -946,21 +956,10 @@ export function App(): ReactElement {
         });
     };
 
-    /**
-     * Readies the microphone on any touch, but only when that can't put up a prompt mid-swipe. Otherwise it
-     * waits for a hold, and after a refusal it waits for the person to ask again.
-     */
+    /** Revives an open microphone on any touch, as iOS can suspend it. It never opens one: only talking does. */
     const wakeMicrophone = (): void => {
         if (captureRef.current !== null) {
             void ensureMicrophone();
-            return;
-        }
-        if (micRef.current === "ok") {
-            void microphoneAllowed().then((allowed: boolean) => {
-                if (allowed === true) {
-                    void ensureMicrophone();
-                }
-            });
         }
     };
 
@@ -1008,10 +1007,22 @@ export function App(): ReactElement {
             setMenu("mic");
             return;
         }
-        tappingRef.current = true;
-        setTapping(true);
-        void ensureMicrophone();
-        startTalking();
+        const begin = (): void => {
+            tappingRef.current = true;
+            setTapping(true);
+            startTalking();
+        };
+        if (captureRef.current !== null) {
+            void ensureMicrophone();
+            begin();
+            return;
+        }
+        // The first talk of a session opens the microphone, and a prompt may sit up for a while, so the recording's clock waits for it.
+        void ensureMicrophone().then(() => {
+            if (captureRef.current !== null) {
+                begin();
+            }
+        });
     };
 
     // A recording nobody is holding has to end itself, so a forgotten one can't keep listening to the room.
@@ -1148,10 +1159,22 @@ export function App(): ReactElement {
                     setMenu("mic");
                     return;
                 }
+                if (captureRef.current === null) {
+                    // A hold still going once the microphone opens starts talking; one ended by a prompt just tries again.
+                    holdWaitingRef.current = true;
+                    void ensureMicrophone().then(() => {
+                        if (holdWaitingRef.current === true && captureRef.current !== null) {
+                            holdWaitingRef.current = false;
+                            startTalking();
+                        }
+                    });
+                    return;
+                }
                 void ensureMicrophone();
                 startTalking();
             },
             holdEnd: (): void => {
+                holdWaitingRef.current = false;
                 if (holdingRef.current === true && tappingRef.current === false) {
                     stopTalking();
                 }
@@ -1178,13 +1201,12 @@ export function App(): ReactElement {
         return (
             <main className="note-screen" data-scrolls>
                 <small className="room-tag">{PRODUCT_NAME} · Room {state.roomCode}</small>
-                <form className="place-card" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; void ensureMicrophone(); dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
+                <form className="place-card" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("name") as HTMLInputElement; pendingNameRef.current = field.value; dispatch({ type: "joining" }); send({ type: "hello", name: field.value }); }}>
                     <label htmlFor="name-field">Who's sitting down?</label>
                     <input id="name-field" name="name" placeholder="Your name" maxLength={24} autoComplete="nickname" autoCapitalize="words" required />
                     <button className="primary" type="submit">Sit down</button>
-                    <button type="submit" className="quiet" onClick={() => { noMicRef.current = true; setNoMic(true); }}>Sit down without a mic</button>
                 </form>
-                <p className="fine">Your browser will ask for the mic. Your phone will show it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
+                <p className="fine">Your phone asks for the mic the first time you talk, then shows it as on while you play. {HOST_NAME} only hears you after you tap to talk or hold to talk.</p>
             </main>
         );
     }
@@ -1339,6 +1361,7 @@ export function App(): ReactElement {
                     <button className="type-instead" onClick={() => { setMenu("type"); }}>Type instead</button>
                 </div>
             ) : null}
+            {micNote === true ? <p className="update-note mic-once" role="status">iPhones ask again each time this app opens.</p> : null}
             {outOfDate === true ? <button className="update-note" onClick={() => { location.reload(); }}>New version available, reload</button> : null}
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
