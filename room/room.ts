@@ -212,6 +212,9 @@ const TEXT_ONLY: boolean = process.env.GAME_ROOM_TEXT_ONLY === "1";
 /** Room for hidden reasoning plus a list of questions or a secret. */
 const CONTENT_TOKEN_LIMIT: number = 2000;
 
+/** False when the server is started with WEB_SEARCH_OFF=1: games then only get content the model writes from memory. */
+const WEB_SEARCH_ON: boolean = process.env.WEB_SEARCH_OFF !== "1";
+
 /** What the model is told when it writes content for a game. */
 const CONTENT_SYSTEM: string = "You write content for a family party game. Keep it suitable for all ages, even if a topic pushes otherwise. Reply with exactly what is asked and nothing else.";
 
@@ -390,6 +393,8 @@ export class Room implements HostStage {
     private nextPlayerNumber: number = 1;
     private caption: Caption | null = null;
     private hostThinking: boolean = false;
+    /** Content being written for the game. The lantern shows it as thinking; nothing else treats the host as busy. */
+    private contentBeingWritten: number = 0;
     private hostMood: HostMood | null = null;
     private lastJoinNoticeAt: number = 0;
     private captionGeneration: number = 0;
@@ -1480,6 +1485,8 @@ export class Room implements HostStage {
         }
         const startedAt: number = Date.now();
         const stopWriting: AbortController = new AbortController();
+        this.contentBeingWritten += 1;
+        this.broadcastHostState();
         const collect = async (): Promise<string> => {
             let text: string = "";
             for await (const delta of streamSpark([{ role: "system", content: CONTENT_SYSTEM }, { role: "user", content: prompt }], { maxTokens: CONTENT_TOKEN_LIMIT, signal: AbortSignal.any([stopWriting.signal, AbortSignal.timeout(CONTENT_TIME_LIMIT_MILLISECONDS)]) })) {
@@ -1493,10 +1500,12 @@ export class Room implements HostStage {
             }
             return "";
         });
-        const content: Promise<SearchedText> = grounding === undefined || BUDGET.spend("spark") === false
+        const content: Promise<SearchedText> = grounding === undefined || WEB_SEARCH_ON === false || BUDGET.spend("spark") === false
             ? written.then((text: string) => ({ text, sources: [] }))
             : this.groundOr(prompt, grounding, written, stopWriting);
         content.then(({ text, sources }: SearchedText) => {
+            this.contentBeingWritten -= 1;
+            this.broadcastHostState();
             log(this.scope(), `content ready in ${Date.now() - startedAt} ms`);
             if (this.game === game) {
                 game?.event({ type: "contentReady", at: Date.now(), text, ...(sources.length > 0 ? { sources } : {}) });
@@ -2489,7 +2498,7 @@ export class Room implements HostStage {
      * @returns the message.
      */
     private hostStateMessage(): RoomToScreenMessage {
-        return { type: "hostState", thinking: this.hostThinking, speaking: this.hostSpeaking, hostName: this.host.persona.name, mood: this.hostMood };
+        return { type: "hostState", thinking: this.hostThinking === true || this.contentBeingWritten > 0, speaking: this.hostSpeaking, hostName: this.host.persona.name, mood: this.hostMood };
     }
 
     /** Tells screens and phones what the host is doing. */
