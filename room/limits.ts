@@ -61,6 +61,15 @@ export class RateWindow {
         this.count += 1;
         return this.count <= this.limit;
     }
+
+    /**
+     * Says how long until another event would be allowed, without counting one.
+     * @returns the wait, or 0 when one is allowed now.
+     */
+    public millisecondsUntilOpen(): number {
+        const remaining: number = this.windowMilliseconds - (Date.now() - this.windowStart);
+        return remaining > 0 && this.count >= this.limit ? remaining : 0;
+    }
 }
 
 /** The whole server's daily spend. */

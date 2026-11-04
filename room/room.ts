@@ -516,7 +516,7 @@ export class Room implements HostStage {
     /** Silences the host and releases the room's voice connection. */
     public close(): void {
         this.game?.stop();
-        this.host.interrupt(false);
+        this.host.close();
         this.speech.close();
         this.scheduleRemark(null);
         this.drawings.clear();
