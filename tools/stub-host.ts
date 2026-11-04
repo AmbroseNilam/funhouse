@@ -36,6 +36,9 @@ function contentFor(prompt: string): string | null {
     if (prompt.includes("You are the clue-giver") === true) {
         return "harbour, 2";
     }
+    if (prompt.startsWith("Pick one place") === true) {
+        return "Place: Lighthouse | Roles: keeper, sailor, painter, tourist, engineer, cook, inspector, fisher";
+    }
     return null;
 }
 
@@ -57,6 +60,14 @@ export function hostReply(system: string, user: string): string {
     const clue: RegExpExecArray | null = /The clue is "([^"]+)", (\d+)/.exec(text);
     if (clue !== null) {
         return `${clue[1] ?? ""}, ${clue[2] ?? ""}. Go on.`;
+    }
+    const place: string | undefined = /The place is: ([^.]+)\./.exec(system)?.[1];
+    if (place !== undefined && rulings.includes("right") === true) {
+        const said: string = lines.at(-1) ?? "";
+        return said.toLowerCase().includes(place.toLowerCase()) === true ? "[[right]]" : "[[wrong]]";
+    }
+    if (system.includes("Players are questioning each other in turn") === true) {
+        return "(quiet)";
     }
     if (text.includes("(Game:") === true) {
         return "Fair enough. Carry on.";
