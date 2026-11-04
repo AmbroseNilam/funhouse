@@ -165,6 +165,10 @@ function turnAway(socket: WebSocket, reason: RejectedReason): void {
  */
 async function serveStatic(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url: URL = new URL(request.url ?? "/", "http://room");
+    if (url.pathname === "/terms" || url.pathname === "/privacy" || url.pathname === "/terms/" || url.pathname === "/privacy/") {
+        response.writeHead(302, { location: `/landing/${url.pathname.replaceAll("/", "")}/` }).end();
+        return;
+    }
     if (url.pathname === "/favicon.ico") {
         response.writeHead(302, { location: "/landing/brand/favicon-32.png" }).end();
         return;
