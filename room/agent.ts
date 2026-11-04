@@ -667,15 +667,15 @@ export async function serveAgent(request: IncomingMessage, response: ServerRespo
         send(response, 404, "text/plain", LINK_ENDED);
         return true;
     }
+    if (action === "mcp" && request.method !== "POST") {
+        send(response, 405, "text/plain", "This MCP server answers POST only.");
+        return true;
+    }
     // Only a request that has passed every check counts as the agent having looked.
     if (link.seat !== null) {
         link.room.agentLooked(link.seat);
     }
     if (action === "mcp") {
-        if (request.method !== "POST") {
-            send(response, 405, "text/plain", "This MCP server answers POST only.");
-            return true;
-        }
         if (body.method === "initialize") {
             const issued: string = link.mcpSession ?? randomBytes(16).toString("base64url");
             if (link.mcpSession === null) {

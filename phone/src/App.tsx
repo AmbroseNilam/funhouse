@@ -585,6 +585,7 @@ function SheetTop(props: { sheet: string; onBack: (parent: string) => void; onCl
  */
 function AgentInvite(props: { link: string; games: string[]; joined: string; onCancel: () => void; onDone: () => void }): ReactElement {
     const [copied, setCopied] = useState<boolean>(false);
+    const [copyFailed, setCopyFailed] = useState<boolean>(false);
     if (props.link === "") {
         return (
             <>
@@ -598,7 +599,7 @@ function AgentInvite(props: { link: string; games: string[]; joined: string; onC
     const canShare: boolean = CAN_SHARE === true && navigator.canShare(shared) === true;
     const canCopy: boolean = "clipboard" in navigator;
     const copy = (): void => {
-        navigator.clipboard.writeText(words).then(() => { setCopied(true); }).catch(() => { setCopied(false); });
+        navigator.clipboard.writeText(words).then(() => { setCopied(true); }).catch(() => { setCopied(false); setCopyFailed(true); });
     };
     const short: string = props.link.replace(/^https?:\/\//, "").slice(0, 28);
     return (
@@ -607,7 +608,7 @@ function AgentInvite(props: { link: string; games: string[]; joined: string; onC
             <p className="sheet-status" role="status">Waiting for your agent&hellip;</p>
             {canShare === true ? <button className="primary" onClick={() => { navigator.share(shared).catch(() => { /* someone closed the share sheet */ }); }}>Share the link</button> : null}
             {canCopy === true ? <button className={canShare === true ? "sheet-quiet" : "primary"} onClick={copy}>{copied === true ? "Copied" : "Copy the link"}</button> : null}
-            <p className="sheet-small selectable">{canCopy === true ? `${short}\u2026` : props.link}</p>
+            <p className="sheet-small selectable">{canCopy === true && copyFailed === false ? `${short}\u2026` : props.link}</p>
             <button className="sheet-text danger-text" onClick={props.onCancel}>Cancel link</button>
         </>
     );
