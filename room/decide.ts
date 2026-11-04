@@ -66,8 +66,11 @@ async function ask<Value>(name: string, asker: JevAsk, run: () => Promise<Value>
     if ((asker === askJev && jevConfigured() === false) || SWITCHED_OFF.includes(name) === true) {
         return null;
     }
+    const startedAt: number = Date.now();
     try {
-        return await run();
+        const answer: Value = await run();
+        log("decide", `${name} answered in ${Date.now() - startedAt} ms`);
+        return answer;
     } catch {
         if (Date.now() - lastFailureLoggedAt >= FAILURE_LOG_GAP_MILLISECONDS) {
             lastFailureLoggedAt = Date.now();
