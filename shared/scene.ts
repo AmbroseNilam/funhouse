@@ -20,7 +20,22 @@ export type SceneBlock =
     | { type: "timer"; seconds: number; label?: string; running: boolean }
     | { type: "tally"; title: string; rows: TallyRow[] }
     | { type: "progress"; label: string; current: number; max: number; marks?: "door" | "card" }
+    | { type: "board"; columns: number; cells: BoardCell[] }
     | { type: "caption"; speaker: string; text: string; final: boolean };
+
+/**
+ * One word card on a shared grid. Who the card belongs to is shown only once it is turned over,
+ * or when the game ends and the key is shown.
+ */
+export interface BoardCell {
+    text: string;
+    /** Which side the card belongs to: "a" or "b" for the two teams, "neutral", "trap", or "unknown" while it is still hidden. */
+    owner: "a" | "b" | "neutral" | "trap" | "unknown";
+    /** True once the card has been turned over; false for a card shown only because the game is over. */
+    turned: boolean;
+    /** A short word printed small under the card's word once its owner shows, such as a team's name. */
+    owned?: string;
+}
 
 /** A player as the screen shows them. */
 export interface RosterEntry {

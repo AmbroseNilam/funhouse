@@ -53,6 +53,8 @@ function screenQuery(): string {
 /** A fake big screen: holds the latest scene and everything the host has said. */
 export class FakeScreen {
     public scene: Scene | null = null;
+    /** Every scene the room has sent this screen, oldest first, for leak checks. */
+    public readonly scenes: Scene[] = [];
     public shell: ShellView | null = null;
     public code: string = "";
     public thinking: boolean = false;
@@ -77,6 +79,7 @@ export class FakeScreen {
                 return;
             }
             this.scene = message.scene;
+            this.scenes.push(message.scene);
             this.code = message.roomCode;
             for (const block of message.scene.blocks) {
                 if (block.type === "caption" && block.speaker === HOST_NAME && this.hostLines.at(-1) !== block.text) {
@@ -110,6 +113,8 @@ export class FakeScreen {
 /** A fake phone. */
 export class FakePhone {
     public view: PhoneView | null = null;
+    /** Every view the room has sent this phone, oldest first, for leak checks. */
+    public readonly views: PhoneView[] = [];
     private readonly socket: WebSocket;
     private readonly name: string;
 
@@ -126,6 +131,7 @@ export class FakePhone {
             const message: RoomToPhoneMessage = JSON.parse(rawDataToText(data)) as RoomToPhoneMessage;
             if (message.type === "view") {
                 this.view = message.view;
+                this.views.push(message.view);
             }
         });
     }

@@ -1,0 +1,4 @@
+# Lists where each game or kit adds its own line: keep both sides' lines when two branches add.
+studio/registry.ts merge=union
+studio/shelf.ts merge=union
+studio/blueprint.ts merge=union

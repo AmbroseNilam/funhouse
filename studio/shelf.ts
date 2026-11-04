@@ -7,13 +7,72 @@
 import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
-import { blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
+import { blueprintPauseActions, blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
+import { TWO_TAKES_BLUEPRINT } from "./games/two-takes/blueprint.ts";
+import { MIND_THE_GAP_BLUEPRINT } from "./games/mind-the-gap/blueprint.ts";
+import { OFF_BY_A_MILE_BLUEPRINT } from "./games/off-by-a-mile/blueprint.ts";
+import { PAST_THE_GATE_BLUEPRINT } from "./games/past-the-gate/blueprint.ts";
+import { CLUE_GALLERY_BLUEPRINT } from "./games/clue-gallery.ts";
+import { PAINTED_WHISPERS_BLUEPRINT } from "./games/painted-whispers.ts";
+
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
+import { MAGPIE_POCKETS_BLUEPRINT } from "./games/magpie-pockets.ts";
+import { UNDER_THE_CUP_BLUEPRINT } from "./games/under-the-cup.ts";
+import { NAME_TAG_BLUEPRINT } from "./games/name-tag.ts";
+import { COLD_READ_BLUEPRINT } from "./games/cold-read.ts";
+import { BLANK_VERDICT_BLUEPRINT } from "./games/blank-verdict.ts";
+import { LONELY_CLUES_BLUEPRINT } from "./games/lonely-clues.ts";
+import { PANTOMIME_PANIC_BLUEPRINT } from "./games/pantomime-panic.ts";
+import { BLANK_TRUTH_BLUEPRINT } from "./games/blank-truth/blueprint.ts";
+import { GHOST_WRITER_BLUEPRINT } from "./games/ghost-writer/blueprint.ts";
+import { WHO_FITS_BLUEPRINT } from "./games/who-fits.ts";
 import { frozenCopy } from "./kit/primitives.ts";
+import { STRAY_WORD_BLUEPRINT } from "./games/stray-word/index.ts";
+import { TIN_CAN_TELEPHONE_BLUEPRINT } from "./games/tin-can-telephone/index.ts";
+import { WRONG_ROOM_BLUEPRINT } from "./games/wrong-room/index.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [
+    TWENTY_DOORS_BLUEPRINT,
+    LEADING_QUESTIONS_BLUEPRINT,
+    WHO_FITS_BLUEPRINT,
+    UNDER_THE_CUP_BLUEPRINT,
+    MAGPIE_POCKETS_BLUEPRINT,
+    TWO_TAKES_BLUEPRINT,
+    PAST_THE_GATE_BLUEPRINT,
+    OFF_BY_A_MILE_BLUEPRINT,
+    MIND_THE_GAP_BLUEPRINT,
+    TIN_CAN_TELEPHONE_BLUEPRINT,
+    WRONG_ROOM_BLUEPRINT,
+    STRAY_WORD_BLUEPRINT,
+    BLANK_TRUTH_BLUEPRINT,
+    GHOST_WRITER_BLUEPRINT,
+    PANTOMIME_PANIC_BLUEPRINT,
+    LONELY_CLUES_BLUEPRINT,
+    BLANK_VERDICT_BLUEPRINT,
+    COLD_READ_BLUEPRINT,
+    NAME_TAG_BLUEPRINT,
+    PAINTED_WHISPERS_BLUEPRINT,
+    CLUE_GALLERY_BLUEPRINT,
+];
+
+/**
+ * Games that are built and pass their scripted checks but stay off the shelf until a run against the real
+ * thing clears them: each id maps to what is still missing. Clearing a game is deleting its line. A room started with STUDIO_SHOW_HELD=1 shows them anyway, for the
+ * scripted runs that prove them.
+ */
+export const HELD_BACK: Readonly<Record<string, string>> = {
+    blankTruth: "no run with the real host yet",
+    ghostWriter: "no run with the real host yet",
+    pantomimePanic: "no run with the real host yet",
+    lonelyClues: "no run with the real host yet",
+    blankVerdict: "no run with the real host yet",
+    coldRead: "no run with the real host yet",
+    nameTag: "no run with the real host yet",
+    paintedWhispers: "no run with the real picture model; its cost and latency are unmeasured",
+    clueGallery: "no run with the real picture model; its cost and latency are unmeasured",
+};
 
 /**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
@@ -33,7 +92,7 @@ export function installBlueprint(given: Blueprint): InstalledGame {
         pitch: blueprint.box.pitch,
         howToPlay: [...blueprint.box.howToPlay],
         art: blueprint.box.art,
-        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || blueprint.decisions.giveUpButton === true),
+        pauseActions: blueprintPauseActions(blueprint),
         remarks: [...blueprint.box.remarks],
         create: (stage: GameStage): RunningGame => {
             log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);
@@ -46,10 +105,14 @@ export function installBlueprint(given: Blueprint): InstalledGame {
  * A shelf where every shipped blueprint stands in for the hand-written game with the same id,
  * and blueprints with new ids come after the hand-written games.
  * @param handWritten the games written in TypeScript.
+ * @param showHeld true to include the games on hold, each marked as testing in its pitch.
  * @returns the shelf.
  */
-export function studioShelf(handWritten: InstalledGame[]): InstalledGame[] {
-    const installed: InstalledGame[] = BLUEPRINTS.map(installBlueprint);
+export function studioShelf(handWritten: InstalledGame[], showHeld: boolean = false): InstalledGame[] {
+    const installed: InstalledGame[] = BLUEPRINTS.filter((blueprint: Blueprint) => showHeld === true || process.env.STUDIO_SHOW_HELD === "1" || HELD_BACK[blueprint.box.id] === undefined).map((blueprint: Blueprint) => {
+        const game: InstalledGame = installBlueprint(blueprint);
+        return HELD_BACK[blueprint.box.id] === undefined ? game : { ...game, pitch: `Testing. ${game.pitch}` };
+    });
     const replaced: InstalledGame[] = handWritten.map((game: InstalledGame) => installed.find((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) ?? game);
     const added: InstalledGame[] = installed.filter((game: InstalledGame) => handWritten.some((candidate: InstalledGame) => candidate.manifest.id === game.manifest.id) === false);
     return [...replaced, ...added];

@@ -6,6 +6,7 @@
 // change state in place and never throw. It never says a game is good.
 
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
+import type { Control } from "../shared/controls.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { Turn } from "../shared/turn.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
@@ -28,6 +29,9 @@ export const PAPER_PLAYERS: readonly CartridgePlayer[] = ["Teacup", "Spoon", "Ca
 export type Move =
     | { kind: "say"; playerId: string; text: string; ruling: string | null }
     | { kind: "press"; playerId: string; actionId: string }
+    | { kind: "answer"; playerId: string; controlId: string; value: string | number }
+    /** The judge rules with no one speaking, as the host does when it asks or guesses; the detail is what it wrote inside the ruling. */
+    | { kind: "rule"; ruling: string; detail: string }
     | { kind: "leave"; playerId: string }
     | { kind: "wait"; seconds: number };
 
@@ -43,6 +47,8 @@ export interface Glimpse<State> {
     players: readonly CartridgePlayer[];
     /** What a player may press right now. */
     legal(playerId: string): LegalAction[];
+    /** What a player's phone shows right now, such as a box to type in. */
+    controls(playerId: string): Control[];
     /** Rulings the phase allows right now. */
     rulings: string[];
 }
@@ -88,7 +94,15 @@ export interface Tally {
 export interface RehearsalOptions {
     /** What the host's model writes when content is asked for; empty means it failed. */
     content?: string;
+    /** Like content, but chosen by the request, for a game that asks for more than one kind of content. */
+    contentFor?: (request: string) => string;
     players?: readonly CartridgePlayer[];
+    /**
+     * How the picture provider behaves: seconds each picture takes, or null when pictures never
+     * come, which is how the room treats a failed or refused drawing. Left out, every picture
+     * arrives at once.
+     */
+    drawSeconds?: number | null;
 }
 
 /** How to check that a game's hidden role is invisible to everyone who doesn't hold it. */
@@ -97,6 +111,11 @@ export interface RoleCheck<State> {
     deal(seat: number, players: readonly CartridgePlayer[]): KitGame<State>;
     /** Events and player inputs to play, the same whoever holds the role. */
     script: readonly TraceEvent[];
+    /**
+     * True when other players are meant to see the role, as in a game where everyone but its owner
+     * can read each name tag. Then only the TV and the host must stay the same.
+     */
+    publicOnly?: boolean;
 }
 
 /** Keys whose values are never shown to anyone: kinds, ids, styles and image addresses. */
@@ -156,7 +175,8 @@ export function findLeaks(viewer: string, seen: readonly string[], hidden: reado
     for (const value of hidden) {
         const near: string | undefined = value.near;
         const lines: readonly string[] = near === undefined ? seen : [...seen, ...together].filter((line: string) => squash(line).includes(squash(near)) === true);
-        const found: boolean = near === undefined ? appears(seen, value.text) : appearsAsWord(lines, value.text);
+        const whole: boolean = near !== undefined || value.wholeWord === true;
+        const found: boolean = whole === false ? appears(seen, value.text) : appearsAsWord(lines, value.text);
         if (value.seenBy.includes(viewer) === false && found === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }
@@ -240,16 +260,29 @@ export function viewsOf<State>(cartridge: Cartridge<State>, state: State, player
     return views;
 }
 
+/**
+ * A stand-in for the random key the room gives a picture, made from its id.
+ * @param id the picture's id.
+ * @returns lower-case hex.
+ */
+function seedHex(id: string): string {
+    return [...id].map((letter: string) => letter.charCodeAt(0).toString(16)).join("");
+}
+
 /** The rehearsal's own running state, kept in one object so its step function can update it. */
 interface Run<State> {
     state: State | null;
     players: CartridgePlayer[];
     pendingContent: boolean;
+    /** The last content request, so the reply can fit it. */
+    request: string;
     pendingMerges: { id: string; question: string; answers: string[] }[];
     /** When each running timer is due, by id, in seconds on the virtual clock. */
     timers: Map<string, number>;
     now: number;
     stopped: boolean;
+    /** Pictures asked for and not yet delivered, with when each is due. */
+    drawings: { id: string; at: number }[];
 }
 
 /**
@@ -265,7 +298,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     const trace: TraceEntry<State>[] = [];
     const phases: Set<string> = new Set();
     const problems: string[] = [];
-    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, pendingMerges: [], timers: new Map(), now: 0, stopped: false };
+    const run: Run<State> = { state: null, players: [...(options.players ?? PAPER_PLAYERS)], pendingContent: false, request: "", pendingMerges: [], timers: new Map(), now: 0, stopped: false, drawings: [] };
 
     /**
      * Calls the rules safely: a throw, including one from changing frozen state, becomes a problem.
@@ -309,6 +342,12 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             run.stopped = true;
         }
         run.pendingContent = run.pendingContent === true || step.contentRequest !== undefined;
+        run.request = step.contentRequest ?? run.request;
+        if (options.drawSeconds !== null) {
+            for (const draw of step.draws ?? []) {
+                run.drawings.push({ id: draw.id, at: run.now + (options.drawSeconds ?? 0) });
+            }
+        }
         if (step.mergeRequest !== undefined) {
             run.pendingMerges.push(step.mergeRequest);
         }
@@ -318,18 +357,32 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         return step;
     };
 
-    /** Fires every timer that is due, earliest first, as the room would. */
+    /** The state now, read afresh, since the rules may have stepped while a player was acting. */
+    const stateNow = (): State | null => run.state;
+
+    /** Fires every timer and delivers every picture that is due, earliest first, as the room would. */
     const fireDue = (): void => {
-        const due: [string, number][] = [...run.timers.entries()]
-            .filter(([, at]: [string, number]) => at <= run.now)
-            .sort((first: [string, number], second: [string, number]) => first[1] - second[1]);
-        for (const [timerId] of due) {
-            run.timers.delete(timerId);
+        const timers: { at: number; timerId: string | null; pictureId: string | null }[] = [
+            ...[...run.timers.entries()].map(([timerId, at]: [string, number]) => ({ at, timerId, pictureId: null })),
+            ...run.drawings.map((drawing: { id: string; at: number }) => ({ at: drawing.at, timerId: null, pictureId: drawing.id })),
+        ];
+        const due: { at: number; timerId: string | null; pictureId: string | null }[] = timers
+            .filter((entry: { at: number }) => entry.at <= run.now)
+            .sort((first: { at: number }, second: { at: number }) => first.at - second.at);
+        for (const entry of due) {
             const current: State | null = run.state;
+            if (entry.timerId !== null) {
+                run.timers.delete(entry.timerId);
+            }
+            if (entry.pictureId !== null) {
+                run.drawings = run.drawings.filter((drawing: { id: string }) => drawing.id !== entry.pictureId);
+            }
             if (current === null || run.stopped === true || cartridge.outcome(current) !== null) {
                 return;
             }
-            const event: RoomEvent = { type: "timerFired", at: run.now, timerId };
+            const event: RoomEvent = entry.pictureId !== null
+                ? { type: "drawingReady", at: run.now, id: entry.pictureId, src: `/drawings/TEST/${seedHex(entry.pictureId)}` }
+                : { type: "timerFired", at: run.now, timerId: entry.timerId ?? "" };
             take(event, () => cartridge.onEvent(current, event));
         }
     };
@@ -337,7 +390,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
     take({ type: "phaseChanged", at: 0, phaseId: "init" }, () => cartridge.init([...run.players], {}));
     let moves: number = 0;
     while (run.state !== null && run.stopped === false && cartridge.outcome(run.state) === null && moves < MOVE_BUDGET) {
-        const current: State = run.state;
+        let current: State = run.state;
         const merge = run.pendingMerges.shift();
         if (merge !== undefined) {
             const event: RoomEvent = { type: "answersMerged", at: run.now, id: merge.id, groups: mergeIdenticalAnswers(merge.answers) };
@@ -346,7 +399,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         }
         if (run.pendingContent === true) {
             run.pendingContent = false;
-            const event: RoomEvent = { type: "contentReady", at: run.now, text: options.content ?? "" };
+            const event: RoomEvent = { type: "contentReady", at: run.now, text: options.contentFor?.(run.request) ?? options.content ?? "" };
             take(event, () => cartridge.onEvent(current, event));
             continue;
         }
@@ -359,6 +412,7 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             now: run.now,
             players: run.players,
             legal: (playerId: string) => cartridge.legalActions(current, playerId),
+            controls: (playerId: string) => cartridge.privateControls(current, playerId),
             rulings: Object.keys(phase?.hostRulings ?? {}),
         });
         if (move.kind === "wait") {
@@ -368,8 +422,19 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
         }
         run.now += ACTION_SECONDS;
         fireDue();
-        if (run.state !== current) {
-            continue;
+        const live: State | null = stateNow();
+        if (live !== current) {
+            // A clock that ticked while the player acted, such as a card changing on the TV, doesn't undo the move; a new phase does.
+            if (live === null || cartridge.phaseOf(live) !== cartridge.phaseOf(current)) {
+                continue;
+            }
+            // A press that was on offer when the player looked, but whose question a clock closed while the table was still tapping, arrives too late and is dropped.
+            const lateToLive: boolean = move.kind === "press" && cartridge.legalActions(current, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === true && cartridge.legalActions(live, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === false;
+            if (lateToLive === true) {
+                current = live;
+                continue;
+            }
+            current = live;
         }
         if (move.kind === "leave") {
             run.players = run.players.filter((player: CartridgePlayer) => player.playerId !== move.playerId);
@@ -378,11 +443,34 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
             fireDue();
             continue;
         }
+        if (move.kind === "answer") {
+            const asked: boolean = cartridge.privateControls(current, move.playerId).some((control: Control) => "id" in control && control.id === move.controlId);
+            if (asked === false) {
+                problems.push(`${persona.name} answered "${move.controlId}" when it was not on the phone.`);
+            }
+            const answered: RoomEvent = { type: "answered", at: run.now, playerId: move.playerId, controlId: move.controlId, value: move.value };
+            take(answered, () => cartridge.onEvent(current, answered));
+            fireDue();
+            continue;
+        }
         if (move.kind === "press") {
             if (cartridge.legalActions(current, move.playerId).some((action: LegalAction) => action.actionId === move.actionId) === false) {
                 problems.push(`${persona.name} pressed "${move.actionId}" when it was not offered.`);
             }
             take({ type: "input", playerId: move.playerId, actionId: move.actionId }, () => cartridge.apply(current, move.playerId, move.actionId));
+            fireDue();
+            continue;
+        }
+        if (move.kind === "rule") {
+            if (phase?.hostRulings?.[move.ruling] === undefined) {
+                problems.push(`The judge ruled "${move.ruling}" in phase ${cartridge.phaseOf(current)}, which does not allow it.`);
+                continue;
+            }
+            const spoken: RoomEvent = { type: "hostRuled", at: run.now, ruling: move.ruling, detail: move.detail, playerId: null };
+            const result: Step<State> | null = take(spoken, () => cartridge.onEvent(current, spoken));
+            if (result !== null && result.state === current && result.facts.length === 0) {
+                problems.push(`The ruling "${move.ruling}" was allowed but did nothing.`);
+            }
             fireDue();
             continue;
         }
@@ -465,7 +553,7 @@ function roleProblems<State>(check: RoleCheck<State> | undefined, players: reado
     const games: { game: KitGame<State>; holderId: string }[] = players.map((player: CartridgePlayer, seat: number) => {
         return { game: check.deal(seat, players), holderId: player.playerId };
     });
-    return roleBlindness(games, check.script, players).map((problem: string) => `role check: ${problem}`);
+    return roleBlindness(games, check.script, players, check.publicOnly === true).map((problem: string) => `role check: ${problem}`);
 }
 
 /**
@@ -475,12 +563,14 @@ function roleProblems<State>(check: RoleCheck<State> | undefined, players: reado
  * @param games the same game dealt differently, with who holds the role in each.
  * @param script the events to play, the same for every game.
  * @param players who is at the table.
+ * @param publicOnly compare only the TV and the host, for games where the other phones may see the role.
  * @returns a problem per difference found.
  */
 export function roleBlindness<State>(
     games: readonly { game: KitGame<State>; holderId: string }[],
     script: readonly TraceEvent[],
     players: readonly CartridgePlayer[] = PAPER_PLAYERS,
+    publicOnly: boolean = false,
 ): string[] {
     const problems: string[] = [];
     const runs: { holderId: string; views: Map<string, unknown[]>[] }[] = games.map(({ game, holderId }: { game: KitGame<State>; holderId: string }) => {
@@ -509,7 +599,8 @@ export function roleBlindness<State>(
             problems.push(`The game ran a different number of steps when ${other.holderId} held the role.`);
         }
         for (let index = 0; index < length; index += 1) {
-            const viewers: string[] = ["screen", "host", ...players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== first.holderId && id !== other.holderId)];
+            const phones: string[] = publicOnly === true ? [] : players.map((player: CartridgePlayer) => player.playerId).filter((id: string) => id !== first.holderId && id !== other.holderId);
+            const viewers: string[] = ["screen", "host", ...phones];
             for (const viewer of viewers) {
                 const seenFirst: string = JSON.stringify(first.views[index]?.get(viewer) ?? []);
                 const seenOther: string = JSON.stringify(other.views[index]?.get(viewer) ?? []);

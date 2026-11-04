@@ -30,4 +30,16 @@ describe("room directory shelves", () => {
         assert.equal(room.brief().includes("leadingQuestions"), false);
         room.close();
     });
+
+    it("shows the games on hold, marked as testing, only to a room opened for testing", () => {
+        const directory: InstanceType<typeof RoomDirectory> = new RoomDirectory("http://localhost:8740", GAMES, studioShelf(GAMES), studioShelf(GAMES, true));
+        const curated = directory.create(false, false, false, true);
+        const testing = directory.create(false, false, false, true, true);
+        assert.ok(curated !== null && testing !== null);
+        assert.equal(curated.brief().includes("paintedWhispers"), false);
+        assert.equal(testing.brief().includes("paintedWhispers"), true);
+        assert.equal(testing.brief().includes("Testing."), true);
+        curated.close();
+        testing.close();
+    });
 });
