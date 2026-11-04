@@ -130,7 +130,12 @@ if (keeper === undefined || rule === undefined) {
     throw new Error("The clue on the TV is not one of the keepers' clues.");
 }
 console.warn(`Keeper ${keeper.keeper}; clue: ${clue}`);
+const heardBeforeGate: number = screen.hostLines.length;
 await waitFor(() => (screen.scene?.blocks ?? []).some((block: SceneBlock) => block.type === "progress"), "the gate to open");
+const gateLineUntil: number = Date.now() + 12000;
+while (screen.hostLines.length <= heardBeforeGate && Date.now() < gateLineUntil) {
+    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 200); });
+}
 
 // The table lobbies. None of it may get anyone through.
 const [first, second, third] = seats;

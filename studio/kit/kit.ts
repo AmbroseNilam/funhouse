@@ -172,3 +172,9 @@ export function rulingNameProblem(name: string): string | null {
     }
     return null;
 }
+
+/** How every line sounds in a polished game: short, warm, dry, never a formula, and no number the game didn't give. */
+export const HOST_LINE_RULES: string = "Keep every line to about 25 words. Stay warm and dry. Never say a number or a count you weren't handed. Never open two lines the same way or fall into a formula.";
+
+/** Added to a fact that must be spoken, so a phase that is mostly silent can't swallow it. Facts can reach the table, so it holds no word a keeper's rule might use. */
+export const SAY_IT_ALOUD: string = "Say this out loud; don't reply (quiet).";
