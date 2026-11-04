@@ -77,6 +77,14 @@ describe("Twenty Doors' own topic", () => {
         });
     }
 
+    it("doesn't wait long after someone says a topic the host won't rule", () => {
+        const game = createTwentyDoors(() => 0, "own");
+        const started = game.init(players, {});
+        const spoken = game.onEvent(started.state, { type: "speechEnded", at: 0, playerId: "a", text: "something rude" });
+        assert.notEqual(spoken.timers?.["topic-heard"], undefined);
+        assert.equal(game.phaseOf(game.onEvent(spoken.state, { type: "timerFired", at: 0, timerId: "topic-heard" }).state), "asking");
+    });
+
     it("never stalls: no topic named, or the model too slow, falls back too", () => {
         const { game, started, choosing } = toChoosing();
         assert.equal(game.phaseOf(game.onEvent(started.state, { type: "timerFired", at: 0, timerId: "topic-time" }).state), "asking");

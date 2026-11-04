@@ -97,6 +97,9 @@ const OWN_TOPIC: string = "own";
 /** How long the room gets to name a topic before the host chooses instead. */
 const TOPIC_SECONDS: number = 20;
 
+/** How long after someone speaks the host gets to rule it a topic. */
+const TOPIC_HEARD_SECONDS: number = 9;
+
 /** How long the model gets to choose a secret on the topic. The game mustn't wait on it for long. */
 const CHOOSING_SECONDS: number = 8;
 
@@ -223,6 +226,13 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
      */
     const onTopicEvent = (state: TwentyDoorsState, event: RoomEvent): Step<TwentyDoorsState> => {
         const fallBack: string = "That topic didn't work out, so make one short dry joke about it and say you're picking something yourself. ";
+        // Someone spoke and the host hasn't ruled a topic soon after: it was refused or it wasn't one, so nobody waits long.
+        if (state.phase === "topic" && event.type === "speechEnded") {
+            return { state, facts: [], timers: { "topic-heard": TOPIC_HEARD_SECONDS } };
+        }
+        if (state.phase === "topic" && event.type === "timerFired" && event.timerId === "topic-heard") {
+            return surprise(state, "That topic didn't work out, so make one short dry joke about it if you haven't, and say you're picking something yourself. ");
+        }
         if (state.phase === "topic" && event.type === "timerFired" && event.timerId === "topic-time") {
             return surprise(state, "Nobody named a topic, so make one short dry joke about it and say you're picking something yourself. ");
         }
