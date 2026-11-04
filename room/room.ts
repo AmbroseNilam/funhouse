@@ -14,7 +14,9 @@ import type { Control, ListeningMode, PhoneView } from "../shared/controls.ts";
 import { lobbyScene, type RosterEntry, type Scene } from "../shared/scene.ts";
 import { appendEvent, type RoomEvent } from "../shared/timeline.ts";
 import { isPhoneMessage, parseMessage, type PhoneMessage, type RoomToPhoneMessage, type RoomToScreenMessage, type ScreenMessage } from "../shared/protocol.ts";
+import { isFitForRoom } from "../providers/meta/moderation.ts";
 import { FAST_SPARK_MODEL, SPARK_MODEL } from "../providers/meta/spark.ts";
+import { filterText, type FilterResult } from "./content-filter.ts";
 import { rawDataToText, TranscribeSession } from "../providers/meta/transcribe.ts";
 import { ELEVENLABS_KEY_VARIABLE, ElevenLabsSpeech } from "../providers/elevenlabs/speech.ts";
 import { OpenAiRealtimeSpeech } from "../providers/openai/realtime-speech.ts";
@@ -51,6 +53,8 @@ interface Player {
     /** Replaces the standby before the provider closes it for sitting idle. */
     standbyTimer: NodeJS.Timeout | null;
     holdingToTalk: boolean;
+    /** When this phone last had a typed answer checked. */
+    lastTextAnswerAt: number;
     /** False when this phone's owner turned the host's quick reactions off. */
     wantsReactions: boolean;
     /** Sessions whose press has not produced final text yet; a new press can overlap the last. */
@@ -130,6 +134,15 @@ const CAPTION_WAIT_MILLISECONDS: number = 2500;
 
 /** How many of the latest acknowledgements are not reused. */
 const ACKNOWLEDGE_NO_REPEAT: number = 4;
+
+/** Longest typed answer a game can ask for. */
+const TEXT_ANSWER_LIMIT: number = 80;
+
+/** Least time between one phone's typed answers, as each costs a check. */
+const TEXT_ANSWER_GAP_MILLISECONDS: number = 1000;
+
+/** What someone hears when the filter says no. It never says why. */
+const ANSWER_REFUSED_NOTE: string = "That one won't work. Try another.";
 
 /** Longest name a seat can have. */
 const NAME_CHARACTER_LIMIT: number = 24;
@@ -355,6 +368,12 @@ export class Room implements HostStage {
     private lullsThisGame: number = 0;
     private readonly livelyRoom: boolean;
     private readonly tapToTalk: boolean;
+    /** Controls each player has answered this game, as "player|control". */
+    private readonly answered: Set<string> = new Set();
+    /** Typed answers waiting on the filter. */
+    private readonly checking: Set<string> = new Set();
+    /** Typed answers the filter refused, until the next try. */
+    private readonly refused: Set<string> = new Set();
     private readonly fastReplies: boolean;
     private readonly lullTimer: NodeJS.Timeout | null;
     private hostSpeaking: boolean = false;
@@ -614,6 +633,10 @@ export class Room implements HostStage {
                 player = null;
                 return;
             }
+            if (message.type === "answer") {
+                this.onAnswer(player, message.controlId, message.value);
+                return;
+            }
             this.onControl(player, message.input.value.slice(0, MAX_INPUT_CHARACTERS), message.input.controlIndex);
         });
         socket.on("close", (code: number) => {
@@ -869,7 +892,7 @@ export class Room implements HostStage {
         const name: string = this.freeName(cleanName(rawName) || `Player ${this.nextPlayerNumber}`, null);
         const playerId: string = `p${this.nextPlayerNumber}`;
         this.nextPlayerNumber += 1;
-        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
+        const player: Player = { playerId, name, lastPressAt: 0, overlapMilliseconds: 0, talkMilliseconds: 0, phoneDown: false, phoneDownTimer: null, colour: SEAT_COLOURS[(this.nextPlayerNumber - 2) % SEAT_COLOURS.length] ?? "#8c5a2b", resumeToken: randomBytes(16).toString("hex"), socket, connected: true, leaveTimer: null, listening: "holdToTalk", speaking: false, transcribe: null, standby: null, standbyTimer: null, holdingToTalk: false, wantsReactions: true, lastTextAnswerAt: 0, awaitingFinal: new Set(), hint: "", hintTimer: null, releasedAt: 0, partial: "" };
         this.players.set(playerId, player);
         this.record({ type: "playerJoined", at: Date.now(), playerId, name });
         log(this.scope(), `${playerId} joined`);
@@ -950,6 +973,92 @@ export class Room implements HostStage {
             return;
         }
         this.game?.input(player.playerId, value);
+        this.refreshPhones();
+    }
+
+    /**
+     * Takes one answer to a textInput, numberInput or slider. Anything but a live control of this
+     * player's, a value in its range, and a first answer is ignored.
+     * @param player who.
+     * @param controlId the control.
+     * @param value what they entered.
+     */
+    private onAnswer(player: Player, controlId: string, value: string | number): void {
+        const key: string = `${player.playerId}|${controlId}`;
+        const control: Control | undefined = this.answerControl(player, controlId);
+        if (this.paused === true || control === undefined || this.answered.has(key) === true || this.checking.has(key) === true) {
+            return;
+        }
+        if (control.type === "textInput") {
+            if (typeof value === "string") {
+                void this.checkTextAnswer(player, controlId, value, Math.min(control.maxLength, TEXT_ANSWER_LIMIT));
+            }
+            return;
+        }
+        if (control.type !== "numberInput" && control.type !== "slider") {
+            return;
+        }
+        const steps: number = typeof value === "number" ? (value - control.min) / (control.step ?? 1) : Number.NaN;
+        if (typeof value !== "number" || value < control.min || value > control.max || Math.abs(steps - Math.round(steps)) > 1e-9) {
+            return;
+        }
+        this.acceptAnswer(player, controlId, value);
+    }
+
+    /**
+     * Finds a control this player can answer right now.
+     * @param player who.
+     * @param controlId the control.
+     * @returns the control, if it's in their view.
+     */
+    private answerControl(player: Player, controlId: string): Control | undefined {
+        return this.game?.controls(player.playerId).find((control: Control) => "id" in control && control.id === controlId);
+    }
+
+    /**
+     * Runs a typed answer past the filter. The text goes nowhere else until it passes.
+     * @param player who.
+     * @param controlId the control.
+     * @param text what they typed.
+     * @param limit the longest allowed.
+     */
+    private async checkTextAnswer(player: Player, controlId: string, text: string, limit: number): Promise<void> {
+        const key: string = `${player.playerId}|${controlId}`;
+        if (Date.now() - player.lastTextAnswerAt < TEXT_ANSWER_GAP_MILLISECONDS) {
+            return;
+        }
+        player.lastTextAnswerAt = Date.now();
+        const game: RunningGame | null = this.game;
+        this.checking.add(key);
+        this.refused.delete(key);
+        this.refreshPhones();
+        const classify = async (line: string): Promise<boolean> => BUDGET.spend("spark") === true && await isFitForRoom(line);
+        const result: FilterResult = await filterText(text.slice(0, limit * 2), limit, classify);
+        this.checking.delete(key);
+        if (this.game !== game || game === null || this.answerControl(player, controlId) === undefined) {
+            this.refreshPhones();
+            return;
+        }
+        if (result.allowed === false) {
+            log(this.scope(), `${player.playerId} answer filtered: ${result.category}`);
+            this.refused.add(key);
+            this.refreshPhones();
+            return;
+        }
+        this.acceptAnswer(player, controlId, result.text);
+    }
+
+    /**
+     * Marks an answer as given and hands it to the game.
+     * @param player who.
+     * @param controlId the control.
+     * @param value the checked answer.
+     */
+    private acceptAnswer(player: Player, controlId: string, value: string | number): void {
+        this.answered.add(`${player.playerId}|${controlId}`);
+        const event: RoomEvent = { type: "answered", at: Date.now(), playerId: player.playerId, controlId, value };
+        this.record(event);
+        this.game?.event(event);
         this.refreshPhones();
     }
 
@@ -1198,6 +1307,9 @@ export class Room implements HostStage {
         log(this.scope(), `ended ${this.game.manifest.id}`);
         this.game.stop();
         this.game = null;
+        this.answered.clear();
+        this.checking.clear();
+        this.refused.clear();
         this.caption = null;
         this.shell.gameEnded();
         const waiting: InstalledGame | null = this.waitingInstall;
@@ -2070,7 +2182,19 @@ export class Room implements HostStage {
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
-        return this.game?.controls(player.playerId) ?? [];
+        return (this.game?.controls(player.playerId) ?? []).map((control: Control): Control => {
+            if ("id" in control === false) {
+                return control;
+            }
+            const key: string = `${player.playerId}|${control.id}`;
+            if (this.answered.has(key) === true) {
+                return { type: "notice", text: "Sent.", tone: "info" };
+            }
+            if (this.checking.has(key) === true) {
+                return { type: "notice", text: "Just checking that.", tone: "info" };
+            }
+            return this.refused.has(key) === true ? { ...control, note: ANSWER_REFUSED_NOTE } : control;
+        });
     }
 
     /**

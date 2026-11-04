@@ -160,7 +160,7 @@ export function blockBrowserGestures(): () => void {
         }
     };
     const move = (event: TouchEvent): void => {
-        if (event.target instanceof Element && event.target.closest("[data-scrolls]") !== null) {
+        if (event.target instanceof Element && event.target.closest("[data-scrolls], input[type=\"range\"]") !== null) {
             return;
         }
         event.preventDefault();

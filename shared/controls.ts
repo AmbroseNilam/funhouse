@@ -8,12 +8,18 @@ import type { PhoneTurn } from "./turn.ts";
 /** How a phone's microphone behaves right now. See docs/VOICE.md in the planning repo. */
 export type ListeningMode = "muted" | "holdToTalk" | "openFloor" | "hostSpeaking";
 
-/** One interactive element on a phone. */
+/**
+ * One interactive element on a phone. A textInput, numberInput or slider is answered once: the room
+ * checks the answer, then hands the game an "answered" event with the control's id, and a text
+ * answer only gets that far once the content filter has passed it. Give each question its own id.
+ */
 export type Control =
     | { type: "roleCard"; title: string; body: string; secret: boolean }
     | { type: "buttons"; prompt?: string; options: ControlOption[] }
     | { type: "choice"; prompt: string; options: ControlOption[]; multiple: boolean }
-    | { type: "textInput"; prompt: string; placeholder?: string; maxLength: number }
+    | { type: "textInput"; id: string; prompt: string; placeholder?: string; maxLength: number; note?: string }
+    | { type: "numberInput"; id: string; prompt: string; min: number; max: number; step?: number; note?: string }
+    | { type: "slider"; id: string; prompt: string; min: number; max: number; step?: number; lowLabel?: string; highLabel?: string; note?: string }
     | { type: "waiting"; text: string }
     | { type: "notice"; text: string; tone: "info" | "warning" | "secret" };
 
@@ -45,7 +51,7 @@ export interface PhoneView {
 
 /** What a phone sends when a player uses a control. */
 export interface ControlInput {
-    /** Id of the control's option, or the text for a textInput. */
+    /** Id of the control's option. */
     value: string;
     /** Which control, by its index in the current view. */
     controlIndex: number;

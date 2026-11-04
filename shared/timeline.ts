@@ -11,6 +11,7 @@ export type RoomEvent =
     | { type: "speechStarted"; at: number; playerId: string }
     | { type: "speechEnded"; at: number; playerId: string; text: string }
     | { type: "controlUsed"; at: number; playerId: string; value: string; controlIndex: number }
+    | { type: "answered"; at: number; playerId: string; controlId: string; value: string | number }
     | { type: "phaseChanged"; at: number; phaseId: string }
     | { type: "timerFired"; at: number; timerId: string }
     | { type: "silence"; at: number; seconds: number }

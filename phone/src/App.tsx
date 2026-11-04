@@ -402,6 +402,24 @@ function SecretCard(props: { title: string; lines: string[] }): ReactElement {
 }
 
 /**
+ * A slider with its value in big type, answered once.
+ * @param props the control, and how to send the answer.
+ * @returns the element.
+ */
+function SliderCard(props: { control: Extract<Control, { type: "slider" }>; send: (message: PhoneMessage) => void }): ReactElement {
+    const { control } = props;
+    const step: number = control.step ?? 1;
+    const [value, setValue] = useState<number>(control.min + Math.round((control.max - control.min) / 2 / step) * step);
+    return (
+        <section className="paper choices slider-card">
+            <label className="prompt">{control.prompt}<input type="range" min={control.min} max={control.max} step={step} value={value} onChange={(event) => { setValue(Number(event.target.value)); }} /></label>
+            <div className="slider-labels"><span>{control.lowLabel ?? control.min}</span><strong>{value}</strong><span>{control.highLabel ?? control.max}</span></div>
+            <button onClick={() => { props.send({ type: "answer", controlId: control.id, value }); }}>Send it</button>
+        </section>
+    );
+}
+
+/**
  * Renders one private control as a paper card. Waiting lines go on the surface instead.
  * @param control the control.
  * @param index its index, sent back with input.
@@ -425,13 +443,26 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
             </section>
         );
     }
-    if (control.type === "textInput") {
+    if (control.type === "textInput" || control.type === "numberInput") {
+        const submit = (event: FormEvent<HTMLFormElement>): void => {
+            event.preventDefault();
+            const typed: string = (event.currentTarget.elements.namedItem("value") as HTMLInputElement).value;
+            if (typed.trim() !== "") {
+                send({ type: "answer", controlId: control.id, value: control.type === "numberInput" ? Number(typed) : typed });
+            }
+        };
         return (
-            <form key={index} className="paper choices" onSubmit={(event) => { event.preventDefault(); const field = event.currentTarget.elements.namedItem("value") as HTMLInputElement; send({ type: "input", input: { value: field.value.slice(0, control.maxLength), controlIndex: index } }); field.value = ""; }}>
-                <label className="prompt">{control.prompt}<input name="value" maxLength={control.maxLength} placeholder={control.placeholder ?? ""} autoComplete="off" /></label>
+            <form key={control.id} className="paper choices" onSubmit={submit}>
+                {control.note !== undefined ? <p className="prompt" role="alert">{control.note}</p> : null}
+                {control.type === "textInput"
+                    ? <label className="prompt">{control.prompt}<input name="value" maxLength={control.maxLength} placeholder={control.placeholder ?? ""} autoComplete="off" enterKeyHint="send" /></label>
+                    : <label className="prompt">{control.prompt}<input name="value" type="number" inputMode="numeric" min={control.min} max={control.max} step={control.step ?? 1} autoComplete="off" enterKeyHint="send" /></label>}
                 <button type="submit">Send it</button>
             </form>
         );
+    }
+    if (control.type === "slider") {
+        return <SliderCard key={control.id} control={control} send={send} />;
     }
     if (control.tone === "secret") {
         return null;

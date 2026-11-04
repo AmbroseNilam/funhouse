@@ -140,6 +140,16 @@ export class FakePhone {
     }
 
     /**
+     * Answers a textInput, numberInput or slider.
+     * @param controlId the control.
+     * @param value the answer.
+     */
+    public answer(controlId: string, value: string | number): void {
+        console.warn(`${this.name} answers ${controlId}`);
+        this.socket.send(JSON.stringify({ type: "answer", controlId, value }));
+    }
+
+    /**
      * The buttons this phone can press right now, from every control.
      * @returns one entry per enabled option.
      */
