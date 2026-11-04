@@ -20,6 +20,7 @@ import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
+import { TvHand } from "./TvHand.tsx";
 import { useTvSeat, type TvSeat } from "./tvSeat.ts";
 
 /** How long a reveal waits before its scores start counting: the answer, then who got it, then the points. */
@@ -645,6 +646,7 @@ export function App(): ReactElement {
             </div>
             {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} pointing={pointing} /> : null}
+            {tvSeat.view !== null && shell?.screen === "play" && shell.gameOver === false && shell.steppedOut === false ? <TvHand gameId={shell.gameId} controls={tvSeat.view.controls} send={tvSeat.send} /> : null}
             {ON_CONSOLE === false && state.started === true ? (
                 <div className="tv-strip">
                     {tvSeat.view !== null
