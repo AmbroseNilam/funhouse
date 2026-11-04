@@ -7,7 +7,7 @@
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, Step } from "../../shared/cartridge.ts";
 import type { Control } from "../../shared/controls.ts";
-import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
+import type { RosterEntry, Scene, SceneBlock } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
@@ -486,33 +486,31 @@ export function createPushGame(givenBox: Box, givenDecisions: PushDecisions, ran
     };
 
     /**
-     * One row for a player on the TV, in seat order.
+     * One chip for a player on the TV, in seat order: their pocket, or what became of it.
      * @param state the state.
      * @param playerId the player.
-     * @param bankedNow who banked at this reveal, to highlight.
-     * @returns the row.
+     * @returns the chip.
      */
-    const rowFor = (state: PushState, playerId: string, bankedNow: readonly string[]): TallyRow => {
+    const chipFor = (state: PushState, playerId: string): RosterEntry => {
         const name: string = nameIn(state.players, playerId);
         if (state.standing[playerId] === "stayed") {
-            return { label: `${name}: stayed, banked`, count: state.roundBanked[playerId] ?? 0, highlight: bankedNow.includes(playerId) };
+            return { playerId, name, speaking: false, muted: false, badge: `banked ${state.roundBanked[playerId] ?? 0}` };
         }
         if (state.standing[playerId] === "bust") {
-            return { label: `${name}: bust, lost ${state.lost[playerId] ?? 0}`, count: 0 };
+            return { playerId, name, speaking: false, muted: false, badge: `bust, lost ${state.lost[playerId] ?? 0}` };
         }
         const hand: number[] = state.hands[playerId] ?? [];
-        return { label: `${name}: ${hand.map((index: number) => decisions.cards[index]?.name ?? "").join(", ")}`, count: worth(hand) };
+        return { playerId, name, speaking: false, muted: false, badge: `${hand.map((index: number) => decisions.cards[index]?.name ?? "").join(", ")} (${worth(hand)})` };
     };
 
     /**
-     * The leader against the target, as a bar.
+     * Who leads and what the target is, as one line.
      * @param state the state.
-     * @returns the block.
+     * @returns the line.
      */
-    const leaderBar = (state: PushState): SceneBlock => {
+    const standingLine = (state: PushState): string => {
         const top: { ids: string[]; score: number } = leaders(state);
-        const label: string = top.ids.length === 0 ? `Nobody has banked yet. First to ${decisions.target}` : `${namesOf(state, top.ids)} ${top.ids.length === 1 ? "leads" : "lead"} with ${top.score}. First to ${decisions.target}`;
-        return { type: "progress", label, current: Math.min(top.score, decisions.target), max: decisions.target, marks: "card" };
+        return top.ids.length === 0 ? `Nobody has banked yet. First to ${decisions.target} wins.` : `${namesOf(state, top.ids)} ${top.ids.length === 1 ? "leads" : "lead"} with ${top.score} banked. First to ${decisions.target} wins.`;
     };
 
     const cartridge: Cartridge<PushState> = {
@@ -603,18 +601,15 @@ export function createPushGame(givenBox: Box, givenDecisions: PushDecisions, ran
                 const title: string = top.ids.length === 0 ? "Empty pockets all round" : `${namesOf(state, top.ids)} ${top.ids.length === 1 ? "takes" : "take"} the pocket`;
                 return { mood: "victory", transition: "fade", blocks: [{ type: "title", text: title, kicker: box.name }, scoreboard("Banked", state.players, state.banked)] };
             }
-            const bankedNow: string[] = state.results.filter((row) => row.result === "stayed").map((row) => row.playerId);
-            const rows: TallyRow[] = state.players.map((player: CartridgePlayer): TallyRow => rowFor(state, player.playerId, bankedNow));
+            const pockets: SceneBlock = { type: "roster", players: state.players.map((player: CartridgePlayer): RosterEntry => chipFor(state, player.playerId)) };
             if (state.phase === "choosing") {
                 return {
                     mood: "tense",
                     transition: "fade",
                     blocks: [
-                        { type: "title", text: "Draw or stay?", kicker: `${kicker}, card ${state.flips}` },
-                        { type: "text", text: `Last card: ${state.last === null ? "none" : cardText(state.last)}. ${state.deck.length} left in the deck.`, emphasis: "large" },
-                        { type: "tally", title: "In each pocket", rows },
-                        leaderBar(state),
-                        { type: "text", text: tensionLine(state), emphasis: "whisper" },
+                        { type: "title", text: "Draw or stay?", kicker: `${kicker}, card ${state.flips}, ${state.deck.length} left` },
+                        pockets,
+                        { type: "text", text: standingLine(state), emphasis: "whisper" },
                         { type: "timer", seconds: decisions.chooseSeconds, label: "to choose", running: true },
                     ],
                 };
@@ -635,8 +630,8 @@ export function createPushGame(givenBox: Box, givenDecisions: PushDecisions, ran
                 transition: "fade",
                 blocks: [
                     { type: "title", text: state.flipped === null ? "Nobody drew" : `Flipped: ${cardText(state.flipped)}`, kicker: `${kicker}, card ${state.flips}` },
-                    { type: "tally", title: "After the flip", rows },
-                    leaderBar(state),
+                    pockets,
+                    { type: "text", text: standingLine(state), emphasis: "whisper" },
                 ],
             };
         },
@@ -648,19 +643,20 @@ export function createPushGame(givenBox: Box, givenDecisions: PushDecisions, ran
                 const odds: string = `${dangerous(state, playerId)} of the ${state.deck.length} cards left would bust you.`;
                 return [{ type: "roleCard", title: `Your pocket: ${worth(hand)}`, body: `${pocket}. ${odds}`, secret: false }, ballot("Draw or stay?", legalFor(state, playerId).map((action: LegalAction) => ({ id: action.actionId, label: action.label })))];
             }
+            const card = (title: string, body: string): Control[] => [{ type: "roleCard", title, body, secret: false }];
             if (state.phase === "choosing" && state.standing[playerId] === "in") {
-                return [{ type: "waiting", text: `Locked in. You chose to ${state.choices[playerId] ?? "stay"}. Waiting for the others.` }];
+                return card("Locked in", `You chose to ${state.choices[playerId] ?? "stay"}. The flip is coming.`);
             }
             if (state.phase === "choosing" || state.phase === "reveal") {
                 if (state.standing[playerId] === "bust") {
-                    return [{ type: "waiting", text: `Bust. You lost ${state.lost[playerId] ?? 0}. Back next round.` }];
+                    return card("Bust", `You lost ${state.lost[playerId] ?? 0}. You are back in next round.`);
                 }
                 if (state.standing[playerId] === "stayed") {
-                    return [{ type: "waiting", text: `You banked ${state.roundBanked[playerId] ?? 0}. Watching the rest.` }];
+                    return card(`Banked ${state.roundBanked[playerId] ?? 0}`, "Watching the rest.");
                 }
-                return [{ type: "waiting", text: `Your pocket: ${pocket}. Look at the screen.` }];
+                return card(`Your pocket: ${worth(hand)}`, `${pocket}. Look at the screen.`);
             }
-            return [{ type: "waiting", text: state.phase === "writing" ? "Shuffling the deck." : "Look at the screen." }];
+            return card(state.phase === "writing" ? "Shuffling the deck" : `You banked ${state.banked[playerId] ?? 0}`, "Look at the screen.");
         },
 
         hostFacts(state: PushState, scope: Scope): ScopedFact[] {

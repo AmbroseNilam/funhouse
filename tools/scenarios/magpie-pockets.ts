@@ -49,6 +49,15 @@ function rows(): { label: string; count: number }[] {
 }
 
 /**
+ * The pockets on the TV, one chip per player, as "Name: what is in it".
+ * @returns the chips, possibly none.
+ */
+function pockets(): string[] {
+    const block: SceneBlock | undefined = screen.scene?.blocks.find((candidate: SceneBlock) => candidate.type === "roster");
+    return block?.type === "roster" ? block.players.map((player) => `${player.name}: ${player.badge ?? ""}`) : [];
+}
+
+/**
  * What a phone says its pocket is worth, from its card.
  * @param phone the phone.
  * @returns the points, or 0 when it has no card.
@@ -88,7 +97,7 @@ while (gameOver() === false) {
     lastKey = kicker();
     await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 400); });
     const waiting: FakePhone[] = phones.filter((phone: FakePhone) => phone.options().length > 0);
-    console.warn(`Beat ${beats + 1} (${lastKey}): ${rows().map((row) => `${row.label} ${row.count}`).join(" | ")}`);
+    console.warn(`Beat ${beats + 1} (${lastKey}): ${pockets().join(" | ")}`);
     const before: string = JSON.stringify(screen.scene);
     const bystander: FakePhone | undefined = waiting[1];
     const bystanderBefore: string = JSON.stringify(bystander?.view?.controls);
@@ -115,7 +124,7 @@ while (gameOver() === false) {
     }
     beats += 1;
     await waitFor(() => choosing() === false, "the flip");
-    console.warn(`  ${screen.title()}: ${rows().map((row) => `${row.label} ${row.count}`).join(" | ")}`);
+    console.warn(`  ${screen.title()}: ${pockets().join(" | ")}`);
     if (screen.title().endsWith("is over") === true) {
         roundsPlayed += 1;
         console.warn(`  Round ${roundsPlayed} over.`);

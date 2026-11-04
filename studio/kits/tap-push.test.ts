@@ -193,11 +193,12 @@ describe("magpie pockets", () => {
         assert.deepEqual(buttons?.type === "buttons" ? buttons.options.map((option) => option.label) : [], ["Draw a card", "Stay and bank 3"]);
         const scene: Scene = game.cartridge.publicScene(set);
         assert.equal(scene.blocks.some((block: SceneBlock) => block.type === "timer"), true);
-        assert.equal(scene.blocks.some((block: SceneBlock) => block.type === "tally"), true);
-        assert.equal(scene.blocks.some((block: SceneBlock) => block.type === "progress"), true);
+        const pockets: SceneBlock | undefined = scene.blocks.find((block: SceneBlock) => block.type === "roster");
+        assert.equal(pockets?.type === "roster" ? pockets.players[0]?.badge : "", "Brass key, Button (3)");
+        assert.match(stringsIn(scene).join(" "), /Nobody has banked yet\. First to 30 wins/);
         const flipped: Step<PushState> = chooseAll(game, set, { paper1: "draw", paper2: "stay", paper3: "stay", paper4: "stay" });
-        assert.match(game.cartridge.privateControls(flipped.state, "paper1").map((control) => stringsIn(control).join(" ")).join(" "), /Bust\. You lost 3/);
-        assert.match(game.cartridge.privateControls(flipped.state, "paper2").map((control) => stringsIn(control).join(" ")).join(" "), /You banked 1/);
+        assert.match(game.cartridge.privateControls(flipped.state, "paper1").map((control) => stringsIn(control).join(" ")).join(" "), /Bust You lost 3/);
+        assert.match(game.cartridge.privateControls(flipped.state, "paper2").map((control) => stringsIn(control).join(" ")).join(" "), /Banked 1/);
     });
 
     it("rejects bad decisions: too few kinds, a duplicate name, a non-finite number, a shouting line", () => {
