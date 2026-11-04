@@ -12,7 +12,7 @@ Last full check: `npm run check` passes (333 tests, warnings are line lengths). 
 | --- | --- | --- | --- |
 | Who Fits | everyone secretly taps who a prompt fits; counts shown | 3 to 8 | passed |
 | Two Takes | two players answer a prompt in secret, the room votes (typed text, filtered) | 3 to 8 | needs the real classifier: not run (stub cannot refuse text) |
-| Past the Gate | a keeper with a secret rule; players plead, code judges | 2 to 8 | not ready: scenario compares score rows by key order and fails (see below) |
+| Past the Gate | a keeper with a secret rule; players plead, code judges | 2 to 8 | passed (rules only), after fixing its score comparison |
 | Off by a Mile | guess a number, bet on whose guess is closest | 3 to 8 | passed (rules only) |
 | Mind the Gap | place a dated card in a growing row | 2 to 8 | passed (rules only) |
 | Tin Can Telephone | two teams, clue-givers hold a hidden key on a shared board | 3 to 10 | passed with stub model (failed once in a batch, passed on rerun: flaky) |
@@ -26,9 +26,6 @@ Not tested on any device. Not played at a table. Image cost and latency are unme
 
 ## Not ready
 
-- Past the Gate: `tools/scenarios/past-the-gate.ts` ~197 compares `JSON.stringify` of two score maps, so two
-  players on equal points in a different order fail it. A scenario bug, not a rules bug; the builder should
-  compare by name.
 - Two Takes: its scenario checks that a refused line is refused; needs a real META key.
 - Tin Can Telephone: flaky in the scenario ("timed out waiting for the guesser's turn"), once in two runs.
 

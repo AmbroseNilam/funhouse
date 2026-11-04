@@ -195,7 +195,8 @@ if (seats.some((seat: Seat) => (screen.scene?.blocks ?? []).some((block: SceneBl
 }
 const rows: Record<string, number> = Object.fromEntries((screen.scene?.blocks.find((block: SceneBlock) => block.type === "tally") as { rows: { label: string; count: number }[] } | undefined)?.rows.map((row) => [row.label, row.count]) ?? []);
 const expected: Record<string, number> = { [first.name]: 3, [second.name]: 3, [third.name]: 1 };
-if (JSON.stringify(rows) !== JSON.stringify(expected)) {
+const sameRows = (left: Record<string, number>, right: Record<string, number>): boolean => JSON.stringify(Object.entries(left).sort()) === JSON.stringify(Object.entries(right).sort());
+if (sameRows(rows, expected) === false) {
     throw new Error(`Wrong points: ${JSON.stringify(rows)}, expected ${JSON.stringify(expected)}.`);
 }
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, hostSilent === true ? 500 : 6000); });
