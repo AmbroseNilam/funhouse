@@ -106,6 +106,15 @@ function storePath(): string {
     return join(settings().directory, "spend.json");
 }
 
+/** Whether what was read has every part the meter relies on. */
+function isWholeDay(saved: SavedDay): boolean {
+    const isFigures = (value: unknown): boolean => typeof value === "object" && value !== null && Object.values(value).every((figure: unknown) => typeof figure === "number");
+    const accounts: unknown = saved.accounts;
+    return typeof saved.salt === "string" && typeof saved.day === "string" && typeof saved.unattributed === "number" && isFigures(saved.byService)
+        && typeof accounts === "object" && accounts !== null
+        && Object.values(accounts).every((account: Account | null) => typeof account?.dollars === "number" && typeof account.transcribeSeconds === "number" && typeof account.jevCalls === "number");
+}
+
 /** Reads the saved day, or marks the store broken. A missing file is simply a first run. */
 function load(): SavedDay {
     const fresh: SavedDay = { day: dayName(Date.now()), salt: randomBytes(32).toString("hex"), byService: {}, accounts: {}, unattributed: 0 };
@@ -137,14 +146,14 @@ function load(): SavedDay {
     }
     try {
         const saved: SavedDay = JSON.parse(text) as SavedDay;
-        if (typeof saved.salt !== "string" || typeof saved.day !== "string" || typeof saved.accounts !== "object") {
+        if (isWholeDay(saved) === false) {
             throw new Error("bad shape");
         }
         return saved;
     } catch {
         storeBroken = true;
         loadedBadFile = true;
-        note("spend store is damaged: spending stays off until it is fixed or removed");
+        note("spend store is damaged: spending stays off until it is fixed or removed and the server restarted");
         return fresh;
     }
 }
@@ -254,7 +263,7 @@ function stageAt(fraction: number): Stage {
 
 /**
  * Where a payer stands: the worse of their own allowance and the site's. The owner pass is exempt
- * from both. A broken store stops everyone but limits being off stops nobody.
+ * from both. A broken store stops everyone, the owner too, since nothing could be counted.
  * @param payer the payer; the current one when not given.
  * @returns the stage.
  */
@@ -265,11 +274,11 @@ export function stageOf(payer: string | undefined = PAYER.getStore()): Stage {
     }
     const day: SavedDay = today();
     const account: Account | undefined = payer === undefined ? undefined : day.accounts[payer];
-    if (account?.pass === "owner") {
-        return 0;
-    }
     if (storeBroken === true) {
         return 3;
+    }
+    if (account?.pass === "owner") {
+        return 0;
     }
     const allowance: number = account?.pass === "judge" ? limits.judge : limits.address;
     const own: Stage = limits.address === 0 && account === undefined ? 0 : stageAt(allowance === 0 ? 1 : (account?.dollars ?? 0) / allowance);
@@ -460,6 +469,7 @@ export function resetMeterForTest(): void {
 export function chargeChatEstimate(service: Service, inputCharacters: number): (usage: unknown) => void {
     const estimate: number = Math.ceil(inputCharacters / 3) * PRICES.sparkInputPerToken + 300 * PRICES.sparkOutputPerToken;
     charge(service, estimate);
+    const startedOn: string = today().day;
     let settled: boolean = false;
     return (usage: unknown): void => {
         const counted = usage as { prompt_tokens?: unknown; completion_tokens?: unknown; input_tokens?: unknown; output_tokens?: unknown } | null | undefined;
@@ -469,6 +479,10 @@ export function chargeChatEstimate(service: Service, inputCharacters: number): (
             return;
         }
         settled = true;
+        // Yesterday's estimate is yesterday's; a correction mustn't hand today extra allowance.
+        if (today().day !== startedOn) {
+            return;
+        }
         charge(service, input * PRICES.sparkInputPerToken + output * PRICES.sparkOutputPerToken - estimate);
     };
 }

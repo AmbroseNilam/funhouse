@@ -70,6 +70,12 @@ test("a damaged store stops spending without throwing", () => {
     assert.equal(mayCharge("spark"), false);
 });
 
+test("a store with parts missing stops spending without throwing", () => {
+    writeFileSync(join(process.env.COST_DIR ?? "", "spend.json"), JSON.stringify({ day: "2026-11-04", salt: "x", accounts: null }));
+    assert.equal(mayCharge("spark"), false);
+    assert.equal(stageOf("anyone"), 3);
+});
+
 test("an unwritable store stops spending, and recovers", () => {
     const directory: string = process.env.COST_DIR ?? "";
     charge("spark", 0.01);
