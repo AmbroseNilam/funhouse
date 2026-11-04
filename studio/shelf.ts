@@ -9,13 +9,14 @@ import { GameSession, type GameStage, type RunningGame } from "../room/game-sess
 import { log } from "../room/log.ts";
 import { blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
+import { MIND_THE_GAP_BLUEPRINT } from "./games/mind-the-gap/blueprint.ts";
 import { OFF_BY_A_MILE_BLUEPRINT } from "./games/off-by-a-mile/blueprint.ts";
 import { PAST_THE_GATE_BLUEPRINT } from "./games/past-the-gate/blueprint.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import { frozenCopy } from "./kit/primitives.ts";
 
 /** The blueprints Studio ships with, in shelf order. */
-export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, PAST_THE_GATE_BLUEPRINT, OFF_BY_A_MILE_BLUEPRINT];
+export const BLUEPRINTS: readonly Blueprint[] = [TWENTY_DOORS_BLUEPRINT, LEADING_QUESTIONS_BLUEPRINT, PAST_THE_GATE_BLUEPRINT, OFF_BY_A_MILE_BLUEPRINT, MIND_THE_GAP_BLUEPRINT];
 
 /**
  * Makes an installable game from a blueprint. The blueprint is copied first, so changing it
