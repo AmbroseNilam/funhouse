@@ -149,3 +149,16 @@ test("still refuses a capitals word the classifier refuses either way, and any l
     assert.deepEqual(await filterText("MAP LOVERS", 40, onlyLower), { allowed: false, category: "classifier" });
     assert.deepEqual(await filterText("Map", 40, onlyLower), { allowed: false, category: "classifier" }, "only a word wholly in capitals gets a second look");
 });
+
+test("a real abusive word in capitals is refused by the local check, with no second look at all", async () => {
+    const asked: string[] = [];
+    const classify: TextClassifier = (line: string): Promise<boolean> => {
+        asked.push(line);
+        return Promise.resolve(line === line.toLowerCase());
+    };
+    for (const word of [SLUR, SLUR_TWO, SHORT_SLUR, EXPLICIT]) {
+        const result = await filterText(word.toUpperCase(), 40, classify);
+        assert.equal(result.allowed, false, "a word on the local list");
+    }
+    assert.deepEqual(asked, [], "the classifier never saw them, so its second look can't let them through");
+});
