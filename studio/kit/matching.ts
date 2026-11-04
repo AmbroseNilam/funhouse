@@ -7,7 +7,7 @@
 export type GuessRuling = "match" | "close" | "miss";
 
 /** Small words that are not worth matching on their own. */
-const SMALL_WORDS: ReadonlySet<string> = new Set(["a", "an", "the", "of", "to", "in", "on", "at", "and", "or", "for", "with", "is", "it", "its", "i", "my", "his", "her", "their", "that"]);
+const SMALL_WORDS: ReadonlySet<string> = new Set(["a", "an", "the", "of", "to", "in", "on", "at", "and", "or", "for", "with", "is", "it", "its", "i", "my", "his", "her", "their", "that", "who", "was", "are", "be", "by", "from", "you", "your", "this", "as"]);
 
 /** Shortest word that a one-letter mishearing is forgiven in. */
 const FUZZY_FROM_LETTERS: number = 5;
