@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { CartridgePlayer } from "../../shared/cartridge.ts";
 import { boxProblems, isShortText, isWholeIn, rulingNameProblem, squash, type Box } from "./kit.ts";
-import { dealOne, frozenCopy, seededRandom, spend, tally, type Budget, type Spent, type Tally } from "./primitives.ts";
+import { dealOne, frozenCopy, seededRandom, shuffle, spend, tally, type Budget, type Spent, type Tally } from "./primitives.ts";
 
 /** A box that passes every check. */
 const BOX: Box = { id: "testGame", name: "Test game", pitch: "", howToPlay: [], remarks: ["Go on, then."], art: "", minPlayers: 2, maxPlayers: 6, keywords: [] };
@@ -20,6 +20,15 @@ describe("kit primitives", () => {
         const players: CartridgePlayer[] = [{ playerId: "a", name: "A" }, { playerId: "b", name: "B" }, { playerId: "c", name: "C" }];
         assert.ok(["a", "b", "c"].includes(dealOne(players, seededRandom(7))));
         assert.equal(dealOne(players, () => 0.99), "c");
+    });
+
+    it("shuffles a copy with the same items, the same way for the same seed", () => {
+        const items: number[] = [1, 2, 3, 4, 5, 6];
+        const mixed: number[] = shuffle(items, seededRandom(9));
+        assert.deepEqual([...mixed].sort(), items);
+        assert.deepEqual(items, [1, 2, 3, 4, 5, 6]);
+        assert.deepEqual(shuffle(items, seededRandom(9)), mixed);
+        assert.equal(new Set(Array.from({ length: 30 }, (_unused: unknown, seed: number) => shuffle(items, seededRandom(seed + 1)).join())).size > 5, true);
     });
 
     it("warns at the chosen counts and runs out once", () => {

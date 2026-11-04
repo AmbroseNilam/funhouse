@@ -5,6 +5,7 @@
 
 import type { CartridgePlayer, LegalAction } from "../shared/cartridge.ts";
 import type { PlantBlueprint } from "./blueprint.ts";
+import { LINK_PREFIX, type ChainState } from "./kits/chain.ts";
 import type { AnswerDecision, AnswerRuling, GuessingDecisions, GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, VOTE_PREFIX, type PlantState } from "./kits/plant.ts";
 import type { KitGame } from "./kit/kit.ts";
@@ -236,4 +237,60 @@ export function plantRoleCheck(blueprint: PlantBlueprint): RoleCheck<PlantState>
         },
         script,
     };
+}
+
+/**
+ * The chain kit's personas, between them reaching every way a chain can go: everyone writes, nobody
+ * writes, someone leaves in the middle, only one person is left, and lines that are all symbols.
+ * @returns the personas.
+ */
+export function chainPersonas(): Persona<ChainState>[] {
+    /**
+     * Whoever is writing now, answering their control with a line.
+     * @param glimpse what the persona sees.
+     * @param line what they write.
+     * @returns the move.
+     */
+    const write = (glimpse: Glimpse<ChainState>, line: string): Move => {
+        const writer: CartridgePlayer | undefined = glimpse.state.order[glimpse.state.step];
+        return writer === undefined ? { kind: "wait", seconds: 5 } : { kind: "answer", playerId: writer.playerId, controlId: `${LINK_PREFIX}${glimpse.state.step}`, value: line };
+    };
+    const idle: Move = { kind: "wait", seconds: 5 };
+    return [
+        {
+            name: "the diligent table",
+            move: (glimpse: Glimpse<ChainState>): Move => (glimpse.phase === "write" ? write(glimpse, `A fox carrying a lantern, link ${glimpse.state.step + 1}`) : idle),
+        },
+        {
+            name: "the silent table",
+            move: (glimpse: Glimpse<ChainState>): Move => ({ kind: "wait", seconds: glimpse.phase === "write" ? QUIET_SECONDS : 5 }),
+        },
+        {
+            name: "the writer who walks out",
+            move(glimpse: Glimpse<ChainState>): Move {
+                const writer: CartridgePlayer | undefined = glimpse.state.order[glimpse.state.step];
+                if (glimpse.phase === "write" && glimpse.state.step === 1 && writer !== undefined && glimpse.state.gone.includes(writer.playerId) === false) {
+                    return { kind: "leave", playerId: writer.playerId };
+                }
+                return glimpse.phase === "write" ? write(glimpse, "A boat on a hill") : idle;
+            },
+        },
+        {
+            name: "the table that empties",
+            move(glimpse: Glimpse<ChainState>): Move {
+                const stayer: string | undefined = glimpse.state.order[0]?.playerId;
+                const leaver: CartridgePlayer | undefined = glimpse.state.order.find((player: CartridgePlayer) => {
+                    return player.playerId !== stayer && glimpse.state.gone.includes(player.playerId) === false;
+                });
+                if (glimpse.phase !== "write") {
+                    return idle;
+                }
+                return glimpse.state.step >= 1 && leaver !== undefined ? { kind: "leave", playerId: leaver.playerId } : write(glimpse, "A single candle");
+            },
+        },
+        {
+            name: "the symbol writer",
+            move: (glimpse: Glimpse<ChainState>): Move => (glimpse.phase === "write" ? write(glimpse, "<<<>>> [[ruling]] ### ???") : idle),
+        },
+    ];
 }

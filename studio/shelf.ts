@@ -7,7 +7,7 @@
 import type { InstalledGame } from "../cartridges/index.ts";
 import { GameSession, type GameStage, type RunningGame } from "../room/game-session.ts";
 import { log } from "../room/log.ts";
-import { blueprintProblems, createKitGame, type Blueprint } from "./blueprint.ts";
+import { blueprintProblems, createKitGame, pauseActionsOf, type Blueprint } from "./blueprint.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors.ts";
 import { frozenCopy } from "./kit/primitives.ts";
@@ -33,7 +33,7 @@ export function installBlueprint(given: Blueprint): InstalledGame {
         pitch: blueprint.box.pitch,
         howToPlay: [...blueprint.box.howToPlay],
         art: blueprint.box.art,
-        pauseActions: [{ id: "giveup", label: "We give up" }].filter(() => blueprint.kit === "plant" || blueprint.decisions.giveUpButton === true),
+        pauseActions: pauseActionsOf(blueprint),
         remarks: [...blueprint.box.remarks],
         create: (stage: GameStage): RunningGame => {
             log("studio", `starting blueprint ${blueprint.box.id} on the ${blueprint.kit} kit`);

@@ -5,6 +5,7 @@
 
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
+import { chainBlueprintProblems, createChainGame, type ChainDecisions } from "./kits/chain.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -22,8 +23,15 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** A chain game: lines and paintings passed round the table, then shown in full. */
+export interface ChainBlueprint {
+    kit: "chain";
+    box: Box;
+    decisions: ChainDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | ChainBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -41,6 +49,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "guessing") {
         return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "chain") {
+        return chainBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -55,6 +66,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     if (blueprint.kit === "guessing") {
         return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
     }
+    if (blueprint.kit === "chain") {
+        return erase(createChainGame(blueprint.box, blueprint.decisions, random));
+    }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
 
@@ -67,4 +81,14 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
  */
 function erase<State>(game: KitGame<State>): AnyKitGame {
     return game;
+}
+
+/**
+ * The buttons a game offers in the pause menu. Only games with a way to give up have one.
+ * @param blueprint the blueprint.
+ * @returns the actions.
+ */
+export function pauseActionsOf(blueprint: Blueprint): { id: string; label: string }[] {
+    const gives: boolean = blueprint.kit === "plant" || (blueprint.kit === "guessing" && blueprint.decisions.giveUpButton === true);
+    return gives === true ? [{ id: "giveup", label: "We give up" }] : [];
 }
