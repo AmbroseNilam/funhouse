@@ -178,6 +178,17 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
             </ul>
         );
     }
+    if (block.type === "moment") {
+        return (
+            <div key={`moment-${block.kind}-${block.heading}`} className={`moment moment-${block.kind}`}>
+                {block.kind === "night" ? <div className="night-sky" aria-hidden="true"><i className="moon" /><i className="eyes"><b /><b /></i></div> : null}
+                <div className="moment-card">
+                    <strong>{block.heading}</strong>
+                    {block.detail !== undefined ? <span>{block.detail}</span> : null}
+                </div>
+            </div>
+        );
+    }
     return <span key={index} hidden />;
 }
 

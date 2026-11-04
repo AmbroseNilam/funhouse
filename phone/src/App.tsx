@@ -267,6 +267,9 @@ function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTal
     if (waiting !== "") {
         return { big: waiting, small: canTalk === true && micOff === true ? "Turn on your mic from the menu" : "" };
     }
+    if (canTalk === true && micOff === false && learned.has("hold") === false) {
+        return { big: talkHint, small: talkButton === true ? `${HOST_NAME} hears you until you tap Stop or go quiet` : `${HOST_NAME} hears you while you hold` };
+    }
     if (canTalk === false && pad.axis === null) {
         return { big: "Phones are quiet for now", small: `${HOST_NAME} will say when it's your turn` };
     }
@@ -408,6 +411,27 @@ function SecretCard(props: { title: string; lines: string[] }): ReactElement {
             {peeking === true
                 ? <>{props.title !== "" ? <strong>{props.title}</strong> : null}{props.lines.map((line: string) => <span key={line}>{line}</span>)}</>
                 : <em>Press and hold to peek</em>}
+        </button>
+    );
+}
+
+/**
+ * A role dealt to this player. A tap turns it over; it starts face up when first dealt and as a
+ * small strip from then on, so it never crowds the game.
+ * @param props the role, anything else secret, and how it starts.
+ * @returns the element.
+ */
+function RoleCard(props: { title: string; lines: string[]; startHidden: boolean }): ReactElement {
+    const [hidden, setHidden] = useState<boolean>(props.startHidden);
+    useEffect(() => { setHidden(props.startHidden); }, [props.startHidden]);
+    if (hidden === true) {
+        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>Your role. Tap to see</button>;
+    }
+    return (
+        <button className="paper role-face" onClick={() => { setHidden(true); }}>
+            <strong>{props.title}</strong>
+            {props.lines.map((line: string) => <span key={line}>{line}</span>)}
+            <small>Tap to hide</small>
         </button>
     );
 }
@@ -1124,7 +1148,6 @@ export function App(): ReactElement {
     const pad: PadView | null = view?.pad ?? null;
     const controls: Control[] = view?.controls ?? [];
     const waiting: string = controls.flatMap((control: Control) => (control.type === "waiting" ? [control.text] : [])).join(" ");
-    const line: { big: string; small: string } = pad === null ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     const secretTitle: string = controls.flatMap((control: Control) => (control.type === "roleCard" && control.secret === true ? [control.title] : []))[0] ?? "";
     const secretLines: string[] = controls.flatMap((control: Control) => {
         if (control.type === "roleCard" && control.secret === true) {
@@ -1132,16 +1155,24 @@ export function App(): ReactElement {
         }
         return control.type === "notice" && control.tone === "secret" ? [control.text] : [];
     });
-    const secretCard: ReactElement | null = secretLines.length > 0 ? <SecretCard key="secret" title={secretTitle} lines={secretLines} /> : null;
+    const roleControl: Control | undefined = controls.find((control: Control) => control.type === "roleCard" && control.secret === true);
+    const roleStartsHidden: boolean = roleControl?.type === "roleCard" && roleControl.startHidden === true;
+    const secretCard: ReactElement | null = secretLines.length === 0
+        ? null
+        : roleControl !== undefined
+            ? <RoleCard key="role" title={secretTitle} lines={secretLines} startHidden={roleStartsHidden} />
+            : <SecretCard key="secret" title={secretTitle} lines={secretLines} />;
     const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
     const hasPrivate: boolean = privateControls.some((control) => control !== null);
+    const quietUnderCards: boolean = hasPrivate === true && waiting === "" && canTalk === false;
+    const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true ? "Your mic is off" : "";
-    const status: string = problem !== "" ? problem : view?.status === line.big || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
+    const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""}`} style={seatStyle}>
+        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""} ${hasPrivate === true ? "has-private" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>

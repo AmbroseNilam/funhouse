@@ -1,84 +1,176 @@
-// Plays Werewolf from a script with five fake phones, through to a winner. Fails if the host
-// names a living werewolf as one, or if a phone can see another phone's role.
-// Run the room with GAME_ROOM_TEXT_ONLY=1, then: node tools/scenarios/werewolf.ts
+// Plays Werewolf from a script through to a winner, with 4 or 6 fake phones: 6 by default, or pass the
+// number. Four lets the host decide; six also switches on the doctor and hunter by hand. Fails if a
+// phone, the TV or the host ever shows a secret it shouldn't, or the game stalls.
+// Run the room with GAME_ROOM_TEXT_ONLY=1, then: node tools/scenarios/werewolf.ts [4|6]
 
 import { FakePhone, FakeScreen, waitFor } from "../simulate.ts";
 
 /** One fake player and what their phone told them. */
-interface Seat {
+interface Player {
     name: string;
     phone: FakePhone;
     role: string;
-    out: boolean;
 }
 
+/** How often the script looks at the table. */
+const LOOK_MILLISECONDS: number = 250;
+
+/** The longest a whole game may take. */
+const GAME_LIMIT_MILLISECONDS: number = 210000;
+
+const count: number = Number(process.argv[2] ?? process.env.WEREWOLF_PLAYERS ?? 6);
 const screen: FakeScreen = new FakeScreen();
 await waitFor(() => screen.code !== "", "a room");
-const seats: Seat[] = ["Sam", "Priya", "Jo", "Dana", "Leo"].map((name: string) => ({ name, phone: new FakePhone(screen.code, name), role: "", out: false }));
-await waitFor(() => screen.shell?.seats.length === seats.length, "every phone to join");
-await seats[0]?.phone.startGame(screen, "Werewolf");
-await waitFor(() => screen.title() === "Look at your phone", "the role cards");
-await waitFor(() => seats.every((seat: Seat) => seat.phone.view?.controls.some((control) => control.type === "roleCard") === true), "every role card");
-for (const seat of seats) {
-    const card = seat.phone.view?.controls.find((control) => control.type === "roleCard");
-    seat.role = card?.type === "roleCard" ? card.title.replace("You are a ", "") : "";
-    console.warn(`${seat.name} is a ${seat.role}`);
+const players: Player[] = ["Sam", "Priya", "Jo", "Dana", "Leo", "Ivy"].slice(0, count).map((name: string) => ({ name, phone: new FakePhone(screen.code, name), role: "" }));
+await waitFor(() => screen.shell?.seats.length === players.length, "every phone to join");
+await players[0]?.phone.startGame(screen, "Werewolf");
+await waitFor(() => screen.title() === "Choose your village", "the pick step");
+await waitFor(() => players.every((player: Player) => player.phone.options().length > 0), "pick buttons on every phone");
+if (count >= 6) {
+    players[1]?.phone.press("setup:doctor");
+    await waitFor(() => players[1]?.phone.options().some((option) => option.label === "Doctor: in") === true, "the doctor toggle");
+    players[2]?.phone.press("setup:hunter");
+    await waitFor(() => players[2]?.phone.options().some((option) => option.label === "Hunter: in") === true, "the hunter toggle");
+    players[0]?.phone.press("setup:go");
 }
-if (seats.filter((seat: Seat) => seat.role === "werewolf").length !== 1) {
-    throw new Error("Five players should get one werewolf.");
+if (count < 6) {
+    players[0]?.phone.press("setup:host");
 }
-const hasFinished = (): boolean => screen.title().endsWith("wins");
-const isOut = (seat: Seat): boolean => {
-    return screen.shell?.seats.some((entry) => entry.name === seat.name && entry.out === true) === true;
+await waitFor(() => screen.title() === "How it works", "the rules");
+const isFinished = (): boolean => screen.title().endsWith("win") || screen.title().endsWith("wins");
+const isOut = (player: Player): boolean => screen.shell?.seats.some((entry) => entry.name === player.name && entry.out === true) === true;
+const living = (): Player[] => players.filter((player: Player) => isOut(player) === false);
+const titles: string[] = [];
+let asked: boolean = false;
+let voteRound: number = 0;
+let lastTitle: string = "";
+const startedAt: number = Date.now();
+
+/**
+ * The first option on a phone whose label is a player's name, or anything if none is.
+ * @param player whose phone.
+ * @param wanted the name wanted.
+ * @returns the option's id, or undefined.
+ */
+const optionFor = (player: Player, wanted: string): string | undefined => {
+    const options = player.phone.options();
+    return options.find((option) => option.label === wanted)?.id ?? options[0]?.id;
 };
 
-let day: number = 1;
-while (hasFinished() === false && day <= 4) {
-    await waitFor(() => screen.title() === "Night falls" || hasFinished(), "night");
-    if (hasFinished() === true) {
-        break;
+while (isFinished() === false) {
+    if (Date.now() - startedAt > GAME_LIMIT_MILLISECONDS) {
+        throw new Error(`The game stalled on "${screen.title()}". Screens so far: ${titles.join(" > ")}`);
     }
-    await waitFor(() => seats.some((seat: Seat) => seat.role === "werewolf" && seat.phone.options().length > 0), "the werewolf's choices");
-    for (const seat of seats.filter((candidate: Seat) => candidate.role === "seer" || candidate.role === "werewolf")) {
-        const option = seat.phone.options()[0];
-        if (option !== undefined && isOut(seat) === false) {
-            seat.phone.press(option.id);
+    const title: string = screen.title();
+    if (title !== lastTitle) {
+        titles.push(title);
+        lastTitle = title;
+        console.warn(`TV: ${title}`);
+        if (title === "The vote") {
+            voteRound += 1;
         }
     }
-    await waitFor(() => screen.title() === "Dawn" || hasFinished(), "dawn");
-    if (hasFinished() === true) {
-        break;
-    }
-    await waitFor(() => screen.title() === "Who is the werewolf?" || hasFinished(), "the discussion");
-    if (hasFinished() === true) {
-        break;
-    }
-    const speakers: Seat[] = seats.filter((seat: Seat) => isOut(seat) === false);
-    const before: number = screen.hostLines.length;
-    speakers[0]?.phone.say("Marlowe, who is the werewolf? You must know.");
-    await screen.nextHostLine(before);
-    speakers[1]?.phone.say(`I think it's ${speakers[0]?.name ?? "someone"}, honestly.`);
-    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 5000); });
-    speakers[0]?.phone.say("Okay Marlowe, we're ready to vote.");
-    await waitFor(() => screen.title() === "The vote" || hasFinished(), "the vote");
-    await waitFor(() => speakers.every((seat: Seat) => seat.phone.options().length > 0), "ballots on every phone");
-    const wolf: Seat | undefined = seats.find((seat: Seat) => seat.role === "werewolf");
-    for (const seat of speakers) {
-        const wanted = seat.phone.options().find((option) => option.label === wolf?.name) ?? seat.phone.options()[0];
-        if (wanted !== undefined) {
-            seat.phone.press(wanted.id);
+    for (const player of living()) {
+        const options = player.phone.options();
+        if (title === "How it works" && options.some((option) => option.label === "Got it") === true) {
+            player.phone.press("Got it");
+        }
+        if (title === "Check your phone") {
+            const card = player.phone.view?.controls.find((control) => control.type === "roleCard");
+            player.role = card?.type === "roleCard" ? card.title.replace(/^You are (a|the) /, "") : player.role;
+            if (options.some((option) => option.label === "I've seen it") === true) {
+                player.phone.press("I've seen it");
+            }
+        }
+        if (title === "Night falls" && options.length > 0 && player.phone.view?.controls.some((control) => control.type === "notice" && control.text.startsWith("You chose")) !== true) {
+            const pick = options.find((option) => option.label !== player.name && option.label !== "Yourself");
+            player.phone.press(pick?.id ?? options[0]?.id ?? "");
+        }
+        if ((title === "The vote" || title === "The final vote") && player.phone.view?.turn?.yours === true) {
+            const wolf: Player | undefined = living().find((candidate: Player) => candidate.role === "werewolf");
+            const notWolf: Player | undefined = living().find((candidate: Player) => candidate.role !== "werewolf" && candidate !== player);
+            const target: Player | undefined = count >= 6 && voteRound === 1 ? notWolf : wolf;
+            const chosen: string | undefined = optionFor(player, target === player ? notWolf?.name ?? "" : target?.name ?? "");
+            if (chosen !== undefined) {
+                player.phone.press(chosen);
+            }
         }
     }
-    await waitFor(() => screen.title() !== "The vote", "the vote to finish");
-    day += 1;
+    if (title === "One last shot") {
+        for (const player of players) {
+            const shot = player.phone.options().find((option) => option.id.startsWith("shoot:"));
+            if (shot !== undefined) {
+                player.phone.press(shot.id);
+            }
+        }
+    }
+    if (title === "Who is the werewolf?") {
+        if (asked === false) {
+            asked = true;
+            const before: number = screen.hostLines.length;
+            living()[0]?.phone.say("Marlowe, who is the werewolf? You must know.");
+            await screen.nextHostLine(before).catch(() => undefined);
+        }
+        const needing: Player[] = living().filter((player: Player) => player.phone.options().some((option) => option.label === "Ready to vote") === true);
+        for (const player of needing) {
+            player.phone.press("Ready to vote");
+        }
+    }
+    await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, LOOK_MILLISECONDS); });
 }
-await waitFor(hasFinished, "a winner");
-console.warn(`Result: ${screen.title()}`);
+console.warn(`Result: ${screen.title()}. Screens: ${titles.join(" > ")}`);
 await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, 6000); });
-const wolfName: string = seats.find((seat: Seat) => seat.role === "werewolf")?.name ?? "";
-const leaks: string[] = screen.hostLines.slice(0, -2).filter((line: string) => line.includes(wolfName) === true && /\b(is|was) (a |the )?werewolf\b/i.test(line) === true && line.includes("was") === false);
-if (leaks.length > 0) {
-    throw new Error(`Host may have named the werewolf: ${leaks.join(" | ")}`);
+
+for (const needed of ["How it works", "Check your phone", "Night falls", "Dawn"]) {
+    if (titles.includes(needed) === false) {
+        throw new Error(`Never saw "${needed}". Screens: ${titles.join(" > ")}`);
+    }
 }
+const wolves: Player[] = players.filter((player: Player) => player.role === "werewolf");
+if (wolves.length !== 1) {
+    throw new Error(`This table should have one werewolf and had ${wolves.length}.`);
+}
+
+// Secrets never reach the wrong phone.
+for (const player of players) {
+    const seen: string = JSON.stringify(player.phone.views);
+    for (const role of ["werewolf", "seer", "doctor", "hunter", "villager"]) {
+        const article: string = role === "werewolf" || role === "villager" ? "a" : "the";
+        if (role !== player.role && seen.includes(`You are ${article} ${role}`) === true) {
+            throw new Error(`${player.name} saw another role's card.`);
+        }
+    }
+    if (player.role !== "werewolf" && seen.includes("You hunt alone") === true) {
+        throw new Error(`${player.name} saw the pack's whisper.`);
+    }
+    if (player.role !== "seer" && /(is|is not) a werewolf\./.test(seen) === true) {
+        throw new Error(`${player.name} saw the seer's finding.`);
+    }
+    if (player.role !== "werewolf" && seen.includes("kill:") === true) {
+        throw new Error(`${player.name} was offered a kill.`);
+    }
+}
+
+// Secrets never reach the TV or the host while they're still secret.
+const beforeEnd = screen.scenes.filter((scene) => scene.blocks.some((block) => block.type === "title" && (block.text.endsWith("win") || block.text.endsWith("wins"))) === false);
+const tvText: string = JSON.stringify(beforeEnd);
+for (const wolf of wolves) {
+    if (tvText.includes(`"badge":"werewolf"`) === true) {
+        throw new Error("The TV showed a role before the end.");
+    }
+    const namesWolf: RegExp = new RegExp(`${wolf.name} (is|was) (a |the )?werewolf`, "i");
+    const hostBeforeOut: string[] = screen.hostLines.slice(0, -3).filter((line: string) => namesWolf.test(line) === true);
+    if (hostBeforeOut.length > 0 && titles.at(-1) !== "The village wins") {
+        throw new Error(`Host may have named the werewolf: ${hostBeforeOut.join(" | ")}`);
+    }
+}
+const overLong: string[] = screen.hostLines.slice(0, -1).filter((line: string) => line.split(/\s+/).length > 25);
+if (overLong.length > 0) {
+    console.warn(`Host lines over 25 words: ${overLong.length}`);
+    for (const line of overLong) {
+        console.warn(`  ${line}`);
+    }
+}
+console.warn(`Winner seen. Roles: ${players.map((player: Player) => `${player.name} ${player.role}`).join(", ")}`);
 console.warn("PASS");
 process.exit(0);

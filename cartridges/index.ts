@@ -63,8 +63,8 @@ export const GAMES: InstalledGame[] = [
     },
     {
         manifest: WEREWOLF_MANIFEST,
-        pitch: "A village, a secret werewolf, and a vote every day.",
-        howToPlay: ["Your phone tells you your role. Keep it to yourself.", "At night, the werewolf chooses someone on their phone.", "By day, argue out loud, then vote someone out."],
+        pitch: "A village, secret roles, and a vote every day.",
+        howToPlay: ["Your phone tells you your role. Tap it to hide it.", "At night, eyes close and the werewolves choose someone on their phones.", "By day, argue out loud, then vote someone out."],
         art: "art/werewolf.webp",
         pauseActions: [],
         remarks: ["I like this one. Everyone lies.", "You'll want more friends for this.", "Don't look at me. I don't know either."],
