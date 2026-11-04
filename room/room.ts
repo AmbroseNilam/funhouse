@@ -8,7 +8,7 @@
 // short pre-recorded filler plays when a reply is slow to start.
 
 import { OWN_ANSWER_LIMIT } from "../cartridges/setup-step.ts";
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type WebSocket from "ws";
 import type { GamePick, ContentGrounding, CartridgeManifest } from "../shared/cartridge.ts";
 import { REVEAL_NOW, type Control, type GuestTable, type HostVoiceChoice, type ListeningMode, type PhoneView } from "../shared/controls.ts";
@@ -437,6 +437,8 @@ function guestPick(persona: GuestPersona): { name: string; label: string } {
 
 /** The room runtime. One instance per live room. */
 export class Room implements HostStage, AgentHost {
+    /** Proves a screen is the one that opened this room; never sent to anyone else. */
+    private readonly screenKey: string = randomBytes(24).toString("hex");
     public readonly code: string;
     /** Who this room's spending is charged to: whoever opened it. */
     public readonly payer: string;
@@ -727,10 +729,22 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
+     * Checks a key a screen presented, in constant time.
+     * @param key what it sent.
+     * @returns true when it's this room's.
+     */
+    private isScreenKey(key: unknown): boolean {
+        const given: Buffer = createHash("sha256").update(typeof key === "string" ? key : "").digest();
+        return timingSafeEqual(given, createHash("sha256").update(this.screenKey).digest());
+    }
+
+    /**
      * Attaches a screen and sends it the current scene.
      * @param socket the screen's WebSocket.
+     * @param opener true when this screen just opened the room. Only it is given the key that lets a
+     * mouse steer, as the room code is on show to everyone and only ever lets a screen watch.
      */
-    public attachScreen(socket: WebSocket): void {
+    public attachScreen(socket: WebSocket, opener: boolean = false): void {
         this.screens.add(socket);
         log(this.scope(), `screen connected (${this.screens.size} open)`);
         socket.on("close", () => {
@@ -740,8 +754,30 @@ export class Room implements HostStage, AgentHost {
         let lit: boolean = false;
         const unlitTimer: NodeJS.Timeout = setTimeout(() => { socket.close(4008, "never lit"); }, UNLIT_SCREEN_MILLISECONDS);
         socket.on("close", () => { clearTimeout(unlitTimer); });
+        let steering: boolean = opener;
+        const screenRate: RateWindow = new RateWindow(TEXT_MESSAGES_PER_SECOND, 1000);
+        if (opener === true) {
+            this.sendToScreen(socket, { type: "screenKey", roomCode: this.code, key: this.screenKey });
+        }
         socket.on("message", this.onAccount((data: WebSocket.RawData) => {
+            if (screenRate.allow() === false) {
+                return;
+            }
             const message: ScreenMessage | null = parseMessage<ScreenMessage>(rawDataToText(data));
+            if (message?.type === "claim") {
+                if (this.isScreenKey(message.key) === true) {
+                    steering = true;
+                    this.sendToScreen(socket, { type: "screenKey", roomCode: this.code, key: this.screenKey });
+                }
+                return;
+            }
+            if (message?.type === "nav") {
+                if (steering === true && isPhoneMessage(message as unknown as { type: string } & Record<string, unknown>) === true) {
+                    this.lastActivityAt = Date.now();
+                    this.shell.actFromScreen(message.action);
+                }
+                return;
+            }
             if (message?.type !== "ready" || lit === true) {
                 return;
             }

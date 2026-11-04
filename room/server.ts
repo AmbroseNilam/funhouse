@@ -403,7 +403,7 @@ sockets.on("connection", (socket: WebSocket, request: IncomingMessage) => {
         if (noPaintings === true) {
             room.stopPaintings();
         }
-        room.attachScreen(socket);
+        room.attachScreen(socket, existing === undefined);
         return;
     }
     if (url.pathname === "/ws/phone") {

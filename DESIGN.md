@@ -64,8 +64,8 @@ The phone is one full-screen touch surface, designed so nobody has to look down.
 ## The TV
 
 - **Discrete focus, same direction as the thumb.** Focus memory per shelf.
-- **A mouse is a seat, not a remote.** Someone with no phone clicks from their own seat, an ordinary phone
-  connection held to the same holder rules; on an empty table a click sits them down, otherwise they ask for a seat.
+- **A mouse steers the view and never plays.** On the TV that opened the room, a mouse moves through the shelf
+  and menus as the controller's holder could. It takes no seat and no game counts it; players are always on phones.
   The cursor and mouse buttons show only while a mouse is moving, never on touch or a console.
 - **Thumb lean:** before a step, the focused item leans toward the thumb (up to 1.5 degrees and 8px).
   At an edge it rubberbands 12px. This is what makes it feel connected.

@@ -1,6 +1,6 @@
 // The console's screens, drawn from what the room says: the shelf of game boxes, a game's page,
 // who's at the table, and the pause menu. Nothing here decides anything. Text is written for
-// reading across a room. Every screen works from the phone alone; a mouse only says what a phone could.
+// reading across a room. Every screen works from the phone alone; a mouse only steers the menus.
 
 import type { ReactElement } from "react";
 import { HOST_NAME } from "../../shared/brand.ts";
@@ -131,7 +131,7 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
             <img className="room-art" src="art/hero.webp" alt="" />
             <header className="shelf-heading" key={focused?.id ?? "players"}>
                 {empty === true
-                    ? <><h1>Pull up a chair.</h1><p>Scan the code with your phone. It becomes your controller.{pointing !== null ? <><br />No phone? Pick a box with your mouse.</> : null}</p></>
+                    ? <><h1>Join on your phone to play.</h1><p>Scan the code with your phone. It becomes your controller.</p></>
                     : <><h1>{focused?.name ?? "At the table"}</h1><p>{focused?.pitch ?? "See who's here, or add a player."}</p></>}
             </header>
             <div className={`shelf ${empty === true ? "dimmed" : ""}`}>
@@ -168,17 +168,18 @@ function Shelf(props: { shell: ShellView; driver: Seat | undefined; qr: string; 
  * @param props the console and game.
  * @returns the element.
  */
-function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame; pointing: Pointing }): ReactElement {
+function GamePage(props: { shell: ShellView; driver: Seat | undefined; game: ShelfGame; qr: string; code: string; joinHost: string; pointing: Pointing }): ReactElement {
     const { shell, game, driver } = props;
     return (
         <section className="screen game-screen">
+            {shell.seats.length === 0 ? <JoinTag qr={props.qr} code={props.code} big={false} joinHost={props.joinHost} /> : null}
             <img className="room-art" src="art/hero.webp" alt="" />
             <div className="cover" style={{ viewTransitionName: `box-${game.id}` }}><Poster id={game.id} art={game.art} /></div>
             <div className="about">
                 <h1>{game.name}</h1>
                 <p className="pitch">{game.pitch}</p>
                 <ol className="steps">{game.howToPlay.map((line: string) => <li key={line}>{line}</li>)}</ol>
-                <p className={`players-note ${game.blocked !== null ? "blocked" : ""}`}>{game.blocked ?? game.players}</p>
+                <p className={`players-note ${game.blocked !== null ? "blocked" : ""}`}>{shell.seats.length === 0 ? "Join on your phone to play." : game.blocked ?? game.players}</p>
                 <Rows rows={shell.menu} focus={shell.focus} driver={driver} pointing={props.pointing} {...(game.blocked !== null ? { muted: [0] } : {})} />
             </div>
         </section>
@@ -312,7 +313,7 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
         );
     }
     if (shell.screen === "game" && game !== undefined) {
-        return <GamePage shell={shell} driver={driver} game={game} pointing={pointing} />;
+        return <GamePage shell={shell} driver={driver} game={game} qr={props.qr} code={props.code} joinHost={props.joinHost} pointing={pointing} />;
     }
     if (shell.screen === "players" || shell.screen === "addPlayer" || shell.screen === "addGuest" || shell.screen === "guestLine" || shell.screen === "agentOnPhone") {
         return <PlayersPage shell={shell} driver={driver} qr={props.qr} code={props.code} joinHost={props.joinHost} pointing={pointing} />;

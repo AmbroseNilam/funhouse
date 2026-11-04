@@ -390,3 +390,30 @@ describe("the console", () => {
         assert.equal(shell.view().screen, "pause");
     });
 });
+
+describe("a mouse on the TV", () => {
+    it("steers for the holder and leaves the controller with them", () => {
+        const told: Told = { started: [], ended: 0, pausedNow: false, pickLines: [], over: false };
+        const shell: Shell = shellWith(told);
+        shell.seatsChanged();
+        const holder: boolean = shell.isDriving("a");
+        shell.actFromScreen({ kind: "choose", index: 0 });
+        assert.equal(shell.view().screen, "game");
+        assert.equal(holder, true);
+        assert.equal(shell.isDriving("a"), true);
+    });
+
+    it("can look around an empty table but can't start a game there", () => {
+        const told: Told = { started: [], ended: 0, pausedNow: false, pickLines: [], over: false, seats: [] };
+        const shell: Shell = shellWith(told);
+        shell.seatsChanged();
+        shell.actFromScreen({ kind: "choose", index: 0 });
+        assert.equal(shell.view().screen, "game");
+        shell.actFromScreen({ kind: "choose", index: 0 });
+        shell.actFromScreen({ kind: "select" });
+        assert.equal(shell.view().screen, "game");
+        assert.equal(told.started.length, 0);
+        shell.actFromScreen({ kind: "back" });
+        assert.equal(shell.view().screen, "home");
+    });
+});

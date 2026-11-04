@@ -1,17 +1,17 @@
 // The TV: the room's shelf and pages, the game on the table, the lantern, and what was just
-// said. It draws what it is told and plays what it is sent. Phones drive; someone at the TV with a
-// mouse can drive too, through a seat of their own (see tvSeat.ts).
+// said. It draws what it is told and plays what it is sent. Phones play. A mouse on the TV that opened
+// the room can steer the menus for whoever holds the controller, and never plays.
 
 import { versionLine } from "../../shared/build-info.ts";
 import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import type { Turn } from "../../shared/turn.ts";
-import { useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type FormEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type FormEvent, type ReactElement } from "react";
 import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
 import { HOST_NAME } from "../../shared/brand.ts";
-import type { Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
+import type { NavAction, Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel, type Pointing } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
@@ -21,8 +21,6 @@ import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
 import { HostSpeaker } from "./speaker.ts";
-import { TvHand } from "./TvHand.tsx";
-import { useTvSeat, type TvSeat } from "./tvSeat.ts";
 
 /** How long a reveal waits before its scores start counting: the answer, then who got it, then the points. */
 const COUNT_UP_DELAY_MILLISECONDS: number = 900;
@@ -53,6 +51,8 @@ interface ScreenState {
     roomClosed: boolean;
     resting: boolean;
     shell: ShellView | null;
+    /** True once the room has said this screen opened it, so its mouse counts. */
+    steering: boolean;
 }
 
 /** Actions that change screen state. */
@@ -93,7 +93,7 @@ const PHONE_SHORT_SIDE_PIXELS: number = 600;
 /** True on a touch device with a phone-sized display, in either orientation. */
 const ON_PHONE: boolean = matchMedia("(pointer: coarse)").matches === true && Math.min(screen.width, screen.height) <= PHONE_SHORT_SIDE_PIXELS;
 
-const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, turn: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, resting: false, shell: null };
+const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrDataUrl: "", hostThinking: false, hostMood: null, turn: null, hostSpeaking: false, hostName: "Host", connected: false, started: false, turnedAway: false, roomClosed: false, resting: false, shell: null, steering: false };
 
 /**
  * Pure reducer from room messages to screen state.
@@ -103,7 +103,7 @@ const INITIAL_STATE: ScreenState = { scene: null, joinUrl: "", roomCode: "", qrD
  */
 function reduce(state: ScreenState, action: ScreenAction): ScreenState {
     if (action.type === "connection") {
-        return { ...state, connected: action.connected };
+        return { ...state, connected: action.connected, steering: action.connected === true && state.steering };
     }
     if (action.type === "turnedAway") {
         return { ...state, turnedAway: true };
@@ -121,6 +121,9 @@ function reduce(state: ScreenState, action: ScreenAction): ScreenState {
         return { ...state, qrDataUrl: action.dataUrl };
     }
     const message: RoomToScreenMessage = action.message;
+    if (message.type === "screenKey") {
+        return { ...state, steering: true };
+    }
     if (message.type === "scene") {
         return { ...state, scene: message.scene, joinUrl: message.joinUrl, roomCode: message.roomCode, turn: message.turn };
     }
@@ -286,6 +289,36 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
     return <span key={index} hidden />;
 }
 
+/** Keys this page holds, kept here too in case the browser refuses storage. */
+const screenKeys: Map<string, string> = new Map();
+
+/**
+ * Keeps the key that shows this screen opened a room, so a reload still counts. Per tab.
+ * @param roomCode the room.
+ * @param key the key.
+ */
+function rememberScreenKey(roomCode: string, key: string): void {
+    screenKeys.set(roomCode, key);
+    try {
+        sessionStorage.setItem(`funhouse.screenKey.${roomCode}`, key);
+    } catch {
+        // The copy in memory still covers a dropped connection.
+    }
+}
+
+/**
+ * Finds this tab's key for a room.
+ * @param roomCode the room.
+ * @returns the key, or an empty string.
+ */
+function screenKey(roomCode: string): string {
+    try {
+        return screenKeys.get(roomCode) ?? sessionStorage.getItem(`funhouse.screenKey.${roomCode}`) ?? "";
+    } catch {
+        return screenKeys.get(roomCode) ?? "";
+    }
+}
+
 /** The screen application. */
 export function App(): ReactElement {
     const [state, dispatch] = useReducer(reduce, INITIAL_STATE);
@@ -304,7 +337,12 @@ export function App(): ReactElement {
     const touchTimerRef = useRef<number>(0);
     const [phoneGate, setPhoneGate] = useState<boolean>(ON_PHONE);
 
-    const tvSeat: TvSeat = useTvSeat(state.roomCode, ON_CONSOLE === false && ON_PHONE === false);
+    /** Sends what the mouse chose; the room decides whether this screen may. */
+    const navigate = useCallback((action: NavAction): void => {
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "nav", action } satisfies ScreenMessage));
+        }
+    }, []);
 
     // The cursor and the mouse's own buttons show only while a real mouse is moving. A touch never brings them up, so a wall tablet stays clean.
     useEffect(() => {
@@ -360,6 +398,10 @@ export function App(): ReactElement {
             socket.onopen = (): void => {
                 retryDelay = 500;
                 dispatch({ type: "connection", connected: true });
+                const key: string = screenKey(new URLSearchParams(location.search).get("room") ?? "");
+                if (key !== "") {
+                    socket.send(JSON.stringify({ type: "claim", key } satisfies ScreenMessage));
+                }
                 // Already lit before the connection dropped, so the room needs to hear it again, without any fuss.
                 if (speakerRef.current !== null) {
                     socket.send(JSON.stringify({ type: "ready", resumed: true } satisfies ScreenMessage));
@@ -386,6 +428,9 @@ export function App(): ReactElement {
                 const message: RoomToScreenMessage | null = parseMessage<RoomToScreenMessage>(event.data);
                 if (message === null) {
                     return;
+                }
+                if (message.type === "screenKey") {
+                    rememberScreenKey(message.roomCode, message.key);
                 }
                 if (message.type === "edge") {
                     soundsRef.current?.edge();
@@ -652,12 +697,9 @@ export function App(): ReactElement {
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
     const backdrop: string | undefined = state.scene?.backdrop ?? (game === undefined ? undefined : `art/posters/${game.id}.webp`);
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
-    const people: Seat[] = seats.filter((seat: Seat) => seat.guest === false);
-    // A seated visitor follows the same rule as any phone. Nobody seated may only sit down by clicking when the table has no people at it.
-    const mayPoint: boolean = ON_CONSOLE === false && state.started === true && (tvSeat.view !== null ? tvSeat.view.pad.canDrive === true : people.length === 0 && HAS_MOUSE === true);
-    const pointing: Pointing = mayPoint === true ? tvSeat.nav : null;
-    const backLabel: string | null = tvSeat.view?.pad.backLabel ?? null;
-    const showBack: boolean = pointing !== null && backLabel !== null && (shell?.screen === "play" || shell?.screen === "pick" || shell?.screen === "startCard");
+    // Only the TV that opened the room gets a mouse, only where a mouse exists, and it never takes a seat.
+    const pointing: Pointing = ON_CONSOLE === false && HAS_MOUSE === true && state.started === true && state.steering === true ? navigate : null;
+    const backLabel: string | null = shell?.screen === "pick" || shell?.screen === "startCard" ? "Back" : (shell?.screen === "play" && shell.gameOver === false) || shell?.screen === "setup" ? "Pause" : null;
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
             <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
@@ -690,16 +732,7 @@ export function App(): ReactElement {
             </div>
             {shell?.steppedOut === true ? <SteppedOutPanel qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} /> : null}
             {shell?.steppedOut !== true && (shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd") ? <PausePanel shell={shell} driver={driver} game={game} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} pointing={pointing} /> : null}
-            {tvSeat.view !== null && shell?.screen === "play" && shell.gameOver === false && shell.steppedOut === false ? <TvHand gameId={shell.gameId} controls={tvSeat.view.controls} send={tvSeat.send} /> : null}
-            {ON_CONSOLE === false && state.started === true ? (
-                <div className="tv-strip">
-                    {tvSeat.view === null && (people.length > 0 || HAS_MOUSE === true) ? <span className="tv-agree">For adults 18+. By sitting down you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy</a>.</span> : null}
-                    {tvSeat.view !== null
-                        ? <><span>You're {tvSeat.name} at this screen{tvSeat.view.pad.canDrive === false && tvSeat.view.pad.driverName !== "" ? `. ${tvSeat.view.pad.driverName} has the controller.` : "."}</span><button className="tv-button" onClick={tvSeat.leave}>Leave</button></>
-                        : people.length > 0 ? <button className="tv-button" onClick={tvSeat.sit}>{tvSeat.full === true ? "The table's full" : "No phone? Take a seat"}</button> : null}
-                    {showBack === true ? <button className="tv-button" onClick={() => { tvSeat.nav({ kind: "back" }); }}>{backLabel}</button> : null}
-                </div>
-            ) : null}
+            {pointing !== null && backLabel !== null ? <div className="tv-strip"><button className="tv-button" onClick={() => { pointing({ kind: "back" }); }}>{backLabel}</button></div> : null}
             {state.connected === false && state.started === true ? <p className="reconnecting">Reconnecting…</p> : null}
             {state.started === false ? (
                 <button key={state.connected === true ? "ready" : "connecting"} className="sound-gate" disabled={state.connected === false} onClick={start} autoFocus>

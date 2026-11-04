@@ -154,6 +154,38 @@ export class Shell {
     }
 
     /**
+     * A mouse on the TV that opened the room. It steers for whoever holds the controller and is
+     * nobody itself, so it can't take a seat or the controller, and its choices are theirs. With
+     * nobody seated it can only look through the shelf and game pages; no game starts from it.
+     * @param action what it chose.
+     */
+    public actFromScreen(action: NavAction): void {
+        if (this.driverId !== null) {
+            this.act(this.driverId, action);
+            return;
+        }
+        if (this.screen !== "home" && this.screen !== "game" && this.screen !== "players") {
+            return;
+        }
+        if (this.screen === "game" && action.kind !== "back" && action.kind !== "step" && this.menu()[action.kind === "choose" ? action.index : this.focus] !== BACK_TO_SHELF) {
+            return;
+        }
+        if (action.kind === "back") {
+            this.back("");
+            return;
+        }
+        if (action.kind === "choose") {
+            this.choose("", action.index);
+            return;
+        }
+        if (action.kind === "step") {
+            this.step(action.delta);
+            return;
+        }
+        this.select("");
+    }
+
+    /**
      * A game started, however it was asked for.
      * @param gameId the game.
      */
