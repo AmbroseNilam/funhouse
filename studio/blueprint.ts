@@ -6,6 +6,7 @@
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
 import { chainBlueprintProblems, createChainGame, type ChainDecisions } from "./kits/chain.ts";
+import { createGalleryGame, galleryBlueprintProblems, type GalleryDecisions } from "./kits/gallery.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -30,8 +31,15 @@ export interface ChainBlueprint {
     decisions: ChainDecisions;
 }
 
+/** A gallery game: private hands of painted cards, a clue, a matching card from everyone, a vote. */
+export interface GalleryBlueprint {
+    kit: "gallery";
+    box: Box;
+    decisions: GalleryDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint | ChainBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | ChainBlueprint | GalleryBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -52,6 +60,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "chain") {
         return chainBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "gallery") {
+        return galleryBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -68,6 +79,9 @@ export function createKitGame(blueprint: Blueprint, random: () => number = Math.
     }
     if (blueprint.kit === "chain") {
         return erase(createChainGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "gallery") {
+        return erase(createGalleryGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }

@@ -6,9 +6,10 @@ import type { Blueprint } from "./blueprint.ts";
 import type { KitGame } from "./kit/kit.ts";
 import { seededRandom } from "./kit/primitives.ts";
 import { createChainGame, type ChainState } from "./kits/chain.ts";
+import { createGalleryGame, type GalleryState } from "./kits/gallery.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing.ts";
 import { createPlantGame, type PlantState } from "./kits/plant.ts";
-import { chainPersonas, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { chainPersonas, galleryPersonas, guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
 import { rehearseMany, type Persona, type RehearsalOptions, type Tally } from "./rehearse.ts";
 
 /** Seeds every blueprint is rehearsed with. */
@@ -28,6 +29,10 @@ export function checkBlueprint(blueprint: Blueprint, options: RehearsalOptions =
     if (blueprint.kit === "chain") {
         const makeChain = (seed: number): KitGame<ChainState> => createChainGame(blueprint.box, blueprint.decisions, seededRandom(seed));
         return rehearsePictureGame(makeChain, chainPersonas(), blueprint.decisions.paintSeconds, options);
+    }
+    if (blueprint.kit === "gallery") {
+        const makeGallery = (seed: number): KitGame<GalleryState> => createGalleryGame(blueprint.box, blueprint.decisions, seededRandom(seed));
+        return rehearsePictureGame(makeGallery, galleryPersonas(), blueprint.decisions.voteSeconds, options);
     }
     const makePlant = (seed: number): KitGame<PlantState> => createPlantGame(blueprint.box, blueprint.decisions, seededRandom(seed));
     return rehearseMany(makePlant, plantPersonas(), CHECK_SEEDS, { ...options, roleCheck: plantRoleCheck(blueprint) });
