@@ -176,11 +176,13 @@ test("a game's page offers a guest only where it's welcome, and filling the tabl
     assert.deepEqual(page().menu, ["Can't start yet", "Add an AI guest", "Back to the shelf"]);
     phone.say({ type: "nav", action: { kind: "step", delta: 1 } });
     phone.say({ type: "nav", action: { kind: "select" } });
-    assert.deepEqual(page().menu, ["Can't start yet", "Add an AI guest", "Remove an AI guest", "Back to the shelf"]);
+    assert.deepEqual(page().menu, ["Can't start yet", "Add an AI guest", "Back to the shelf"]);
     assert.equal(page().focus, 1);
     phone.say({ type: "nav", action: { kind: "select" } });
-    assert.deepEqual(page().menu, ["Play", "Add an AI guest", "Remove an AI guest", "Back to the shelf"]);
+    assert.deepEqual(page().menu, ["Play", "Add an AI guest", "Back to the shelf"]);
     assert.equal(page().focus, 0);
+    phone.say({ type: "guest", action: "add" });
+    assert.deepEqual(page().menu, ["Play", "Remove an AI guest", "Back to the shelf"], "at the cap, the row turns to remove");
 });
 
 test("seats freeze for a game: nobody adds or removes a guest while one runs", () => {

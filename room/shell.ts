@@ -246,14 +246,16 @@ export class Shell {
     }
 
     /**
-     * The game page's rows for AI guests. A game that can't have them can still send them home, so
-     * the way past "remove them first" is on the same page.
+     * The game page's row for AI guests: one at most, because a fourth row runs under the host's
+     * caption on the TV. Adding comes first while it's possible; otherwise this page can send one home,
+     * so the way past "remove them first" is right there. The phone's menu can always remove any guest.
      * @returns the labels.
      */
     private guestRows(): string[] {
-        const seated: boolean = this.stage.seats().some((seat) => seat.guest === true);
-        const mayAdd: boolean = this.currentGame()?.guestsWelcome === true && this.stage.mayAddGuest() === true;
-        return [...(mayAdd === true ? [ADD_GUEST] : []), ...(seated === true ? [REMOVE_GUEST] : [])];
+        if (this.currentGame()?.guestsWelcome === true && this.stage.mayAddGuest() === true) {
+            return [ADD_GUEST];
+        }
+        return this.stage.seats().some((seat) => seat.guest === true) ? [REMOVE_GUEST] : [];
     }
 
     /**
