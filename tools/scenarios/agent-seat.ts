@@ -28,6 +28,7 @@ interface AgentState {
     tv: string[];
     phone: string[];
     leaveUrl: string;
+    pageUrl: string;
 }
 
 /**
@@ -71,7 +72,8 @@ check(stranger.status === 404, "A made-up link should find nothing.");
 
 person.guest("inviteAgent");
 await waitFor(() => (person.view?.guests.agents?.link ?? "") !== "", "the link");
-const link: string = person.view?.guests.agents?.link ?? "";
+const invitation: string = person.view?.guests.agents?.link ?? "";
+let link: string = invitation;
 console.warn(`Link issued; the person's phone holds it.`);
 
 await pause(1100);
@@ -91,10 +93,15 @@ check(JSON.stringify(await mcp(1, "initialize", { protocolVersion: "2025-06-18" 
 check(JSON.stringify(await mcp(2, "tools/list")).includes("sit_down") === true, "MCP should list its tools.");
 check(JSON.stringify(await mcp(3, "tools/call", { name: "look", arguments: {} })).includes("invited") === true, "MCP's look should show the invitation, without taking a seat.");
 check(screen.shell?.seats.length === 1, "MCP's look must not take a seat.");
+const blankSession: Response = await fetch(`${link}/mcp`, { method: "POST", headers: { "content-type": "application/json", "mcp-session-id": "" }, body: JSON.stringify({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "sit_down", arguments: {} } }) });
+check((await blankSession.text()).includes("isError") === true && screen.shell?.seats.length === 1, "A session this link never issued must not sit down.");
 const tooBig: Response = await fetch(`${link}/join`, { method: "POST", body: "x".repeat(5000) }).catch(() => new Response(null, { status: 413 }));
 check(tooBig.ok === false && screen.shell?.seats.length === 1, "A body that's too big must do nothing.");
 const joined: AgentState = await open(`${link}/join`);
 check(joined.seated === true && joined.you === "Teacup's agent", `The room names the agent: ${joined.you}`);
+const taken: Response = await fetch(invitation);
+check(taken.status === 404, "An invitation is single use: once taken, the link that travelled must be dead.");
+link = joined.pageUrl;
 await waitFor(() => screen.shell?.seats.length === 2, "the agent's card");
 const card = screen.shell?.seats.find((seat) => seat.agent === true);
 check(card?.guest === true && card.driving === false, "The agent is marked as a machine and never holds the controller.");

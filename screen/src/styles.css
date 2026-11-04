@@ -58,6 +58,7 @@
     .box-name { position: absolute; left: calc(18 * var(--u)); right: calc(14 * var(--u)); bottom: calc(14 * var(--u)); color: var(--paper); font-size: calc(36 * var(--u)); font-weight: 600; line-height: 1.05; text-shadow: calc(3 * var(--u)) calc(3 * var(--u)) 0 #000; overflow-wrap: break-word; text-wrap: balance; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; padding-right: calc(4 * var(--u)); padding-bottom: calc(4 * var(--u)); }
     .box.focused { z-index: 2; transform: translate(calc(var(--lean-x) * 8 * var(--u)), calc(-22 * var(--u))) scale(1.07) rotate(calc(var(--lean-x) * 1.5deg)); box-shadow: calc(16 * var(--u)) calc(20 * var(--u)) 0 #000, 0 0 0 calc(10 * var(--u)) var(--lamp); }
     .box.focused img { opacity: 1; }
+    .table-box .box-name small { display: block; font-size: 0.68em; font-weight: 500; }
     .table-box { display: flex; flex-direction: column; background: var(--wood-dark); }
     .table-names { flex: 1; display: flex; flex-direction: column; gap: calc(6 * var(--u)); padding: calc(14 * var(--u)) calc(14 * var(--u)) calc(70 * var(--u)); overflow: hidden; }
     .table-names li { padding: calc(4 * var(--u)) calc(10 * var(--u)); color: var(--paper); font-size: calc(28 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -109,6 +110,7 @@
     .players-screen .seats { max-width: calc(1290 * var(--u)); }
     .players-screen .players-hint { max-width: calc(1100 * var(--u)); }
     .players-screen .rows { position: absolute; right: calc(80 * var(--u)); top: calc(520 * var(--u)); width: calc(670 * var(--u)); }
+    .players-screen.adding .rows { top: calc(70 * var(--u)); }
 
     /* Werewolf's big moments: a card turned over, a moon on a paper sky. */
     .moment { position: relative; align-self: stretch; }

@@ -81,12 +81,20 @@ export interface PhoneView {
 export interface GuestTable {
     /** Who's sitting in. */
     seated: { playerId: string; name: string; style: string; agent: boolean }[];
+    /** The people at the table, by name, for the phone's list. */
+    people: string[];
     /** True when this phone may seat another. */
     canAdd: boolean;
     /** True when this phone may send one home; guests only come and go between games. */
     canRemove: boolean;
     /** Whether this phone can bring its own agent, or null where the room doesn't offer that. */
-    agents: { canInvite: boolean; link: string; games: string[] } | null;
+    agents: { canInvite: boolean; link: string; games: string[]; joined: string } | null;
+    /** The guests this phone could seat right now, by name. */
+    picks: { name: string; label: string }[];
+    /** What the TV has just sent this phone to do, numbered so it opens once; null for nothing. */
+    prompt: { kind: "line" | "agent"; id: number } | null;
+    /** True while a guest this phone described is being written. */
+    writing: boolean;
 }
 
 /** What a phone sends when a player uses a control. */

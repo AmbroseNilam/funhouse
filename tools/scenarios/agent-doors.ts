@@ -26,6 +26,7 @@ interface AgentState {
     note: string;
     sayUrl: string | null;
     tv: string[];
+    pageUrl: string;
 }
 
 /**
@@ -65,8 +66,9 @@ const person: FakePhone = new FakePhone(screen.code, "Teacup");
 await waitFor(() => shell()?.seats.length === 1, "the person");
 person.guest("inviteAgent");
 await waitFor(() => (person.view?.guests.agents?.link ?? "") !== "", "the link");
-const link: string = person.view?.guests.agents?.link ?? "";
-await open(`${link}/join`);
+const invitation: string = person.view?.guests.agents?.link ?? "";
+const seated: AgentState = await open(`${invitation}/join`);
+const link: string = seated.pageUrl;
 await waitFor(() => shell()?.seats.length === 2, "the agent");
 const target: number = shell()?.games.findIndex((game) => game.id === "twentyDoors") ?? -1;
 person.nav({ kind: "step", delta: target - (shell()?.focus ?? 0) });

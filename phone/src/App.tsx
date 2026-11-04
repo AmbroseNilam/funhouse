@@ -613,26 +613,73 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
 }
 
 /** The phone application. */
+/** The colour of paper, for the browser's bars while a sheet is up. */
+const SHEET_PAGE_COLOUR: string = "#efe3c8";
+
+/** Where each sheet's Back goes, and what it's called. A sheet without a parent only closes. */
+const SHEETS: Record<string, { title: string; parent: string | null }> = {
+    open: { title: "Menu", parent: null },
+    guests: { title: "At the table", parent: "open" },
+    add: { title: "Add a player", parent: "guests" },
+    install: { title: "Add to your home screen", parent: "open" },
+    guestLine: { title: "Create your own", parent: "add" },
+    agentLink: { title: "Bring your agent", parent: "add" },
+    rename: { title: "Your name", parent: "open" },
+    settings: { title: "Settings", parent: "open" },
+    credits: { title: "Credits", parent: "open" },
+    leave: { title: "Leave the table?", parent: "open" },
+    mic: { title: "Your mic", parent: "open" },
+    type: { title: "Type instead", parent: null },
+};
+
 /**
- * The words to paste to someone's agent, with the link in them.
- * @param props the link and the games an agent can play.
+ * The top of every sheet: Back on the left where there's somewhere to go back to, its name, and Close.
+ * @param props which sheet, and what Back and Close do.
  * @returns the element.
  */
-function AgentInvite(props: { link: string; games: string[] }): ReactElement {
+function SheetTop(props: { sheet: string; onBack: (parent: string) => void; onClose: () => void }): ReactElement {
+    const { title, parent } = SHEETS[props.sheet] ?? { title: "", parent: null };
+    return (
+        <header className="sheet-top">
+            {parent === null ? <span className="sheet-corner" /> : <button className="sheet-corner" onClick={() => { props.onBack(parent); }}>Back</button>}
+            <h2>{title}</h2>
+            <button className="sheet-corner sheet-close" aria-label="Close" onClick={props.onClose}>&times;</button>
+        </header>
+    );
+}
+
+/**
+ * One thing to do: bring your own agent. The link is shown short, and sharing it is the main thing.
+ * @param props the link, the games an agent can play, who has joined, and what its buttons do.
+ * @returns the element.
+ */
+function AgentInvite(props: { link: string; games: string[]; joined: string; onCancel: () => void; onDone: () => void }): ReactElement {
     const [copied, setCopied] = useState<boolean>(false);
+    const [copyFailed, setCopyFailed] = useState<boolean>(false);
+    if (props.link === "") {
+        return (
+            <>
+                <p className="sheet-line" role="status">{props.joined === "" ? "Getting your link." : `${props.joined} sat down.`}</p>
+                {props.joined === "" ? null : <button className="primary" onClick={props.onDone}>Done</button>}
+            </>
+        );
+    }
     const words: string = `Join my party game as my AI agent and play with me. Open this link and follow what it says: ${props.link}`;
+    const shared: ShareData = { text: words };
+    const canShare: boolean = CAN_SHARE === true && navigator.canShare(shared) === true;
+    const canCopy: boolean = "clipboard" in navigator;
     const copy = (): void => {
-        navigator.clipboard.writeText(words).then(() => { setCopied(true); }).catch(() => { setCopied(false); });
+        navigator.clipboard.writeText(words).then(() => { setCopied(true); }).catch(() => { setCopied(false); setCopyFailed(true); });
     };
-    const share = (): void => {
-        navigator.share({ text: words }).catch(() => { /* someone closed the share sheet */ });
-    };
+    const short: string = props.link.replace(/^https?:\/\//, "").slice(0, 28);
     return (
         <>
-            <p className="mic-note">Paste this to any agent. It can play {props.games.join(", ")}. Anyone with the link gets the seat, and it stops working in ten minutes if nobody sits down.</p>
-            <textarea className="agent-words" readOnly rows={6} value={words} onFocus={(event) => { event.target.select(); }} />
-            {"clipboard" in navigator ? <button className="primary" onClick={copy}>{copied === true ? "Copied" : "Copy"}</button> : null}
-            {"share" in navigator ? <button onClick={share}>Share</button> : null}
+            <p className="sheet-line">Send this to any agent. It can play {props.games.join(" or ")}.</p>
+            <p className="sheet-status" role="status">Waiting for your agent&hellip;</p>
+            {canShare === true ? <button className="primary" onClick={() => { navigator.share(shared).catch(() => { /* someone closed the share sheet */ }); }}>Share the link</button> : null}
+            {canCopy === true ? <button className={canShare === true ? "sheet-quiet" : "primary"} onClick={copy}>{copied === true ? "Copied" : "Copy the link"}</button> : null}
+            <p className="sheet-small selectable">{canCopy === true && copyFailed === false ? `${short}\u2026` : props.link}</p>
+            <button className="sheet-text danger-text" onClick={props.onCancel}>Cancel link</button>
         </>
     );
 }
@@ -664,7 +711,7 @@ export function App(): ReactElement {
     const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
     const noMicRef = useRef<boolean>(noMic);
     noMicRef.current = noMic;
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "install">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "install" | "add" | "guestLine" | "agentLink">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -888,7 +935,8 @@ export function App(): ReactElement {
     // Browsers tint their own bars from the page, some only now and then; every colour they could read should agree.
     useEffect(() => {
         if (padScreenRef.current !== null) {
-            matchPageColour(getComputedStyle(padScreenRef.current).backgroundColor);
+            // A sheet reaches the bottom of the screen, so the bar below it matches the sheet and not the seat.
+            matchPageColour(menu === "closed" ? getComputedStyle(padScreenRef.current).backgroundColor : SHEET_PAGE_COLOUR);
         }
         return (): void => { matchPageColour(RESTING_PAGE_COLOUR); };
     });
@@ -1131,6 +1179,16 @@ export function App(): ReactElement {
 
     const view: PhoneView | null = state.view;
     padRef.current = view?.pad ?? null;
+    // The TV can send this phone to a sheet, for what only a phone should show or take in.
+    const guestPrompt = view?.guests.prompt ?? null;
+    const guestPromptSeen = useRef<number>(0);
+    useEffect(() => {
+        if (guestPrompt === null || guestPrompt.id === guestPromptSeen.current) {
+            return;
+        }
+        guestPromptSeen.current = guestPrompt.id;
+        setMenu(guestPrompt.kind === "line" ? "guestLine" : "agentLink");
+    }, [guestPrompt]);
     const canTalk: boolean = view !== null && listeningAllowsTalk(view.listening);
     const canTalkRef = useRef<boolean>(canTalk);
     canTalkRef.current = canTalk;
@@ -1442,20 +1500,24 @@ export function App(): ReactElement {
             {menu === "closed" ? null : (
                 <div className="sheet-backdrop" onClick={(event) => { if (event.target === event.currentTarget) { setMenu("closed"); } }}>
                     <div className="sheet" data-scrolls role="dialog" aria-modal="true" aria-label="Your menu">
+                        <SheetTop sheet={menu} onBack={(parent: string) => { setMenu(parent as typeof menu); }} onClose={() => { setMenu("closed"); setInvited(""); }} />
                         {menu === "open" ? (
                             <>
                                 {invited !== "" ? <p className="invited" role="status">{invited}</p> : null}
-                                {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
-                                {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
-                                <button onClick={() => { void invite(); }}>Invite someone</button>
-                                {view !== null && (view.guests.canAdd === true || view.guests.seated.length > 0 || view.guests.agents !== null) ? <button onClick={() => { setMenu("guests"); }}>{view.guests.agents === null ? "AI guests" : "AI guests and agents"}</button> : null}
-                                {installWay !== null ? <button onClick={() => { setMenu("install"); }}>Add to your home screen</button> : null}
-                                <button onClick={() => { setMenu("rename"); }}>Change your name</button>
-                                <button onClick={() => { setMenu("leave"); }}>Leave the table</button>
-                                <button onClick={() => { setMenu("settings"); }}>Settings</button>
-                                <button className="text-link" onClick={() => { setMenu("credits"); }}>Credits</button>
-                                <button className="quiet" onClick={() => { setMenu("closed"); setInvited(""); }}>Close</button>
-                                <small className="version-line">{versionLine(__BUILD_INFO__)}</small>
+                                <nav className="sheet-rows">
+                                    <button className="sheet-row" onClick={() => { void invite(); }}>Invite someone</button>
+                                    {view !== null ? <button className="sheet-row" onClick={() => { setMenu("guests"); }}>At the table<span>{view.guests.people.length + view.guests.seated.length}</span></button> : null}
+                                    {installWay !== null ? <button className="sheet-row" onClick={() => { setMenu("install"); }}>Add to your home screen</button> : null}
+                                    <button className="sheet-row" onClick={() => { setMenu("rename"); }}>Change your name</button>
+                                    {noMic === true ? <button className="sheet-row" onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
+                                    {state.mic !== "ok" && noMic === false ? <button className="sheet-row" onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
+                                    <button className="sheet-row" onClick={() => { setMenu("settings"); }}>Settings</button>
+                                </nav>
+                                <button className="sheet-text danger-text" onClick={() => { setMenu("leave"); }}>Leave the table</button>
+                                <footer className="sheet-foot">
+                                    <button className="sheet-text" onClick={() => { setMenu("credits"); }}>Credits</button>
+                                    <small className="version-line">{versionLine(__BUILD_INFO__)}</small>
+                                </footer>
                             </>
                         ) : null}
                         {menu === "mic" ? (
@@ -1480,35 +1542,59 @@ export function App(): ReactElement {
                         {menu === "install" && installWay !== null ? <InstallCard way={installWay} onDone={() => { setMenu("closed"); }} /> : null}
                         {menu === "guests" ? (
                             <>
-                                <p>Short of people? An AI guest takes a seat. It plays from its own phone, and it can't talk.</p>
-                                <ul className="guest-list">
+                                <ul className="sheet-rows seat-rows">
+                                    {(view?.guests.people ?? []).map((name: string) => <li key={name} className="sheet-row"><div><strong>{name}</strong>{name === view?.playerName ? <small> you</small> : null}</div></li>)}
                                     {(view?.guests.seated ?? []).map((guest) => (
-                                        <li key={guest.playerId}>
-                                            <div><strong>{guest.name}</strong> <small className="guest-mark">{guest.agent === true ? "AI agent" : "AI guest"}</small><br />{guest.style}</div>
-                                            {view?.guests.canRemove === true ? <button className="quiet" onClick={() => { send({ type: "guest", action: "remove", playerId: guest.playerId }); }}>Remove</button> : null}
+                                        <li key={guest.playerId} className="sheet-row">
+                                            <div>
+                                                <strong>{guest.name}</strong> <small className="guest-mark">{guest.agent === true ? "AI agent" : "AI guest"}</small>
+                                                {guest.style === "" ? null : <small className="seat-style">{guest.style}</small>}
+                                            </div>
+                                            {view?.guests.canRemove === true ? <button className="sheet-text" onClick={() => { send({ type: "guest", action: "remove", playerId: guest.playerId }); }}>Remove</button> : null}
                                         </li>
                                     ))}
                                 </ul>
-                                {view?.guests.canAdd === true ? <button className="primary" onClick={() => { send({ type: "guest", action: "add" }); }}>Add a guest</button> : null}
-                                {view?.guests.agents?.canInvite === true ? <button onClick={() => { send({ type: "guest", action: "inviteAgent" }); }}>Add an agent</button> : null}
-                                {view?.guests.agents !== undefined && view.guests.agents !== null && view.guests.agents.link !== "" ? <AgentInvite link={view.guests.agents.link} games={view.guests.agents.games} /> : null}
-                                {view?.guests.canRemove === false && (view.guests.seated.length > 0) ? <p className="mic-note">Guests come and go between games.</p> : null}
-                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
+                                {(view?.guests.agents?.link ?? "") !== "" ? <button className="sheet-text" onClick={() => { setMenu("agentLink"); }}>Your agent's link is open</button> : null}
+                                {view?.guests.canAdd === true || view?.guests.agents?.canInvite === true ? <button className="primary" onClick={() => { setMenu("add"); }}>Add a player</button> : null}
+                                {view?.guests.canRemove === false && view.guests.seated.length > 0 ? <p className="sheet-small">Guests come and go between games.</p> : null}
                             </>
+                        ) : null}
+                        {menu === "add" ? (
+                            <nav className="sheet-rows">
+                                {(view?.guests.picks ?? []).map((pick) => <button key={pick.name} className="sheet-row" onClick={() => { send({ type: "guest", action: "add", name: pick.name }); setMenu("guests"); }}>{pick.label}</button>)}
+                                {view?.guests.canAdd === true ? <button className="sheet-row" onClick={() => { setMenu("guestLine"); }}>Create your own</button> : null}
+                                {view?.guests.agents?.canInvite === true ? <button className="sheet-row" onClick={() => { send({ type: "guest", action: "inviteAgent" }); setMenu("agentLink"); }}>Bring your agent</button> : null}
+                            </nav>
+                        ) : null}
+                        {menu === "agentLink" ? (
+                            view !== null && view.guests.agents !== null
+                                ? <AgentInvite link={view.guests.agents.link} games={view.guests.agents.games} joined={view.guests.agents.joined} onCancel={() => { send({ type: "guest", action: "cancelAgent" }); setMenu("add"); }} onDone={() => { setMenu("guests"); }} />
+                                : <p className="sheet-line">Agents can't join this room.</p>
+                        ) : null}
+                        {menu === "guestLine" ? (
+                            <form onSubmit={(event) => {
+                                event.preventDefault();
+                                const line: FormDataEntryValue | null = new FormData(event.currentTarget).get("line");
+                                send({ type: "guest", action: "create", text: typeof line === "string" ? line : "" });
+                                setMenu("closed");
+                            }}>
+                                <label htmlFor="guest-line">One line on who should sit down.</label>
+                                <input id="guest-line" name="line" maxLength={60} placeholder="a grumpy cheese pirate" autoComplete="off" autoFocus required />
+                                <button type="submit" className="primary">Seat them</button>
+                                <button type="button" className="sheet-quiet" onClick={() => { send({ type: "guest", action: "add" }); setMenu("closed"); }}>Surprise me</button>
+                            </form>
                         ) : null}
                         {menu === "settings" ? (
                             <>
-                                <p>These stay on this phone.</p>
+                                <p className="sheet-small">These stay on this phone.</p>
                                 <SettingRow label={`${HOST_NAME}'s quick reactions`} on={settings.reactions} onChange={(on: boolean) => { changeSettings({ ...settings, reactions: on }); }} />
                                 {"vibrate" in navigator ? <SettingRow label="Vibration" on={settings.vibration} onChange={(on: boolean) => { changeSettings({ ...settings, vibration: on }); }} /> : null}
                                 {view?.tapToTalk === true ? <SettingRow label="To talk" on={settings.talkButton} onWord="Tap" offWord="Hold" onChange={(on: boolean) => { changeSettings({ ...settings, talkButton: on }); }} /> : null}
-                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
                             </>
                         ) : null}
                         {menu === "credits" ? (
                             <>
-                                <p>{CREDITS}</p>
-                                <button className="quiet" onClick={() => { setMenu("open"); }}>Back</button>
+                                <p className="sheet-line">{CREDITS}</p>
                             </>
                         ) : null}
                         {menu === "rename" ? (
@@ -1516,12 +1602,11 @@ export function App(): ReactElement {
                                 <label htmlFor="new-name">What should we call you?</label>
                                 <input id="new-name" name="name" defaultValue={view?.playerName ?? ""} maxLength={24} autoComplete="nickname" autoCapitalize="words" autoFocus required />
                                 <button type="submit" className="primary">That's me</button>
-                                <button type="button" className="quiet" onClick={() => { setMenu("closed"); }}>Never mind</button>
                             </form>
                         ) : null}
                         {menu === "leave" ? (
                             <>
-                                <p>Leave the table? You'll give up your seat in room {state.roomCode}.</p>
+                                <p className="sheet-line">You'll give up your seat in room {state.roomCode}.</p>
                                 <button className="danger" onClick={leave}>Leave</button>
                                 <button className="quiet" onClick={() => { setMenu("closed"); }}>Stay</button>
                             </>
