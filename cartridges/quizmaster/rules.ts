@@ -9,6 +9,7 @@ import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import { sourceName } from "../../shared/sources.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
+import { isHostSafe } from "../../studio/kit/text.ts";
 import { QUIZMASTER_MANIFEST } from "./manifest.ts";
 
 /** Questions in one game. */
@@ -103,7 +104,7 @@ export function parseQuestions(text: string, sources: string[] = []): QuizQuesti
         const entry: { question?: unknown; answer?: unknown; source?: unknown } = typeof item === "object" && item !== null ? item : {};
         const question: string = typeof entry.question === "string" ? entry.question.trim() : "";
         const answer: string = typeof entry.answer === "string" ? entry.answer.trim() : "";
-        if (question !== "" && answer !== "" && question.length <= TEXT_CHARACTER_LIMIT && answer.length <= TEXT_CHARACTER_LIMIT) {
+        if (isHostSafe(question, TEXT_CHARACTER_LIMIT) === true && isHostSafe(answer, TEXT_CHARACTER_LIMIT) === true) {
             const source: string = typeof entry.source === "string" ? sourceName(entry.source, sources) : "";
             found.push({ question, answer, ...(source === "" ? {} : { source }) });
         }
