@@ -205,6 +205,10 @@ export class FakePhone {
             const own: number = screen.shell.menu.indexOf("Say your own topic");
             this.nav({ kind: "choose", index: Math.max(0, own) });
         }
+        await waitFor(() => screen.shell?.screen === "startCard" || screen.shell?.screen === "play", "the how-to card or the game");
+        if (screen.shell?.screen === "startCard") {
+            this.nav({ kind: "select" });
+        }
         await waitFor(() => screen.shell?.screen === "play", "the game to start");
     }
 

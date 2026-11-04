@@ -246,6 +246,9 @@ function writeLearned(learned: Set<string>): void {
 function surfaceLine(pad: PadView, learned: Set<string>, waiting: string, canTalk: boolean, micOff: boolean, talkButton: boolean): { big: string; small: string } {
     // The Talk button says this itself, so the surface only teaches holding.
     const talkHint: string = talkButton === true ? "" : "Hold to talk";
+    if (pad.startCard.length > 0) {
+        return { big: "", small: pad.canSelect === true ? "Tap to start now" : "Starting soon" };
+    }
     if (pad.pausedBy !== "") {
         return { big: `Paused by ${pad.pausedBy}`, small: pad.canDrive === true ? "Slide to see more, tap to choose" : `Only ${pad.driverName} can resume` };
     }
@@ -1148,6 +1151,13 @@ export function App(): ReactElement {
             </header>
             {turn !== null && pad?.pausedBy === "" ? <p className="turn-line">{turn.line}</p> : null}
             {turn === null && pad !== null && pad.axis !== null ? <p className="control-line">{controlLine(pad)}</p> : null}
+            {pad !== null && pad.startCard.length > 0 ? (
+                <section className="private">
+                    <section className="paper">
+                        <ol className="start-lines">{pad.startCard.map((text: string) => <li key={text}>{text}</li>)}</ol>
+                    </section>
+                </section>
+            ) : null}
             {pad?.confirmEnd === true ? (
                 <section className="private">
                     <section className="paper choices">

@@ -27,6 +27,8 @@ export interface InstalledGame {
     remarks: string[];
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
+    /** A few short lines shown before the first round in a room, if anything. */
+    startCard?: string[];
     /**
      * Readies a new game in a room.
      * @param stage the room.
@@ -45,6 +47,7 @@ export const GAMES: InstalledGame[] = [
         pauseActions: [{ id: "giveup", label: "We give up" }],
         remarks: ["Twenty doors. I've picked something good.", "Go on. I'm hard to crack.", "Nobody's guessed mine in under ten."],
         startPick: TWENTY_DOORS_PICK,
+        startCard: [`${HOST_NAME} is thinking of something.`, "Ask yes-or-no questions. Each answer opens a door.", "You get twenty doors. Name it to win."],
         create: (stage: GameStage, pick?: string) => new GameSession(createTwentyDoors(Math.random, pick), stage),
     },
     {
@@ -55,6 +58,7 @@ export const GAMES: InstalledGame[] = [
         pauseActions: [{ id: "skip", label: "Skip this question" }],
         remarks: ["Pick a topic you actually know.", "I'll go easy. Probably.", "Bold, for someone who hasn't warmed up."],
         startPick: QUIZMASTER_PICK,
+        startCard: ["Six questions, read out loud.", "Everyone answers out loud. One try each.", "Two points if you're right, one if you're close."],
         create: (stage: GameStage, pick?: string) => new GameSession(createQuizmaster(pick), stage),
     },
     {

@@ -259,6 +259,16 @@ export function ConsolePage(props: { shell: ShellView; qr: string; code: string;
             </section>
         );
     }
+    if (shell.screen === "startCard" && game !== undefined) {
+        return (
+            <section className="screen pick-screen">
+                <img className="room-art" src={game.art} alt="" />
+                <header className="shelf-heading"><h1>{game.name}</h1></header>
+                <ol className="steps start-card">{game.startCard?.map((line: string) => <li key={line}>{line}</li>)}</ol>
+                <p className="start-note">{driver === undefined ? "Starting soon." : `Starting soon. ${driver.name} can tap to start now.`}</p>
+            </section>
+        );
+    }
     if (shell.screen === "game" && game !== undefined) {
         return <GamePage shell={shell} driver={driver} game={game} />;
     }

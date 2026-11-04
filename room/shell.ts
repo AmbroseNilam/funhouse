@@ -18,6 +18,12 @@ const CONFIRM_END_MENU: string[] = ["Keep playing", "End for everyone"];
 /** How long a start pick waits for a choice before taking the highlighted one. */
 const PICK_MILLISECONDS: number = 15000;
 
+/** How long a how-to card stays up unless someone skips it. */
+const START_CARD_MILLISECONDS: number = 25000;
+
+/** The how-to card's one row. */
+const START_NOW: string = "Start now";
+
 /** Rows once a game has been decided. */
 const GAME_OVER_MENU: string[] = ["Play again", "Back to the shelf"];
 
@@ -62,6 +68,10 @@ export class Shell {
     private freeTimer: NodeJS.Timeout | null = null;
     private pickTimer: NodeJS.Timeout | null = null;
     private pausedBy: string = "";
+    /** What was chosen for the game about to begin. */
+    private chosen: string | undefined = undefined;
+    /** Games whose how-to card this room has seen, so a replay gets straight on with it. */
+    private readonly cardsSeen: Set<string> = new Set();
 
     /**
      * Creates a console on the shelf.
@@ -199,6 +209,7 @@ export class Shell {
             canSelect: count > 0 && canDrive === true,
             pausedBy: this.pausedBy,
             confirmEnd: this.screen === "confirmEnd" && playerId === this.driverId,
+            startCard: this.screen === "startCard" ? this.currentGame()?.startCard ?? [] : [],
         };
     }
 
@@ -296,6 +307,9 @@ export class Shell {
         if (this.screen === "pick") {
             return (this.currentGame()?.startPick?.choices ?? []).map((choice) => choice.label);
         }
+        if (this.screen === "startCard") {
+            return [START_NOW];
+        }
         if (this.screen === "confirmEnd") {
             return CONFIRM_END_MENU;
         }
@@ -332,7 +346,7 @@ export class Shell {
      * @returns the label, or null.
      */
     private backLabel(): string | null {
-        if (this.screen === "game" || this.screen === "pick" || this.screen === "players" || this.screen === "howTo" || this.screen === "confirmEnd") {
+        if (this.screen === "game" || this.screen === "pick" || this.screen === "startCard" || this.screen === "players" || this.screen === "howTo" || this.screen === "confirmEnd") {
             return "Back";
         }
         if (this.screen === "pause") {
@@ -379,6 +393,10 @@ export class Shell {
             this.takePick();
             return;
         }
+        if (this.screen === "startCard") {
+            this.beginGame();
+            return;
+        }
         if (this.screen === "players" || this.screen === "howTo") {
             this.back(playerId);
             return;
@@ -420,11 +438,13 @@ export class Shell {
             this.stage.refused(game.blocked);
             return;
         }
+        this.gameId = game.id;
+        this.chosen = undefined;
         if (game.startPick !== null) {
             this.openPick(game);
             return;
         }
-        this.stage.startGame(game.id);
+        this.showCardOrBegin(game);
     }
 
     /**
@@ -440,7 +460,7 @@ export class Shell {
         this.stage.changed();
     }
 
-    /** Starts the game with whatever is highlighted. If it can't start, goes back to its page. */
+    /** Takes whatever is highlighted and moves on to the game. */
     private takePick(): void {
         this.stopPickTimer();
         const game: ShelfGame | undefined = this.currentGame();
@@ -448,8 +468,37 @@ export class Shell {
         if (game === undefined || choice === undefined) {
             return;
         }
-        this.stage.startGame(game.id, choice.id);
-        if (this.screen === "pick") {
+        this.chosen = choice.id;
+        this.showCardOrBegin(game);
+    }
+
+    /**
+     * Shows a game's how-to card the first time this room plays it, and otherwise begins.
+     * @param game the game.
+     */
+    private showCardOrBegin(game: ShelfGame): void {
+        if (game.startCard === null || this.cardsSeen.has(game.id) === true) {
+            this.beginGame();
+            return;
+        }
+        this.cardsSeen.add(game.id);
+        this.screen = "startCard";
+        this.focus = 0;
+        this.stopPickTimer();
+        this.pickTimer = setTimeout(() => { this.beginGame(); }, START_CARD_MILLISECONDS);
+        this.pickTimer.unref();
+        this.stage.changed();
+    }
+
+    /** Begins the game on the page. If it can't begin, goes back to its page. */
+    private beginGame(): void {
+        this.stopPickTimer();
+        const game: ShelfGame | undefined = this.currentGame();
+        if (game === undefined) {
+            return;
+        }
+        this.stage.startGame(game.id, this.chosen);
+        if (this.screen === "pick" || this.screen === "startCard") {
             this.screen = "game";
             this.focus = 0;
             this.stage.changed();
@@ -542,11 +591,12 @@ export class Shell {
         if (again === false || game === undefined) {
             return;
         }
+        this.chosen = undefined;
         if (game.startPick !== null) {
             this.openPick(game);
             return;
         }
-        this.stage.startGame(game.id);
+        this.showCardOrBegin(game);
     }
 
     /**
@@ -575,6 +625,9 @@ export class Shell {
         const leaving: ShellScreen = this.screen;
         this.screen = parent;
         this.focus = parent === "home" ? this.shelfFocus : leaving === "howTo" ? 1 : 0;
+        if (parent === "pick") {
+            this.restartPickTimer();
+        }
         if (leaving === "play") {
             this.pausedBy = this.nameOf(playerId);
             this.stage.paused(true);
@@ -596,6 +649,9 @@ export class Shell {
         }
         if (this.screen === "pick") {
             return "game";
+        }
+        if (this.screen === "startCard") {
+            return this.currentGame()?.startPick === null ? "game" : "pick";
         }
         if (this.screen === "howTo" || this.screen === "confirmEnd") {
             return "pause";

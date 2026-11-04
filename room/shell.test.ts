@@ -24,6 +24,7 @@ const GAME: ShelfGame = {
     pauseActions: [],
     blocked: null,
     startPick: { prompt: "Which?", hostLine: "Choose.", choices: [{ id: "surprise", label: "Surprise me" }, { id: "a", label: "A" }, { id: "b", label: "B" }] },
+    startCard: ["Do the thing."],
 };
 
 /**
@@ -62,6 +63,7 @@ function startGame(shell: Shell): void {
     shell.act("a", { kind: "select" });
     shell.act("a", { kind: "select" });
     shell.act("a", { kind: "select" });
+    shell.act("a", { kind: "select" });
 }
 
 describe("the console", () => {
@@ -94,6 +96,8 @@ describe("the console", () => {
         shell.act("a", { kind: "select" });
         shell.act("a", { kind: "step", delta: 1 });
         shell.act("a", { kind: "select" });
+        assert.equal(shell.view().screen, "startCard");
+        shell.act("a", { kind: "select" });
         assert.deepEqual(told.started, [{ gameId: "doors", pick: "a" }]);
         assert.equal(shell.view().screen, "play");
     });
@@ -107,7 +111,29 @@ describe("the console", () => {
         mock.timers.tick(14000);
         assert.deepEqual(told.started, []);
         mock.timers.tick(1000);
+        assert.equal(shell.view().screen, "startCard");
+        assert.deepEqual(told.started, []);
+        mock.timers.tick(25000);
         assert.deepEqual(told.started, [{ gameId: "doors", pick: "b" }]);
+    });
+
+    it("shows the how-to card on every phone, only the holder skips it, and a replay doesn't repeat it", () => {
+        const shell = shellWith(told);
+        shell.act("a", { kind: "select" });
+        shell.act("a", { kind: "select" });
+        shell.act("a", { kind: "select" });
+        assert.deepEqual(shell.pad("c", "").startCard, ["Do the thing."]);
+        assert.equal(shell.view().screen, "startCard");
+        shell.act("a", { kind: "back" });
+        assert.equal(shell.view().screen, "pick");
+        shell.act("a", { kind: "select" });
+        assert.deepEqual(told.started, [{ gameId: "doors", pick: "surprise" }], "the card was already seen");
+        shell.gameEnded();
+        told.started.length = 0;
+        shell.act("a", { kind: "select" });
+        shell.act("a", { kind: "select" });
+        shell.act("a", { kind: "select" });
+        assert.deepEqual(told.started, [{ gameId: "doors", pick: "surprise" }]);
     });
 
     it("doesn't take a choice once someone has gone back or the room has closed", () => {

@@ -1309,7 +1309,7 @@ export class Room implements HostStage {
         const short: number = minPlayers - count;
         const blocked: string | null = short > 0 ? `Needs ${minPlayers} people. ${short} more to go.` : count > maxPlayers ? `Fits ${maxPlayers} people at most.` : null;
         const players: string = minPlayers === 1 ? `Up to ${maxPlayers} people` : `${minPlayers} to ${maxPlayers} people`;
-        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, blocked };
+        return { id, name, pitch: game.pitch, howToPlay: game.howToPlay, players, art: game.art, pauseActions: game.pauseActions, startPick: game.startPick ?? null, startCard: game.startCard ?? null, blocked };
     }
 
     /**

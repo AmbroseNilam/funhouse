@@ -3,7 +3,7 @@
 // only ever says which way the thumb went.
 
 /** Which screen the TV is on. */
-export type ShellScreen = "home" | "game" | "pick" | "players" | "play" | "pause" | "howTo" | "confirmEnd";
+export type ShellScreen = "home" | "game" | "pick" | "startCard" | "players" | "play" | "pause" | "howTo" | "confirmEnd";
 
 /** Which way a phone's swipes move the highlight, if at all. */
 export type NavAxis = "x" | "y" | null;
@@ -34,6 +34,8 @@ export interface ShelfGame {
     blocked: string | null;
     /** What to choose before it begins, or null when it just begins. */
     startPick: StartPick | null;
+    /** A few short lines shown before the first round in a room, or null for none. */
+    startCard: string[] | null;
 }
 
 /** A person at the table. */
@@ -97,6 +99,8 @@ export interface PadView {
     pausedBy: string;
     /** True on the phone that's being asked whether to end the game for everyone. */
     confirmEnd: boolean;
+    /** The lines of a how-to card before a game begins; empty when there's none on show. */
+    startCard: string[];
 }
 
 /** What a phone's thumb did. */
