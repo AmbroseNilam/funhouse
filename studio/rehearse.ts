@@ -6,6 +6,7 @@
 // change state in place and never throw. It never says a game is good.
 
 import type { Cartridge, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../shared/cartridge.ts";
+import type { Control } from "../shared/controls.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { Turn } from "../shared/turn.ts";
 import type { ScopedFact } from "../shared/visibility.ts";
@@ -27,6 +28,7 @@ export const PAPER_PLAYERS: readonly CartridgePlayer[] = ["Teacup", "Spoon", "Ca
 export type Move =
     | { kind: "say"; playerId: string; text: string; ruling: string | null }
     | { kind: "press"; playerId: string; actionId: string }
+    | { kind: "answer"; playerId: string; controlId: string; value: string | number }
     | { kind: "leave"; playerId: string }
     | { kind: "wait"; seconds: number };
 
@@ -155,7 +157,8 @@ export function findLeaks(viewer: string, seen: readonly string[], hidden: reado
     for (const value of hidden) {
         const near: string | undefined = value.near;
         const lines: readonly string[] = near === undefined ? seen : [...seen, ...together].filter((line: string) => squash(line).includes(squash(near)) === true);
-        const found: boolean = near === undefined ? appears(seen, value.text) : appearsAsWord(lines, value.text);
+        const whole: boolean = near !== undefined || value.wholeWord === true;
+        const found: boolean = whole === false ? appears(seen, value.text) : appearsAsWord(lines, value.text);
         if (value.seenBy.includes(viewer) === false && found === true) {
             problems.push(`${value.label} reached ${viewer === "screen" || viewer === "host" ? `the ${viewer}` : `phone ${viewer}`}.`);
         }
@@ -372,6 +375,16 @@ export function rehearse<State>(game: KitGame<State>, persona: Persona<State>, s
                 problems.push(`${persona.name} pressed "${move.actionId}" when it was not offered.`);
             }
             take({ type: "input", playerId: move.playerId, actionId: move.actionId }, () => cartridge.apply(current, move.playerId, move.actionId));
+            fireDue();
+            continue;
+        }
+        if (move.kind === "answer") {
+            const offered: boolean = cartridge.privateControls(current, move.playerId).some((control: Control) => "id" in control && control.id === move.controlId);
+            if (offered === false) {
+                problems.push(`${persona.name} answered "${move.controlId}" when that control was not on their phone.`);
+            }
+            const answered: RoomEvent = { type: "answered", at: run.now, playerId: move.playerId, controlId: move.controlId, value: move.value };
+            take(answered, () => cartridge.onEvent(current, answered));
             fireDue();
             continue;
         }

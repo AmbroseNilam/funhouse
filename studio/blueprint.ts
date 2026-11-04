@@ -5,6 +5,7 @@
 
 import type { Cartridge } from "../shared/cartridge.ts";
 import type { Box, HiddenValue, KitGame } from "./kit/kit.ts";
+import { createGateGame, gateBlueprintProblems, type GateDecisions } from "./kits/gate.ts";
 import { createGuessingGame, guessingBlueprintProblems, type GuessingDecisions } from "./kits/guessing.ts";
 import { createPlantGame, plantBlueprintProblems, type PlantDecisions } from "./kits/plant.ts";
 
@@ -22,8 +23,15 @@ export interface PlantBlueprint {
     decisions: PlantDecisions;
 }
 
+/** A gate game: a keeper the host plays, a secret rule code checks against each plea, and cargo words. */
+export interface GateBlueprint {
+    kit: "gate";
+    box: Box;
+    decisions: GateDecisions;
+}
+
 /** Any game as data. */
-export type Blueprint = GuessingBlueprint | PlantBlueprint;
+export type Blueprint = GuessingBlueprint | PlantBlueprint | GateBlueprint;
 
 /** A running game of any kit, with its state hidden behind the cartridge. */
 export interface AnyKitGame {
@@ -41,6 +49,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
     if (blueprint.kit === "guessing") {
         return guessingBlueprintProblems(blueprint.box, blueprint.decisions);
     }
+    if (blueprint.kit === "gate") {
+        return gateBlueprintProblems(blueprint.box, blueprint.decisions);
+    }
     return plantBlueprintProblems(blueprint.box, blueprint.decisions);
 }
 
@@ -54,6 +65,9 @@ export function blueprintProblems(blueprint: Blueprint): string[] {
 export function createKitGame(blueprint: Blueprint, random: () => number = Math.random): AnyKitGame {
     if (blueprint.kit === "guessing") {
         return erase(createGuessingGame(blueprint.box, blueprint.decisions, random));
+    }
+    if (blueprint.kit === "gate") {
+        return erase(createGateGame(blueprint.box, blueprint.decisions, random));
     }
     return erase(createPlantGame(blueprint.box, blueprint.decisions, random));
 }
