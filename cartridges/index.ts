@@ -31,6 +31,10 @@ export interface InstalledGame {
     remarks: string[];
     /** How AI guests play it; left out, it isn't offered to a table with guests. */
     guests?: GuestPlay;
+    /** True when someone's own agent may sit in; left out, agents are told they can't. */
+    agents?: boolean;
+    /** True when an agent's typed line counts as speech here; the game is judged by the host. */
+    agentsTalk?: boolean;
     /** What to choose before it begins, if anything. */
     startPick?: StartPick;
     /** A few short lines shown before the first round in a room, if anything. */
@@ -41,12 +45,16 @@ export interface InstalledGame {
      * @param pick the id of what was chosen before it began, if anything.
      */
     create(stage: GameStage, pick?: string): RunningGame;
+    /** The same game with a slower clock, for a table with someone's agent, if it has one. */
+    createForAgents?: (stage: GameStage, pick?: string) => RunningGame;
 }
 
 /** The installed games, in shelf order. */
 export const GAMES: InstalledGame[] = [
     {
         manifest: TWENTY_DOORS_MANIFEST,
+        agents: true,
+        agentsTalk: true,
         pitch: `${HOST_NAME} thinks of something. You get twenty questions to find it.`,
         howToPlay: ["Tap to talk on your phone, or hold to talk, and ask a yes-or-no question out loud.", "Every answer opens a door. You get twenty.", "Say what you think it is when you're ready."],
         art: "art/twenty-doors.webp",

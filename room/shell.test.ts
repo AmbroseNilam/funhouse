@@ -39,7 +39,7 @@ const GAME: ShelfGame = {
  * @returns the seat.
  */
 function seat(playerId: string, name: string): Omit<Seat, "driving"> {
-    return { playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false };
+    return { playerId, name, colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false, agent: false };
 }
 
 /**
@@ -337,8 +337,8 @@ describe("the console", () => {
 
     it("lets someone in the game take over a pause from a holder who's only watching", () => {
         const seats = [
-            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false },
-            { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false },
+            { playerId: "a", name: "Ana", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false, agent: false },
+            { playerId: "b", name: "Ben", colour: "", connected: true, talking: false, recording: false, out: false, phoneDown: false, watching: false, guest: false, agent: false },
         ];
         const shell: Shell = new Shell({
             games: () => [],

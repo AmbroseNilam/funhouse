@@ -1,6 +1,6 @@
 // Finds the games and kits by scanning folders, so adding either never edits a shared file. A kit is a
 // folder under kits/ holding kit.meta.json ({ kit }) and an index.ts that exports KIT. A game is a
-// folder under games/ holding game.meta.json ({ id, kit, level, reason?, order?, guests? }) and a blueprint.ts
+// folder under games/ holding game.meta.json ({ id, kit, level, reason?, order?, guests?, agents? }) and a blueprint.ts
 // that exports its blueprint. Everything is checked at load. A folder that fails (no metadata, an unknown
 // kit, a module that won't load, a blueprint its kit says can't run) sits out and is listed in `skipped`
 // naming the culprit, so one bad folder can't stop a server that also runs the plain shelf. A test holds
@@ -23,6 +23,10 @@ export interface GameMeta {
     level: GameLevel;
     /** How AI guests play this game; left out, the game isn't offered to a table with guests. */
     guests?: GuestPlay;
+    /** True when someone's own agent may sit in; left out, agents are told they can't. */
+    agents?: boolean;
+    /** Decisions that differ when an agent is at the table, such as a longer clock for one working through a browser. */
+    agentDecisions?: Record<string, number>;
     /** Why the game is not yet visible; required for testing and held. */
     reason?: string;
     /** Where it stands on the shelf, lowest first; games without one come last, by id. */
@@ -110,6 +114,12 @@ function gameMetaOf(raw: Record<string, unknown>, folder: string): GameMeta {
     const meta: GameMeta = { id: raw.id, kit: raw.kit, level: raw.level as GameLevel };
     if (raw.guests !== undefined) {
         meta.guests = raw.guests;
+    }
+    if (raw.agents === true) {
+        meta.agents = true;
+    }
+    if (typeof raw.agentDecisions === "object" && raw.agentDecisions !== null) {
+        meta.agentDecisions = raw.agentDecisions as Record<string, number>;
     }
     if (typeof raw.reason === "string") {
         meta.reason = raw.reason;

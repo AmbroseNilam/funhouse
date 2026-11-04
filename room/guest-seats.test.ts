@@ -90,7 +90,7 @@ test("nobody adds a guest: no guest on the TV, nothing on the phone, the usual g
     const { phone, screen } = table();
     assert.deepEqual(seatsOn(screen).map((seat) => seat.guest), [false]);
     const view = phone.latest("view")?.view as { guests: { seated: unknown[]; canAdd: boolean; canRemove: boolean } };
-    assert.deepEqual(view.guests, { seated: [], canAdd: true, canRemove: false });
+    assert.deepEqual(view.guests, { seated: [], canAdd: true, canRemove: false, agents: null }, "agents are off unless the server turns them on");
     phone.say({ type: "nav", action: { kind: "select" } });
     const shell = screen.latest("shell")?.view as { screen: string; menu: string[]; games: { id: string }[]; focus: number };
     assert.equal(shell.screen, "game");
