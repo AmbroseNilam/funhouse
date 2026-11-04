@@ -140,7 +140,7 @@ const INSTALLED: boolean = matchMedia("(display-mode: standalone)").matches === 
 const ROOM_CODE_LENGTH: number = 4;
 
 /** True when this phone has a share sheet. */
-const CAN_SHARE: boolean = "share" in navigator;
+const CAN_SHARE: boolean = "share" in navigator && "canShare" in navigator;
 
 /** What the credits say. */
 const CREDITS: string = `Paintings are AI-generated with Meta's Muse Image. The host's words and voice are AI too.`;
@@ -1160,20 +1160,25 @@ export function App(): ReactElement {
     }
 
     /** Shares a link to this room, or copies it where a phone can't share. */
+    // Called straight from the tap with nothing awaited first, because iOS only allows sharing inside a tap.
     const invite = async (): Promise<void> => {
         const url: string = `${location.origin}/phone/?room=${encodeURIComponent(state.roomCode)}`;
-        try {
-            if (CAN_SHARE === true) {
-                await navigator.share({ title: PRODUCT_NAME, text: "Pull up a chair.", url });
+        const shared: ShareData = { title: PRODUCT_NAME, text: `Pull up a chair. We're playing ${PRODUCT_NAME}.`, url };
+        if (CAN_SHARE === true && navigator.canShare(shared) === true) {
+            try {
+                await navigator.share(shared);
                 setMenu("closed");
                 return;
+            } catch (error: unknown) {
+                if (error instanceof DOMException && error.name === "AbortError") {
+                    return;
+                }
             }
+        }
+        try {
             await navigator.clipboard.writeText(url);
-            setInvited("Link copied. Send it to whoever's coming.");
-        } catch (error: unknown) {
-            if (error instanceof DOMException && error.name === "AbortError") {
-                return;
-            }
+            setInvited("Copied. Send the link to whoever's coming.");
+        } catch {
             setInvited(url);
         }
     };
@@ -1290,7 +1295,7 @@ export function App(): ReactElement {
                     <div className="sheet" data-scrolls role="dialog" aria-modal="true" aria-label="Your menu">
                         {menu === "open" ? (
                             <>
-                                {invited !== "" ? <p className="invited">{invited}</p> : null}
+                                {invited !== "" ? <p className="invited" role="status">{invited}</p> : null}
                                 {noMic === true ? <button onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
                                 {state.mic !== "ok" && noMic === false ? <button onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                 <button onClick={() => { void invite(); }}>Invite someone</button>

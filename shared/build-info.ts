@@ -22,18 +22,12 @@ export function buildInfoFrom(env: Record<string, string | undefined>): BuildInf
 }
 
 /**
- * Words a build for a person, such as "v 9920b0c · Nov 4 12:34".
+ * Words a build for a person, such as "v 9920b0c". The build time stays in /version and the boot log.
  * @param build the build.
- * @param timeZone the time zone to show, the reader's own unless given.
  * @returns the line.
  */
-export function versionLine(build: BuildInfo, timeZone?: string): string {
-    const built: Date = new Date(build.builtAt);
-    if (build.builtAt === "" || Number.isNaN(built.getTime()) === true) {
-        return `v ${build.commit}`;
-    }
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(timeZone === undefined ? {} : { timeZone }) };
-    return `v ${build.commit} · ${built.toLocaleString("en-US", options).replace(",", "")}`;
+export function versionLine(build: BuildInfo): string {
+    return `v ${build.commit}`;
 }
 
 /**

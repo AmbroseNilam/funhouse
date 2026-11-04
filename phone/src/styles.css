@@ -162,7 +162,7 @@
     .sheet .setting[aria-checked="true"] .setting-state { background: var(--lamp); color: #241a02; }
     .sheet .quiet { background: none; color: var(--paper-ink); }
     .sheet .text-link { background: none; color: var(--paper-ink); min-height: 44px; font-size: 17px; text-decoration: underline; }
-    .invited { font-size: 17px; overflow-wrap: anywhere; }
+    .invited { font-size: 17px; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
     .place-warning { background: var(--wine); color: var(--paper); padding: 6px 10px; font-size: 18px; }
     .code-field { font-size: 40px; letter-spacing: 0.25em; text-transform: uppercase; }
     .primary:disabled { opacity: 0.45; }
