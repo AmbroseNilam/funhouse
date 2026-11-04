@@ -6,7 +6,7 @@
 // beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { OddWordBlueprint } from "../../blueprint.ts";
+import type { OddWordBlueprint } from "../../kits/oddword/index.ts";
 
 /** Stray Word, written as decisions on the odd-word kit. */
 export const STRAY_WORD_BLUEPRINT: OddWordBlueprint = {

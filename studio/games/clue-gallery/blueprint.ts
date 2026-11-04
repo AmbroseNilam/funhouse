@@ -7,7 +7,7 @@
 // game. The experience script is in clue-gallery.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { GalleryBlueprint } from "../../blueprint.ts";
+import type { GalleryBlueprint } from "../../kits/gallery/index.ts";
 
 /** Clue Gallery, written as decisions on the gallery kit. */
 export const CLUE_GALLERY_BLUEPRINT: GalleryBlueprint = {

@@ -14,7 +14,7 @@ import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
 import { UNDER_THE_CUP_BLUEPRINT } from "../../games/under-the-cup/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
-import { dicePersonas, diceSecrecyCheck } from "../../personas.ts";
+import { dicePersonas, diceSecrecyCheck } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn, type RoleCheck } from "../../rehearse.ts";
 import { BACK_ACTION, CHALLENGE_ACTION, createDiceGame, FACE_PREFIX, HIGHER_ACTION, LOWER_ACTION, QUANTITY_PREFIX, type DiceDecisions, type DiceState } from "./tap-dice.ts";
 

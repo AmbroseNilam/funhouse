@@ -12,7 +12,7 @@ import { checkBlueprint } from "../../check.ts";
 import { MAGPIE_POCKETS_BLUEPRINT } from "../../games/magpie-pockets/blueprint.ts";
 import type { HiddenValue, KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { pushChoiceCheck, pushPersonas } from "../../personas.ts";
+import { pushChoiceCheck, pushPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearse, rehearseMany, stringsIn, type RoleCheck } from "../../rehearse.ts";
 import { createPushGame, PUSH_PREFIX, pushProblems, type PushDecisions, type PushState } from "./tap-push.ts";
 

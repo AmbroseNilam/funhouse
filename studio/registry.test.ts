@@ -36,8 +36,8 @@ describe("kit registry", () => {
 
     it("has a registry entry for every shipped game's kit, and a plain reason for every held game", () => {
         for (const blueprint of BLUEPRINTS) {
-            assert.equal(typeof KITS[blueprint.kit].create, "function", blueprint.box.id);
-            assert.equal(typeof KITS[blueprint.kit].check, "function", blueprint.box.id);
+            assert.equal(typeof KITS[blueprint.kit]?.create, "function", blueprint.box.id);
+            assert.equal(typeof KITS[blueprint.kit]?.check, "function", blueprint.box.id);
         }
         for (const reason of Object.values(HELD_BACK)) {
             assert.equal(reason.length > 0, true);

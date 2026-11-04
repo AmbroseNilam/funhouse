@@ -13,7 +13,7 @@ import { blueprintProblems } from "../../blueprint.ts";
 import { checkBlueprint } from "../../check.ts";
 import { WHO_FITS_BLUEPRINT } from "../../games/who-fits/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
-import { fitsPersonas, fitsTapCheck } from "../../personas.ts";
+import { fitsPersonas, fitsTapCheck } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn, type RoleCheck } from "../../rehearse.ts";
 import { createFitsGame, FITS_PREFIX, type FitsDecisions, type FitsState } from "./tap-fits.ts";
 

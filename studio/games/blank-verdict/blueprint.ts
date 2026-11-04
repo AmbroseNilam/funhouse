@@ -5,7 +5,7 @@
 // a party room plays them all; the first player chooses on their phone before the first round.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { HandBlueprint } from "../../blueprint.ts";
+import type { HandBlueprint } from "../../kits/hand/index.ts";
 import { BLANK_VERDICT_ANSWERS, BLANK_VERDICT_PROMPTS } from "./blank-verdict-cards.ts";
 
 /** Blank Verdict, written as decisions on the hand kit. */

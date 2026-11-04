@@ -5,7 +5,7 @@
 // and plays the reveal. Notes are in under-the-cup.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { TapBlueprint } from "../../blueprint.ts";
+import type { TapBlueprint } from "../../kits/tap/index.ts";
 import type { DiceDecisions } from "../../kits/tap/tap-dice.ts";
 
 /** Under the Cup, written as decisions on the tap kit. */

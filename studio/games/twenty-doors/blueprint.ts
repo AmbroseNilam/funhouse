@@ -3,7 +3,7 @@
 // and the existing scenario plays unchanged. It is what "Make it yours" will start from.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { GuessingBlueprint } from "../../blueprint.ts";
+import type { GuessingBlueprint } from "../../kits/guessing/index.ts";
 
 /** Twenty Doors, written as decisions on the guessing kit. */
 export const TWENTY_DOORS_BLUEPRINT: GuessingBlueprint = {

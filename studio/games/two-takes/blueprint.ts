@@ -4,7 +4,7 @@
 // writes fresh ones. The experience script and the host's lines are in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { WitBlueprint } from "../../blueprint.ts";
+import type { WitBlueprint } from "../../kits/wit/index.ts";
 
 /** Two Takes, written as decisions on the wit kit. */
 export const TWO_TAKES_BLUEPRINT: WitBlueprint = {

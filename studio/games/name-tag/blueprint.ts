@@ -5,7 +5,7 @@
 // names; at play time the host's model writes a fresh list. Notes are in name-tag.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { IdentityBlueprint } from "../../blueprint.ts";
+import type { IdentityBlueprint } from "../../kits/identity/index.ts";
 
 /** Name Tag, written as decisions on the identity kit. */
 export const NAME_TAG_BLUEPRINT: IdentityBlueprint = {

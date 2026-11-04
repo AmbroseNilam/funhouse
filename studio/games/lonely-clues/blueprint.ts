@@ -5,7 +5,7 @@
 // blueprint, so the host is never told the word. The experience script is in lonely-clues.md.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { ClueBlueprint } from "../../blueprint.ts";
+import type { ClueBlueprint } from "../../kits/clue/index.ts";
 
 /** Words the game can pick: everyday things most adults know, easy to clue and hard to clue alike. */
 export const LONELY_CLUES_WORDS: readonly string[] = [

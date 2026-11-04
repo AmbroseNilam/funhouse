@@ -6,7 +6,7 @@
 // painted-whispers.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { ChainBlueprint } from "../../blueprint.ts";
+import type { ChainBlueprint } from "../../kits/chain/index.ts";
 
 /** Painted Whispers, written as decisions on the chain kit. */
 export const PAINTED_WHISPERS_BLUEPRINT: ChainBlueprint = {

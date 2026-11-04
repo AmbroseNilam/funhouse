@@ -13,7 +13,7 @@ import type { Scene } from "../shared/scene.ts";
 import type { RoomEvent } from "../shared/timeline.ts";
 import type { Turn } from "../shared/turn.ts";
 import type { Scope, ScopedFact } from "../shared/visibility.ts";
-import type { GuessingBlueprint } from "./blueprint.ts";
+import type { GuessingBlueprint } from "./kits/guessing/index.ts";
 import { LEADING_QUESTIONS_BLUEPRINT } from "./games/leading-questions/blueprint.ts";
 import { TWENTY_DOORS_BLUEPRINT } from "./games/twenty-doors/blueprint.ts";
 import type { HiddenValue, KitGame } from "./kit/kit.ts";
@@ -21,7 +21,8 @@ import { seededRandom } from "./kit/primitives.ts";
 import { createGuessingGame, type GuessingState } from "./kits/guessing/guessing.ts";
 import { createPlantGame, type PlantDecisions, type PlantState } from "./kits/plant/plant.ts";
 import { checkBlueprint } from "./check.ts";
-import { guessingPersonas, plantPersonas, plantRoleCheck } from "./personas.ts";
+import { guessingPersonas } from "./kits/guessing/personas.ts";
+import { plantPersonas, plantRoleCheck } from "./kits/plant/personas.ts";
 import { appears, findLeaks, PAPER_PLAYERS, stringsIn, rehearse, rehearseMany, type Glimpse, type Move, type Persona, type Rehearsal, type RoleCheck, type Tally, type TraceEntry } from "./rehearse.ts";
 
 /**

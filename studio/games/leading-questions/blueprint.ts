@@ -5,7 +5,7 @@
 // leading-questions.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { PlantBlueprint } from "../../blueprint.ts";
+import type { PlantBlueprint } from "../../kits/plant/index.ts";
 
 /** Leading Questions, written as decisions on the plant kit. */
 export const LEADING_QUESTIONS_BLUEPRINT: PlantBlueprint = {

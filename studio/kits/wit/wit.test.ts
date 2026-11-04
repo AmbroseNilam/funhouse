@@ -11,11 +11,12 @@ import type { Control } from "../../../shared/controls.ts";
 import type { Scene } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type WitBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type WitBlueprint } from "./index.ts";
 import { TWO_TAKES_BLUEPRINT } from "../../games/two-takes/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { witPersonas } from "../../personas-text.ts";
+import { witPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn } from "../../rehearse.ts";
 import { createWitGame, WIT_VOTE_PREFIX, witSchedule, type WitState } from "./wit.ts";
 

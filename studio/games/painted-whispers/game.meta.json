@@ -1,0 +1,7 @@
+{
+    "id": "paintedWhispers",
+    "kit": "chain",
+    "level": "held",
+    "reason": "no run with the real picture model; its cost and latency are unmeasured",
+    "order": 200
+}

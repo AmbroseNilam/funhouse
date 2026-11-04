@@ -11,12 +11,13 @@ import type { Control, ControlOption } from "../../../shared/controls.ts";
 import { localCategory } from "../../../room/content-filter.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type HandBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type HandBlueprint } from "./index.ts";
 import { checkBlueprint } from "../../check.ts";
 import { BLANK_VERDICT_BLUEPRINT } from "../../games/blank-verdict/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { handPersonas } from "../../personas.ts";
+import { handPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearse, stringsIn } from "../../rehearse.ts";
 import { BEAT_SECONDS, createHandGame, GAP, PICK_PREFIX, PLAY_PREFIX, TONE_PREFIX, type AnswerCard, type HandState, type Play, type PromptCard } from "./hand.ts";
 

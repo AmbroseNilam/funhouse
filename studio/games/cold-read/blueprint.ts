@@ -4,7 +4,7 @@
 // names are original to this game. Notes are in cold-read.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { HostGuessBlueprint } from "../../blueprint.ts";
+import type { HostGuessBlueprint } from "../../kits/host-guess/index.ts";
 
 /** Cold Read, written as decisions on the host-guess kit. */
 export const COLD_READ_BLUEPRINT: HostGuessBlueprint = {

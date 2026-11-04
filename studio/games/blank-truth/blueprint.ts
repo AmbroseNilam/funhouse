@@ -5,7 +5,7 @@
 // experience script and the host's lines are in script.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { BluffBlueprint } from "../../blueprint.ts";
+import type { BluffBlueprint } from "../../kits/bluff/index.ts";
 
 /** The Blank Truth, written as decisions on the bluff kit. */
 export const BLANK_TRUTH_BLUEPRINT: BluffBlueprint = {

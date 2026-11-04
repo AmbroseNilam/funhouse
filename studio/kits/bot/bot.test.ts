@@ -12,11 +12,12 @@ import type { Control } from "../../../shared/controls.ts";
 import type { Scene } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type BotBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type BotBlueprint } from "./index.ts";
 import { GHOST_WRITER_BLUEPRINT } from "../../games/ghost-writer/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { botPersonas } from "../../personas-text.ts";
+import { botPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn } from "../../rehearse.ts";
 import { BOT_VOTE_PREFIX, createBotGame, inStyleOf, isUsableGhost, type BotState } from "./bot.ts";
 

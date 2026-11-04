@@ -12,11 +12,12 @@ import type { Control } from "../../../shared/controls.ts";
 import type { Scene } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type BluffBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type BluffBlueprint } from "./index.ts";
 import { BLANK_TRUTH_BLUEPRINT } from "../../games/blank-truth/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { bluffPersonas } from "../../personas-text.ts";
+import { bluffPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn } from "../../rehearse.ts";
 import { BLUFF_PICK_PREFIX, createBluffGame, isUsableFact, readFacts, type BluffState } from "./bluff.ts";
 

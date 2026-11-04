@@ -47,8 +47,9 @@ adopt `mergeAnswers` from master later; they keep their own matching for now.
 
 - Stub servers: `tools/stub-model.ts` (port 8799, text host; it serves `stub-host.ts`) and `tools/stub-meta.ts`
   (port 8798, images and the classifier). Use one or the other per room.
-- Kits now register in `studio/registry.ts`: a new kit is an import, a blueprint type and one entry there, and
-  its games are one line in `studio/shelf.ts`. `.gitattributes` keeps both sides' lines when two branches add.
+- Kits and games are discovered by `studio/discovery.ts`, which scans `studio/kits/<kit>/` (a `kit.meta.json` and an
+  `index.ts` exporting `KIT`) and `studio/games/<game>/` (a `game.meta.json` and a `blueprint.ts`) at startup. Adding
+  either is adding a folder, so no shared file is edited and `.gitattributes` no longer has union lines.
 - Tin Can Telephone's scenario timed out once in five runs ("waiting for the guesser's turn"), only while other
   scenarios were running at the same time; it passes alone. Not made deterministic; treat as load-sensitive.
 
@@ -78,7 +79,7 @@ not confirmed.
 
 ## Held back
 
-`HELD_BACK` in `studio/shelf.ts` keeps Painted Whispers and Clue Gallery off (Two Takes was cleared after its real-key pass) the `?studio=1` shelf
+A game's `"level": "held"` and `reason` in its `game.meta.json` (collected as `HELD_BACK` in `studio/shelf.ts`) keep Painted Whispers and Clue Gallery off (Two Takes was cleared after its real-key pass) the `?studio=1` shelf
 until a run against the real picture model (cost and latency) and the real classifier clears them; delete the
 game's line to put it on. Start the room with `STUDIO_SHOW_HELD=1` to see them anyway (the scenarios need it).
 Any new game that passes goes here until a human or real-host run clears it, except tap-only games.
@@ -96,7 +97,7 @@ Any new game that passes goes here until a human or real-host run clears it, exc
 
 Open `/screen/?studio=1` and pick the game by name. Under the Cup and Magpie Pockets (and Who Fits) are on
 the shelf. Name Tag, Cold Read, Blank Verdict, Lonely Clues, Pantomime Panic, Blank Truth and Ghost Writer
-are in `HELD_BACK`, so the room server must be started with `STUDIO_SHOW_HELD=1` to show them. Each is
+have level `held` in their `game.meta.json`, so the room server must be started with `STUDIO_SHOW_HELD=1` to show them. Each is
 held with the reason "no run with the real host yet" until someone plays it with the real host.
 
 Scenarios in `tools/scenarios/`: games on the stub model use `tools/stub-model.ts` (Cold Read needs
@@ -105,7 +106,7 @@ Scenarios in `tools/scenarios/`: games on the stub model use `tools/stub-model.t
 
 ## Shelf levels
 
-- `/screen/?studio=1`: the curated Studio shelf (games not on `HELD_BACK`).
+- `/screen/?studio=1`: the curated Studio shelf (games whose level is `visible`).
 - `/screen/?studio=all&key=...`: the same plus every held game, each with "Testing." at the start of its pitch.
   Off unless the server has `STUDIO_ALL=1` and `STUDIO_ALL_KEY`, and the key matches; otherwise it is the plain
   shelf. The new-room button keeps the query, so a testing room stays a testing room.

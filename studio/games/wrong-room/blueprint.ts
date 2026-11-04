@@ -5,7 +5,7 @@
 // it can't. The experience script is in wrong-room.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { StrangerBlueprint } from "../../blueprint.ts";
+import type { StrangerBlueprint } from "../../kits/stranger/index.ts";
 
 /** Wrong Room, written as decisions on the stranger kit. */
 export const WRONG_ROOM_BLUEPRINT: StrangerBlueprint = {

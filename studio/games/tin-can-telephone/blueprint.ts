@@ -6,7 +6,7 @@
 // experience script is in tin-can-telephone.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { ClueBoardBlueprint } from "../../blueprint.ts";
+import type { ClueBoardBlueprint } from "../../kits/clueboard/index.ts";
 
 /** Tin Can Telephone, written as decisions on the clue-board kit. */
 export const TIN_CAN_TELEPHONE_BLUEPRINT: ClueBoardBlueprint = {

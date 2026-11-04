@@ -4,7 +4,7 @@
 // at play time the host's model writes extra lines. Notes are in magpie-pockets.md beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { TapBlueprint } from "../../blueprint.ts";
+import type { TapBlueprint } from "../../kits/tap/index.ts";
 import type { PushDecisions } from "../../kits/tap/tap-push.ts";
 
 /** Magpie Pockets, written as decisions on the tap kit. */

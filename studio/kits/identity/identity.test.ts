@@ -14,7 +14,7 @@ import { checkBlueprint } from "../../check.ts";
 import { NAME_TAG_BLUEPRINT } from "../../games/name-tag/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
 import { seededRandom } from "../../kit/primitives.ts";
-import { identityNameCheck, identityPersonas } from "../../personas.ts";
+import { identityNameCheck, identityPersonas } from "./personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn, type RoleCheck } from "../../rehearse.ts";
 import { createIdentityGame, editDistance, identitiesToDeal, namesOf, parseIdentities, PASS_ACTION, saidIdentity, solvePoints, type Identity, type IdentityDecisions, type IdentityState } from "./identity.ts";
 

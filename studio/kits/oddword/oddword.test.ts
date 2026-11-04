@@ -11,10 +11,11 @@ import type { Control, ControlOption } from "../../../shared/controls.ts";
 import type { SceneBlock } from "../../../shared/scene.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type OddWordBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type OddWordBlueprint } from "./index.ts";
 import { STRAY_WORD_BLUEPRINT } from "../../games/stray-word/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
-import { oddWordRoleCheck } from "../../personas.ts";
+import { oddWordRoleCheck } from "./personas.ts";
 import { PAPER_PLAYERS, roleBlindness, stringsIn } from "../../rehearse.ts";
 import { createOddWordGame, ODD_VOTE_PREFIX, parseEntry, STRAY_CARD_TITLE, type OddWordState } from "./oddword.ts";
 

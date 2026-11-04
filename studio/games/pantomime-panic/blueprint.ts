@@ -5,7 +5,7 @@
 // The prompts are original to this game and live beside this file.
 
 import { HOST_NAME } from "../../../shared/brand.ts";
-import type { CharadesBlueprint } from "../../blueprint.ts";
+import type { CharadesBlueprint } from "../../kits/charades/index.ts";
 import { PANTOMIME_PANIC_PROMPTS } from "./pantomime-panic-prompts.ts";
 
 /** Pantomime Panic, written as decisions on the charades kit. */

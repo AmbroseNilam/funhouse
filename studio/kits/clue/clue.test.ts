@@ -9,7 +9,7 @@ import type { Scene } from "../../../shared/scene.ts";
 import { checkBlueprint } from "../../check.ts";
 import { blueprintProblems } from "../../blueprint.ts";
 import { LONELY_CLUES_BLUEPRINT, LONELY_CLUES_WORDS } from "../../games/lonely-clues/blueprint.ts";
-import { cluePersonas } from "../../personas.ts";
+import { cluePersonas } from "./personas.ts";
 import { findLeaks, linesIn, PAPER_PLAYERS, rehearse, stringsIn, viewsOf, type Persona } from "../../rehearse.ts";
 import { seededRandom } from "../../kit/primitives.ts";
 import { clueProblem, createClueGame, guessMatches, isFormOfWord, type ClueState } from "./clue.ts";

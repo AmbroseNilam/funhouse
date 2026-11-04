@@ -10,10 +10,11 @@ import type { CartridgePlayer, Step } from "../../../shared/cartridge.ts";
 import type { Control, ControlOption } from "../../../shared/controls.ts";
 import type { RoomEvent } from "../../../shared/timeline.ts";
 import type { ScopedFact } from "../../../shared/visibility.ts";
-import { blueprintProblems, type StrangerBlueprint } from "../../blueprint.ts";
+import { blueprintProblems } from "../../blueprint.ts";
+import { type StrangerBlueprint } from "./index.ts";
 import { WRONG_ROOM_BLUEPRINT } from "../../games/wrong-room/blueprint.ts";
 import type { KitGame } from "../../kit/kit.ts";
-import { strangerRoleCheck } from "../../personas.ts";
+import { strangerRoleCheck } from "./personas.ts";
 import { PAPER_PLAYERS, roleBlindness, stringsIn } from "../../rehearse.ts";
 import { createStrangerGame, namesPlace, parsePlace, STRANGER_ACTIONS, STRANGER_CARD_TITLE, type StrangerState } from "./stranger.ts";
 
