@@ -13,8 +13,8 @@ export interface Bid {
 /** Faces on a die. */
 export const FACES: number = 6;
 
-/** Most quantity buttons a phone is offered at once, counting up from the lowest legal raise. */
-export const QUANTITY_BUTTONS: number = 8;
+/** Quantity buttons a phone is offered at once, counting up from the lowest legal raise; the rest are a page away. */
+export const QUANTITY_BUTTONS: number = 5;
 
 const SINGULAR: readonly string[] = ["one", "two", "three", "four", "five", "six"];
 const PLURAL: readonly string[] = ["ones", "twos", "threes", "fours", "fives", "sixes"];
@@ -92,18 +92,31 @@ export function lowestRaiseQuantity(standing: Bid | null): number {
 }
 
 /**
- * The quantities a phone offers: from the lowest legal raise upward, capped at the dice on the table.
+ * The quantities a phone offers on one page: from the lowest legal raise upward, capped at the dice
+ * on the table. Later pages go higher, so any bid is reachable without a long list of buttons.
  * @param standing the bid to beat, or null.
  * @param totalDice dice on the table.
+ * @param page which page, from 0.
  * @returns the quantities, ascending, at most QUANTITY_BUTTONS of them.
  */
-export function quantityChoices(standing: Bid | null, totalDice: number): number[] {
-    const lowest: number = lowestRaiseQuantity(standing);
+export function quantityChoices(standing: Bid | null, totalDice: number, page: number = 0): number[] {
+    const first: number = lowestRaiseQuantity(standing) + page * QUANTITY_BUTTONS;
     const choices: number[] = [];
-    for (let quantity = lowest; quantity <= totalDice && choices.length < QUANTITY_BUTTONS; quantity += 1) {
+    for (let quantity = first; quantity <= totalDice && choices.length < QUANTITY_BUTTONS; quantity += 1) {
         choices.push(quantity);
     }
     return choices;
+}
+
+/**
+ * Whether a page of quantities is followed by another.
+ * @param standing the bid to beat, or null.
+ * @param totalDice dice on the table.
+ * @param page which page, from 0.
+ * @returns true when a higher page has at least one quantity.
+ */
+export function hasHigherPage(standing: Bid | null, totalDice: number, page: number): boolean {
+    return quantityChoices(standing, totalDice, page + 1).length > 0;
 }
 
 /**

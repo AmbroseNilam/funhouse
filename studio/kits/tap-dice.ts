@@ -7,15 +7,15 @@
 
 import type { Cartridge, CartridgeManifest, CartridgePlayer, LegalAction, PhaseSpec, Step } from "../../shared/cartridge.ts";
 import type { Control, ControlOption } from "../../shared/controls.ts";
-import type { Scene, SceneBlock, TallyRow } from "../../shared/scene.ts";
+import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import type { RoomEvent } from "../../shared/timeline.ts";
 import type { Turn } from "../../shared/turn.ts";
 import type { Scope, ScopedFact } from "../../shared/visibility.ts";
 import { boxProblems, isWholeIn, type Box, type HiddenValue, type KitGame } from "../kit/kit.ts";
 import { because, frozenCopy } from "../kit/primitives.ts";
 import {
-    beats, boldness, BOLDNESS_WORDS, chanceAtLeast, chancePerDie, clockOpening, countFace, faceChoices, faceWord, nextWithDice, numberWord, quantityChoices, rollDice, sayBid,
-    type Bid,
+    beats, boldness, BOLDNESS_WORDS, chanceAtLeast, chancePerDie, clockOpening, countFace, faceChoices, faceWord, hasHigherPage, nextWithDice, numberWord, quantityChoices,
+    rollDice, sayBid, type Bid,
 } from "./tap-dice-rules.ts";
 import { nameIn } from "./tap.ts";
 
@@ -87,6 +87,8 @@ export interface DiceState {
     bids: Bid[];
     /** The quantity the bidder has chosen and not yet paired with a face. Seen only by the bidder. */
     draft: number | null;
+    /** Which page of quantities the bidder is looking at. Seen only by the bidder. */
+    page: number;
     challengerId: string | null;
     reveal: Reveal | null;
     winnerIds: string[];
@@ -103,6 +105,10 @@ export const FACE_PREFIX: string = "face:";
 /** The option id of the challenge button. */
 export const CHALLENGE_ACTION: string = "challenge";
 
+/** The option ids of the buttons that page through quantities. */
+export const HIGHER_ACTION: string = "higher";
+export const LOWER_ACTION: string = "lower";
+
 /** The option id of the button that takes back a chosen quantity. */
 export const BACK_ACTION: string = "back";
 
@@ -117,6 +123,22 @@ export const DICE_DECISIONS: { dice: string; bid: string; look: string; lift: st
     exact: "exactLoss",
     wild: "wildOnes",
 };
+
+/** What goes between one hand's dice on the TV, and between two hands sharing a line. */
+export const HAND_SEPARATOR: string = " · ";
+export const HANDS_GAP: string = "  |  ";
+
+/** Players at or under which the TV gives every hand its own line; more share lines so the list stays above the lantern. */
+const HAND_LINES_UP_TO: number = 5;
+
+/**
+ * Capitalises the first letter.
+ * @param text any text.
+ * @returns the text, started with a capital.
+ */
+function capital(text: string): string {
+    return `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;
+}
 
 /** Largest table the bid buttons and the TV are laid out for. */
 const MOST_PLAYERS: number = 8;
@@ -201,7 +223,10 @@ export function diceManifest(box: Box): CartridgeManifest {
         },
         {
             id: "lifting",
-            hostBrief: "A challenge has been called and the cups are about to be lifted. You don't know the result. One short, slow line to build the moment, such as who called whom and that nobody is breathing. Don't say who is right.",
+            hostBrief: [
+                "A challenge has been called and the cups are about to be lifted. You don't know the result.",
+                "One short, slow line to build the moment: who called whom, and that nobody is breathing. Manner, not a script: \"Candle has called it. Hands off the cups.\" Don't say who is right.",
+            ].join(" "),
             listening,
             hostMayInterject: false,
             silenceSeconds: 0,
@@ -210,6 +235,7 @@ export function diceManifest(box: Box): CartridgeManifest {
             id: "reveal",
             hostBrief: [
                 "The cups are up and you'll be told every die, the count, and who loses a die. Make a small show of it in two or three short sentences: count the matching dice out loud, give the verdict, name who loses a die and how many they have left.",
+                "Manner, not a script: \"Count with me. A four, another four, a wild one. Three. The bid holds, and Candle pays for doubting it.\"",
                 "If someone is out, say so with ceremony and kindness. Tease the bluff, never the person's looks, money, age or love life.",
             ].join(" "),
             listening,
@@ -333,6 +359,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
             bid: null,
             bids: [],
             draft: null,
+            page: 0,
             challengerId: null,
             reveal: null,
         };
@@ -351,7 +378,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
     const place = (state: DiceState, bid: Bid, byClock: boolean): Step<DiceState> => {
         const bids: Bid[] = [...state.bids, bid];
         const bidderId: string | null = nextWithDice(seatsOf(state), state.diceLeft, bid.playerId);
-        const next: DiceState = { ...state, bid, bids, bidderId, draft: null };
+        const next: DiceState = { ...state, bid, bids, bidderId, draft: null, page: 0 };
         const odds: { text: string; chance: number } = bidWithOdds(state, bid);
         const who: string = nameIn(state.players, bid.playerId);
         const lead: string = byClock === true ? `The clock ran out on ${who}, so a bid went in for them: ` : `${who} bids `;
@@ -371,7 +398,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
         if (standing === null || state.bidderId === null) {
             return { state, facts: [] };
         }
-        const next: DiceState = { ...state, phase: "lifting", challengerId: state.bidderId, draft: null };
+        const next: DiceState = { ...state, phase: "lifting", challengerId: state.bidderId, draft: null, page: 0 };
         const caller: string = nameIn(state.players, state.bidderId);
         const lead: string = byClock === true ? `The clock ran out on ${caller}, so the call was made for them: they challenge` : `${caller} challenges`;
         const called: string = `${lead} ${nameIn(state.players, standing.playerId)}'s bid of ${sayBid(standing.quantity, standing.face)}.`;
@@ -390,7 +417,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
         const most: number = Math.max(0, ...standing.map((player: CartridgePlayer) => state.diceLeft[player.playerId] ?? 0));
         const winners: CartridgePlayer[] = standing.filter((player: CartridgePlayer) => (state.diceLeft[player.playerId] ?? 0) === most);
         const winnerIds: string[] = winners.map((player: CartridgePlayer) => player.playerId);
-        const next: DiceState = { ...state, phase: "end", winnerIds, ending, bidderId: null, draft: null };
+        const next: DiceState = { ...state, phase: "end", winnerIds, ending, bidderId: null, draft: null, page: 0 };
         const names: string = winners.map((player: CartridgePlayer) => player.name).join(" and ");
         const text: string = names === "" ? `${ending} Nobody is left at the table.` : `${ending} ${names} win${winners.length === 1 ? "s" : ""} with ${most} ${most === 1 ? "die" : "dice"} left. Make it a send-off.`;
         return { state: next, facts: publicFact("game-over", text, DICE_DECISIONS.rounds), nextPhaseId: "end" };
@@ -430,7 +457,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
         };
         const after: DiceState = { ...state, diceLeft, challenges: state.challenges + 1 };
         const starterId: string | null = left > 0 ? loserId : nextWithDice(seatsOf(after), diceLeft, loserId);
-        const next: DiceState = { ...after, phase: "reveal", reveal, starterId, bidderId: null, draft: null };
+        const next: DiceState = { ...after, phase: "reveal", reveal, starterId, bidderId: null, draft: null, page: 0 };
         const cups: string = hands.map((hand: Hand) => `${hand.name} ${hand.dice.join(" ")}`).join("; ");
         const wild: string = decisions.wildOnes === true && standing.face !== 1 ? ", counting ones as wild" : "";
         const verdict: string = held === true
@@ -508,14 +535,21 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
             return { raise: [], challenge: [] };
         }
         if (state.draft !== null) {
-            const faces: ControlOption[] = faceChoices(state.draft, state.bid).map((face: number): ControlOption => ({ id: `${FACE_PREFIX}${face}`, label: faceWord(face, true) }));
+            const faces: ControlOption[] = faceChoices(state.draft, state.bid).map((face: number): ControlOption => {
+                return { id: `${FACE_PREFIX}${face}`, label: capital(faceWord(face, true)) };
+            });
             return { raise: [...faces, { id: BACK_ACTION, label: "Back" }], challenge: [] };
         }
-        const quantities: ControlOption[] = quantityChoices(state.bid, totalDice(state)).map((quantity: number): ControlOption => {
+        const total: number = totalDice(state);
+        const quantities: ControlOption[] = quantityChoices(state.bid, total, state.page).map((quantity: number): ControlOption => {
             return { id: `${QUANTITY_PREFIX}${quantity}`, label: String(quantity) };
         });
+        const paging: ControlOption[] = [
+            ...(hasHigherPage(state.bid, total, state.page) === true ? [{ id: HIGHER_ACTION, label: "More" }] : []),
+            ...(state.page > 0 ? [{ id: LOWER_ACTION, label: "Fewer" }] : []),
+        ];
         const called: ControlOption[] = state.bid === null ? [] : [{ id: CHALLENGE_ACTION, label: `Challenge ${nameIn(state.players, state.bid.playerId)}` }];
-        return { raise: quantities, challenge: called };
+        return { raise: [...quantities, ...paging], challenge: called };
     };
 
     /**
@@ -560,6 +594,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
                 bid: null,
                 bids: [],
                 draft: null,
+                page: 0,
                 challengerId: null,
                 reveal: null,
                 winnerIds: [],
@@ -603,6 +638,9 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
             if (actionId === BACK_ACTION) {
                 return { state: { ...state, draft: null }, facts: [] };
             }
+            if (actionId === HIGHER_ACTION || actionId === LOWER_ACTION) {
+                return { state: { ...state, page: Math.max(0, state.page + (actionId === HIGHER_ACTION ? 1 : -1)) }, facts: [] };
+            }
             if (actionId.startsWith(QUANTITY_PREFIX) === true) {
                 return { state: { ...state, draft: Number(actionId.slice(QUANTITY_PREFIX.length)) }, facts: [] };
             }
@@ -640,8 +678,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
 
         publicScene(state: DiceState): Scene {
             const round: string = `Round ${state.challenges + (state.phase === "reveal" || state.phase === "end" ? 0 : 1)}`;
-            const diceRows: TallyRow[] = state.players.map((player: CartridgePlayer): TallyRow => ({ label: player.name, count: state.diceLeft[player.playerId] ?? 0 }));
-            const board = (title: string): SceneBlock => ({ type: "tally", title, rows: diceRows });
+            const left = (heading: string): SceneBlock => ({ type: "text", text: `${heading}: ${state.players.map((player: CartridgePlayer) => `${player.name} ${state.diceLeft[player.playerId] ?? 0}`).join(", ")}`, emphasis: "whisper" });
             if (state.phase === "looking") {
                 return {
                     mood: "night",
@@ -649,7 +686,7 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
                     blocks: [
                         { type: "title", text: "Look at your dice", kicker: round },
                         { type: "text", text: `${totalDice(state)} dice under the cups. Press and hold your phone to peek.`, emphasis: "large" },
-                        board("Dice left"),
+                        left("Dice left"),
                         { type: "timer", seconds: decisions.lookSeconds, label: "until bidding opens", running: true },
                     ],
                 };
@@ -660,13 +697,13 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
                 const blocks: SceneBlock[] = [
                     state.bid === null
                         ? { type: "title", text: "Opening bid", kicker: `${totalDice(state)} dice on the table, ${round.toLowerCase()}` }
-                        : { type: "title", text: sayBid(state.bid.quantity, state.bid.face), kicker: `${nameIn(state.players, state.bid.playerId)} bid, ${totalDice(state)} dice on the table` },
+                        : { type: "title", text: capital(sayBid(state.bid.quantity, state.bid.face)), kicker: `${nameIn(state.players, state.bid.playerId)} bid, ${totalDice(state)} dice on the table` },
                     { type: "text", text: state.bid === null ? `${bidder} opens the bidding.` : `${bidder}: raise it or challenge.`, emphasis: "large" },
                 ];
                 if (earlier !== "") {
                     blocks.push({ type: "text", text: `Before that: ${earlier}`, emphasis: "whisper" });
                 }
-                blocks.push(board("Dice left"), { type: "timer", seconds: decisions.bidSeconds, label: `for ${bidder}`, running: true });
+                blocks.push(left("Dice left"), { type: "timer", seconds: decisions.bidSeconds, label: `for ${bidder}`, running: true });
                 return { mood: "tense", transition: "cut", blocks };
             }
             if (state.phase === "lifting") {
@@ -677,25 +714,34 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
                     blocks: [
                         { type: "title", text: "Cups up", kicker: `${nameIn(state.players, state.challengerId)} challenged ${nameIn(state.players, standing?.playerId ?? null)}` },
                         { type: "text", text: standing === null ? "" : `The bid: ${sayBid(standing.quantity, standing.face)}.`, emphasis: "large" },
-                        board("Dice left"),
+                        left("Dice left"),
                     ],
                 };
             }
             if (state.phase === "reveal" && state.reveal !== null) {
                 const reveal: Reveal = state.reveal;
-                const blocks: SceneBlock[] = [
-                    { type: "title", text: reveal.held === true ? "The bid held" : "A bluff", kicker: `${reveal.bidderName} bid ${sayBid(reveal.bid.quantity, reveal.bid.face)}` },
-                    { type: "text", text: `${reveal.count} counted. ${reveal.loserName} ${reveal.left === 0 ? "is out" : `loses ${reveal.lost === 1 ? "a die" : `${numberWord(reveal.lost)} dice`}`}.`, emphasis: "large" },
-                    ...reveal.hands.map((hand: Hand): SceneBlock => ({ type: "text", text: `${hand.name}:  ${hand.dice.join("  ")}`, emphasis: "normal" })),
-                    board("Dice left"),
-                ];
-                return { mood: "dawn", transition: "slide", blocks };
+                const shown: string[] = reveal.hands.map((hand: Hand) => `${hand.name}: ${hand.dice.join(HAND_SEPARATOR)}`);
+                const perLine: number = shown.length <= HAND_LINES_UP_TO ? 1 : 2;
+                const rows: SceneBlock[] = [];
+                for (let index = 0; index < shown.length; index += perLine) {
+                    rows.push({ type: "text", text: shown.slice(index, index + perLine).join(HANDS_GAP), emphasis: "normal" });
+                }
+                return {
+                    mood: "dawn",
+                    transition: "slide",
+                    blocks: [
+                        { type: "title", text: reveal.held === true ? "The bid held" : "A bluff", kicker: `${reveal.bidderName} bid ${sayBid(reveal.bid.quantity, reveal.bid.face)}` },
+                        { type: "text", text: `${reveal.count} counted. ${reveal.loserName} ${reveal.left === 0 ? "is out" : `loses ${reveal.lost === 1 ? "a die" : `${numberWord(reveal.lost)} dice`}`}.`, emphasis: "large" },
+                        ...rows,
+                        left("Dice left"),
+                    ],
+                };
             }
             const winners: string = state.players.filter((player: CartridgePlayer) => state.winnerIds.includes(player.playerId)).map((player: CartridgePlayer) => player.name).join(" and ");
             return {
                 mood: "victory",
                 transition: "fade",
-                blocks: [{ type: "title", text: winners === "" ? "No winner" : `${winners} won`, kicker: box.name }, { type: "text", text: state.ending, emphasis: "large" }, board("Dice left")],
+                blocks: [{ type: "title", text: winners === "" ? "No winner" : `${winners} won`, kicker: box.name }, { type: "text", text: state.ending, emphasis: "large" }, left("Dice at the end")],
             };
         },
 
@@ -719,15 +765,17 @@ export function createDiceGame(givenBox: Box, givenDecisions: DiceDecisions, ran
                 return [{ type: "waiting", text: "That's the game." }];
             }
             const options: { raise: ControlOption[]; challenge: ControlOption[] } = bidOptions(state, playerId);
-            const standing: Control[] = state.bid === null ? [] : [{ type: "notice", text: standingSaid(state), tone: "info" }];
             if (options.raise.length === 0 && options.challenge.length === 0) {
+                const standing: Control[] = state.bid === null ? [] : [{ type: "notice", text: standingSaid(state), tone: "info" }];
                 return [...controls, ...standing, { type: "waiting", text: `Waiting for ${nameIn(state.players, state.bidderId)} to bid.` }];
             }
-            const prompt: string = state.draft === null
-                ? `${state.bid === null ? "Open" : "Raise"}: how many dice, across every cup, show the same number? ${totalDice(state)} on the table.`
-                : `${numberWord(state.draft)[0]?.toUpperCase() ?? ""}${numberWord(state.draft).slice(1)} of which number?`;
-            const raise: Control = { type: "buttons", prompt, options: options.raise };
-            return [...controls, ...standing, raise, ...(options.challenge.length === 0 ? [] : [{ type: "buttons", options: options.challenge } satisfies Control])];
+            const prompt: string = state.draft !== null
+                ? `${capital(numberWord(state.draft))} of which number?`
+                : state.bid === null
+                    ? `You open. How many dice show the same number, across every cup? ${totalDice(state)} on the table.`
+                    : `${standingSaid(state)} Raise to how many?`;
+            const challenge: Control[] = options.challenge.length === 0 ? [] : [{ type: "buttons", options: options.challenge }];
+            return [...controls, ...challenge, { type: "buttons", prompt, options: options.raise }];
         },
 
         hostFacts(state: DiceState, scope: Scope): ScopedFact[] {

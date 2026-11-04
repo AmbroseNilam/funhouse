@@ -16,7 +16,7 @@ import { UNDER_THE_CUP_BLUEPRINT } from "../games/under-the-cup.ts";
 import type { KitGame } from "../kit/kit.ts";
 import { dicePersonas, diceSecrecyCheck } from "../personas.ts";
 import { PAPER_PLAYERS, rehearseMany, stringsIn, type RoleCheck } from "../rehearse.ts";
-import { BACK_ACTION, CHALLENGE_ACTION, createDiceGame, FACE_PREFIX, QUANTITY_PREFIX, type DiceDecisions, type DiceState } from "./tap-dice.ts";
+import { BACK_ACTION, CHALLENGE_ACTION, createDiceGame, FACE_PREFIX, HIGHER_ACTION, LOWER_ACTION, QUANTITY_PREFIX, type DiceDecisions, type DiceState } from "./tap-dice.ts";
 
 /** Four at the table. */
 const FOUR: CartridgePlayer[] = PAPER_PLAYERS.slice(0, 4);
@@ -69,14 +69,16 @@ function play(game: KitGame<DiceState>, state: DiceState, moves: readonly [strin
 }
 
 /**
- * Makes a bid for a player.
+ * Makes a bid for a player, paging the quantity list up as far as the quantity needs.
  * @param playerId who.
  * @param quantity how many.
  * @param face which face.
- * @returns the two actions.
+ * @param lowest the lowest quantity the first page offers, 1 for an opening bid.
+ * @returns the actions.
  */
-function bid(playerId: string, quantity: number, face: number): [string, string][] {
-    return [[playerId, `${QUANTITY_PREFIX}${quantity}`], [playerId, `${FACE_PREFIX}${face}`]];
+function bid(playerId: string, quantity: number, face: number, lowest: number = 1): [string, string][] {
+    const paging: [string, string][] = Array.from({ length: Math.floor((quantity - lowest) / 5) }, (): [string, string] => [playerId, HIGHER_ACTION]);
+    return [...paging, [playerId, `${QUANTITY_PREFIX}${quantity}`], [playerId, `${FACE_PREFIX}${face}`]];
 }
 
 /**
@@ -125,13 +127,13 @@ function outOf(game: KitGame<DiceState>, state: DiceState): string[] {
 }
 
 /**
- * Makes the biggest bid the buttons offer: every die on the table showing sixes, or eight of them.
- * @param state the state while bidding.
+ * Makes the biggest bid the first page of buttons offers: five dice showing sixes, or every die if fewer.
+ * @param state the state while bidding, with nothing standing.
  * @returns the two actions.
  */
 function biggest(state: DiceState): [string, string][] {
     const total: number = Object.values(state.diceLeft).reduce((sum: number, count: number) => sum + count, 0);
-    return bid(state.bidderId ?? "", Math.min(total, 8), 6);
+    return bid(state.bidderId ?? "", Math.min(total, 5), 6);
 }
 
 /**
@@ -171,10 +173,11 @@ describe("under the cup", () => {
         assert.equal(game.cartridge.apply(state, "paper2", `${QUANTITY_PREFIX}2`).state, state, "not your turn");
         assert.deepEqual(game.cartridge.legalActions(state, "paper2"), []);
         const openers: string[] = game.cartridge.legalActions(state, "paper1").map((action: LegalAction) => action.actionId);
-        assert.deepEqual(openers, ["qty:1", "qty:2", "qty:3", "qty:4", "qty:5", "qty:6", "qty:7", "qty:8"], "no challenge before a bid");
+        assert.deepEqual(openers, ["qty:1", "qty:2", "qty:3", "qty:4", "qty:5", HIGHER_ACTION], "no challenge before a bid");
         const chosen: DiceState = game.cartridge.apply(state, "paper1", "qty:3").state;
         assert.equal(chosen.draft, 3);
         assert.deepEqual(game.cartridge.legalActions(chosen, "paper1").map((action: LegalAction) => action.actionId), ["face:1", "face:2", "face:3", "face:4", "face:5", "face:6", BACK_ACTION]);
+        assert.deepEqual(game.cartridge.privateControls(chosen, "paper1").filter((control: Control) => control.type === "buttons").map((control: Control) => (control.type === "buttons" ? control.prompt : "")), ["Three of which number?"]);
         assert.equal(game.cartridge.apply(chosen, "paper1", BACK_ACTION).state.draft, null);
         const placed: Step<DiceState> = game.cartridge.apply(chosen, "paper1", "face:4");
         assert.deepEqual(placed.state.bid, { playerId: "paper1", quantity: 3, face: 4 });
@@ -187,6 +190,22 @@ describe("under the cup", () => {
         const again: DiceState = game.cartridge.apply(placed.state, "paper2", "qty:3").state;
         assert.deepEqual(game.cartridge.legalActions(again, "paper2").map((action: LegalAction) => action.actionId).slice(0, 2), ["face:5", "face:6"]);
         assert.equal(game.cartridge.apply(again, "paper2", "face:4").state, again, "the same bid is refused");
+    });
+
+    it("pages through quantities so any bid is reachable, and takes a page back when asked", () => {
+        const { game, state } = start();
+        const higher: DiceState = game.cartridge.apply(state, "paper1", HIGHER_ACTION).state;
+        assert.equal(higher.page, 1);
+        const ids = (current: DiceState): string[] => game.cartridge.legalActions(current, "paper1").map((action: LegalAction) => action.actionId);
+        assert.deepEqual(ids(higher), ["qty:6", "qty:7", "qty:8", "qty:9", "qty:10", HIGHER_ACTION, LOWER_ACTION]);
+        const top: DiceState = game.cartridge.apply(higher, "paper1", HIGHER_ACTION).state;
+        assert.deepEqual(ids(top), ["qty:11", "qty:12", LOWER_ACTION]);
+        assert.equal(game.cartridge.apply(top, "paper1", HIGHER_ACTION).state, top, "there is no page past the last die");
+        assert.equal(game.cartridge.apply(state, "paper1", LOWER_ACTION).state, state, "nothing before the first page");
+        const placed: Step<DiceState> = play(game, top, [["paper1", "qty:11"], ["paper1", "face:6"]]);
+        assert.equal(placed.state.bid?.quantity, 11);
+        assert.equal(placed.state.page, 0, "the next bidder starts on the first page");
+        assert.equal(game.cartridge.apply(state, "paper2", HIGHER_ACTION).state, state, "only the bidder pages");
     });
 
     it("keeps the draft off the TV and every other phone", () => {
@@ -399,11 +418,25 @@ describe("under the cup", () => {
         const { game, state } = start();
         const bidding: DiceState = play(game, state, bid("paper1", 5, 4)).state;
         const down: string = stringsIn(game.cartridge.publicScene(game.cartridge.apply(bidding, "paper2", CHALLENGE_ACTION).state)).join("\n");
-        assert.equal(/Teacup:\s+1\s+1\s+4/.test(down), false);
+        assert.equal(/Teacup: 1/.test(down), false);
         const up: Scene = game.cartridge.publicScene(callIt(game, bidding).state);
         const lines: string[] = up.blocks.flatMap((block: SceneBlock) => (block.type === "text" ? [block.text] : []));
-        assert.ok(lines.includes("Teacup:  1  1  4"));
-        assert.ok(lines.includes("Spoon:  4  4  6"));
+        assert.ok(lines.includes("Teacup: 1 · 1 · 4"), "a hand to a line at a small table");
+        assert.ok(lines.includes("Saucer: 3 · 6 · 6"));
+        assert.ok(lines.includes("Dice left: Teacup 3, Spoon 1, Candle 3, Saucer 3"), "the exact bid cost the challenger two");
+    });
+
+    it("puts two hands on a line at a big table so the list stays above the lantern", () => {
+        const eight: CartridgePlayer[] = [...PAPER_PLAYERS, { playerId: "paper6", name: "Kettle" }, { playerId: "paper7", name: "Biscuit" }, { playerId: "paper8", name: "Tray" }];
+        const faces: number[] = Array.from({ length: 24 }, (_unused: unknown, index: number) => (index % 6) + 1);
+        const game: KitGame<DiceState> = createDiceGame(UNDER_THE_CUP_BLUEPRINT.box, DECISIONS, rolling(faces));
+        const looking: DiceState = game.cartridge.init(eight, {}).state;
+        const bidding: DiceState = fire(game, looking, `look${looking.serial}`).state;
+        const opened: DiceState = play(game, bidding, bid("paper1", 3, 6)).state;
+        const result: Step<DiceState> = callIt(game, opened);
+        const lines: string[] = game.cartridge.publicScene(result.state).blocks.flatMap((block: SceneBlock) => (block.type === "text" ? [block.text] : []));
+        assert.equal(lines.filter((line: string) => line.includes("  |  ")).length, 4, "eight hands make four lines");
+        assert.equal(game.cartridge.publicScene(result.state).blocks.length, 7, "a title, the verdict, four lines of hands and the dice left");
     });
 
     it("passes the default check at three, four and five players, and the cups stay closed", () => {

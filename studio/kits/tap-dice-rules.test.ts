@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-    beats, boldness, chanceAtLeast, chancePerDie, clockOpening, countFace, faceChoices, lowestRaiseQuantity, nextWithDice, quantityChoices, rollDice, sayBid, type Bid,
+    beats, boldness, chanceAtLeast, chancePerDie, clockOpening, countFace, faceChoices, hasHigherPage, lowestRaiseQuantity, nextWithDice, quantityChoices, rollDice, sayBid,
+    type Bid,
 } from "./tap-dice-rules.ts";
 
 /** A standing bid of three fours. */
@@ -28,7 +29,12 @@ describe("under the cup rules", () => {
         assert.equal(lowestRaiseQuantity(null), 1);
         assert.equal(lowestRaiseQuantity(THREE_FOURS), 3);
         assert.equal(lowestRaiseQuantity({ ...THREE_FOURS, face: 6 }), 4);
-        assert.deepEqual(quantityChoices(THREE_FOURS, 12), [3, 4, 5, 6, 7, 8, 9, 10]);
+        assert.deepEqual(quantityChoices(THREE_FOURS, 12), [3, 4, 5, 6, 7]);
+        assert.deepEqual(quantityChoices(THREE_FOURS, 12, 1), [8, 9, 10, 11, 12]);
+        assert.deepEqual(quantityChoices(THREE_FOURS, 12, 2), []);
+        assert.equal(hasHigherPage(THREE_FOURS, 12, 0), true);
+        assert.equal(hasHigherPage(THREE_FOURS, 12, 1), false);
+        assert.equal(hasHigherPage(THREE_FOURS, 7, 0), false);
         assert.deepEqual(quantityChoices(THREE_FOURS, 5), [3, 4, 5]);
         assert.deepEqual(quantityChoices({ ...THREE_FOURS, quantity: 5, face: 6 }, 5), [], "nothing left to raise to");
         assert.deepEqual(faceChoices(3, THREE_FOURS), [5, 6]);
