@@ -24,7 +24,7 @@ export function listeningAllowsTalk(mode: ListeningMode): boolean {
  * answer only gets that far once the content filter has passed it. Give each question its own id.
  */
 export type Control =
-    | { type: "roleCard"; title: string; body: string; secret: boolean; startHidden?: boolean }
+    | { type: "roleCard"; title: string; body: string; secret: boolean; startHidden?: boolean; lines?: string[]; numbered?: boolean }
     | { type: "buttons"; prompt?: string; options: ControlOption[] }
     | { type: "choice"; prompt: string; options: ControlOption[]; multiple: boolean }
     | { type: "textInput"; id: string; prompt: string; placeholder?: string; maxLength: number; note?: string }
@@ -36,8 +36,15 @@ export type Control =
 /** A selectable option; the id is what the phone sends back. */
 export interface ControlOption {
     id: string;
+    /** What it says. A toggle's label reads "Name: state", and the phone shows the state as a chip. */
     label: string;
     disabled?: boolean;
+    /** How it looks: the one big action, an on-or-off switch, or a quiet way out. Left out, a plain row. */
+    style?: "primary" | "toggle" | "quiet";
+    /** For a toggle, whether it's on. */
+    on?: boolean;
+    /** True for the option this player has already chosen. */
+    selected?: boolean;
 }
 
 /** Everything one phone needs to render itself. */

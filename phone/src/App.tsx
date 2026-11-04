@@ -5,7 +5,7 @@
 
 import type { PhoneTurn } from "../../shared/turn.ts";
 import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties, type FormEvent, type ReactElement } from "react";
-import { listeningAllowsTalk, type Control, type PhoneView } from "../../shared/controls.ts";
+import { listeningAllowsTalk, type Control, type ControlOption, type PhoneView } from "../../shared/controls.ts";
 import { FOREGROUND_ANSWER_LIMIT_MILLISECONDS, parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
@@ -422,7 +422,7 @@ function RoleCard(props: { title: string; lines: string[]; startHidden: boolean 
     const [hidden, setHidden] = useState<boolean>(props.startHidden);
     useEffect(() => { setHidden(props.startHidden); }, [props.startHidden]);
     if (hidden === true) {
-        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>Your role. Tap to see</button>;
+        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>{props.lines.length > 1 ? "Your role and notes. Tap to see" : "Your role. Tap to see"}</button>;
     }
     return (
         <button className="paper role-face" onClick={() => { setHidden(true); }}>
@@ -484,6 +484,43 @@ function SliderCard(props: { control: Extract<Control, { type: "slider" }>; send
 }
 
 /**
+ * Something to read on a phone: a heading, a sentence and any list, not something to press.
+ * @param props the control.
+ * @returns the element.
+ */
+function InfoCard(props: { control: Extract<Control, { type: "roleCard" }> }): ReactElement {
+    const { control } = props;
+    const lines: string[] = control.lines ?? [];
+    const listed: ReactElement[] = lines.map((line: string) => <li key={line}>{line}</li>);
+    return (
+        <section className="paper info-card">
+            <h2>{control.title}</h2>
+            {lines.length === 0 ? null : control.numbered === true ? <ol className="start-lines">{listed}</ol> : <ul className="card-lines">{listed}</ul>}
+            {control.body !== "" ? <p>{control.body}</p> : null}
+        </section>
+    );
+}
+
+/**
+ * One row of a choice, or a switch when it's on or off.
+ * @param props the option and what to do when it's chosen.
+ * @returns the element.
+ */
+function OptionButton(props: { option: ControlOption; choose: (option: ControlOption) => void }): ReactElement {
+    const { option, choose } = props;
+    if (option.style === "toggle") {
+        const [name = "", state = ""] = option.label.split(": ");
+        return (
+            <button className="toggle" role="switch" aria-checked={option.on === true} disabled={option.disabled === true} onClick={() => { choose(option); }}>
+                <span>{name}</span>
+                <span className="setting-state">{state}</span>
+            </button>
+        );
+    }
+    return <button className={option.selected === true ? "selected" : ""} aria-pressed={option.selected === true} disabled={option.disabled === true} onClick={() => { choose(option); }}>{option.label}</button>;
+}
+
+/**
  * Renders one private control as a paper card. Waiting lines go on the surface instead.
  * @param control the control.
  * @param index its index, sent back with input.
@@ -497,13 +534,21 @@ function renderControl(control: Control, index: number, send: (message: PhoneMes
     if (control.type === "roleCard") {
         return control.secret === true
             ? null
-            : <section key={index} className="paper"><h2>{control.title}</h2><p>{control.body}</p></section>;
+            : <InfoCard key={index} control={control} />;
     }
     if (control.type === "buttons" || control.type === "choice") {
+        const choose = (option: ControlOption): void => { send({ type: "input", input: { value: option.id, controlIndex: index } }); };
+        if (control.options.length > 0 && control.options.every((option: ControlOption) => option.style === "primary" || option.style === "quiet")) {
+            return (
+                <div key={index} className="actions">
+                    {control.options.map((option: ControlOption) => <button key={option.id} className={option.style === "primary" ? "primary" : "quiet-action"} disabled={option.disabled === true} onClick={() => { choose(option); }}>{option.label}</button>)}
+                </div>
+            );
+        }
         return (
             <section key={index} className="paper choices">
                 {control.prompt !== undefined ? <p className="prompt">{control.prompt}</p> : null}
-                {control.options.map((option) => <button key={option.id} disabled={option.disabled === true} onClick={() => { send({ type: "input", input: { value: option.id, controlIndex: index } }); }}>{option.label}</button>)}
+                {control.options.map((option: ControlOption) => <OptionButton key={option.id} option={option} choose={choose} />)}
             </section>
         );
     }
@@ -1248,15 +1293,21 @@ export function App(): ReactElement {
             : <SecretCard key="secret" title={secretTitle} lines={secretLines} />;
     const privateControls: (ReactElement | null)[] = [secretCard, ...controls.map((control, index) => renderControl(control, index, send))];
     const hasPrivate: boolean = privateControls.some((control) => control !== null) && pad?.pausedBy === "";
-    const quietUnderCards: boolean = hasPrivate === true && waiting === "" && canTalk === false;
+    const quietUnderCards: boolean = hasPrivate === true && waiting === "" && pad?.axis === null;
+    // A hidden role alone is a strip, not a card, so the screen is free for one big line.
+    const onlyHiddenRole: boolean = roleStartsHidden === true && controls.every((control: Control) => control.type === "waiting" || (control.type === "roleCard" && control.secret === true) || (control.type === "notice" && control.tone === "secret"));
+    const cardLayout: boolean = hasPrivate === true && pad?.axis === null && onlyHiddenRole === false;
     const line: { big: string; small: string } = pad === null || quietUnderCards === true ? { big: "", small: "" } : surfaceLine(pad, learned, waiting, canTalk, state.mic !== "ok", view?.tapToTalk === true && settings.talkButton === true);
+    // A card over the controller, as at the end of a game: the first thumb lesson says what the thumb is for.
+    const cardOverPad: boolean = hasPrivate === true && pad !== null && pad.axis !== null;
+    const shownLine: { big: string; small: string } = cardOverPad === true && line.big === "Slide your thumb" ? { big: "Slide to choose on the TV", small: "Tap to pick" } : line;
     const problem: string = state.connected === false ? "Connecting…" : state.mic !== "ok" && canTalk === true && hasPrivate === false ? "Your mic is off" : "";
     const status: string = problem !== "" ? problem : view?.status === line.big || hasPrivate === true || (pad !== null && pad.pausedBy !== "") ? "" : view?.status ?? "";
     const turn: PhoneTurn | null = view?.turn ?? null;
     const seatStyle = { "--seat": pad?.colour ?? "#5a4a3a" } as CSSProperties;
     const atRest: boolean = pad !== null && canTalk === false && (pad.axis === null || pad.canDrive === false) && pad.canSelect === false;
     return (
-        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""} ${hasPrivate === true ? "has-private" : ""}`} style={seatStyle}>
+        <main ref={padScreenRef} className={`pad-screen ${state.holding === true ? "talking" : ""} ${waveShown === true ? "dictating" : ""} ${state.connected === false ? "offline" : ""} ${atRest === true ? "at-rest" : ""} ${turn?.yours === true ? "my-turn" : ""} ${turn?.yours === false && turn.open === false ? "not-my-turn" : ""} ${cardLayout === true ? "has-private" : ""} ${onlyHiddenRole === true ? "only-role" : ""} ${cardOverPad === true ? "below-card" : ""} ${canTalk === true ? "can-talk" : ""} ${cardLayout === true && canTalk === false && waiting === "" && state.holding === false ? "no-strip" : ""}`} style={seatStyle}>
             <header className="corners">
                 {pad?.backLabel !== null && pad?.backLabel !== undefined
                     ? <button className="corner" onClick={() => { send({ type: "nav", action: { kind: "back" } }); }}>{pad.backLabel}</button>
@@ -1297,7 +1348,7 @@ export function App(): ReactElement {
                                 : <><strong>Listening</strong>{tapping === true ? <small>Tap Stop when you're done</small> : null}</>
                         : sent === true
                             ? <strong>Got it</strong>
-                            : <><strong>{line.big}</strong>{line.small !== "" ? <small>{line.small}</small> : null}</>}
+                            : <><strong>{shownLine.big}</strong>{shownLine.small !== "" ? <small>{shownLine.small}</small> : null}</>}
                 </div>
                 {status !== "" && state.holding === false ? <p className="status" role="status">{status}</p> : null}
             </div>

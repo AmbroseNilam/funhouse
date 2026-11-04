@@ -176,7 +176,7 @@ export class FakePhone {
      * The buttons this phone can press right now, from every control.
      * @returns one entry per enabled option.
      */
-    public options(): { id: string; label: string }[] {
+    public options(): { id: string; label: string; selected?: boolean }[] {
         const controls: Control[] = this.view?.controls ?? [];
         return controls.flatMap((control: Control) => (control.type === "buttons" || control.type === "choice" ? control.options : [])).filter((option) => option.disabled !== true);
     }

@@ -1,5 +1,5 @@
 // Plays Werewolf from a script through to a winner, with 4 or 6 fake phones: 6 by default, or pass the
-// number. Four lets the host decide; six also switches on the doctor and hunter by hand. Fails if a
+// number. Four takes the host's pick; six also switches on the doctor and hunter by hand. Fails if a
 // phone, the TV or the host ever shows a secret it shouldn't, or the game stalls.
 // Run the room with GAME_ROOM_TEXT_ONLY=1, then: node tools/scenarios/werewolf.ts [4|6]
 
@@ -31,11 +31,8 @@ if (count >= 6) {
     await waitFor(() => players[1]?.phone.options().some((option) => option.label === "Doctor: in") === true, "the doctor toggle");
     players[2]?.phone.press("setup:hunter");
     await waitFor(() => players[2]?.phone.options().some((option) => option.label === "Hunter: in") === true, "the hunter toggle");
-    players[0]?.phone.press("setup:go");
 }
-if (count < 6) {
-    players[0]?.phone.press("setup:host");
-}
+players[0]?.phone.press("setup:go");
 await waitFor(() => screen.title() === "How it works", "the rules");
 const isFinished = (): boolean => screen.title().endsWith("win") || screen.title().endsWith("wins");
 const isOut = (player: Player): boolean => screen.shell?.seats.some((entry) => entry.name === player.name && entry.out === true) === true;
@@ -82,7 +79,7 @@ while (isFinished() === false) {
                 player.phone.press("I've seen it");
             }
         }
-        if (title === "Night falls" && options.length > 0 && player.phone.view?.controls.some((control) => control.type === "notice" && control.text.startsWith("You chose")) !== true) {
+        if (title === "Night falls" && options.length > 0 && options.some((option) => option.selected === true) === false) {
             const pick = options.find((option) => option.label !== player.name && option.label !== "Yourself");
             player.phone.press(pick?.id ?? options[0]?.id ?? "");
         }

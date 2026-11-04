@@ -66,8 +66,18 @@
     .choices input { box-shadow: none; margin-top: 8px; border: 1px solid var(--paper-ink); }
     .paper p { white-space: pre-line; }
     .has-private .private { flex: 1 1 auto; max-height: none; min-height: 0; padding-bottom: 4px; }
-    .has-private .surface { flex: 0 0 84px; padding: 8px 270px calc(8px + env(safe-area-inset-bottom)) 16px; justify-content: flex-start; }
-    .has-private .line { text-align: left; gap: 2px; }
+    /* With cards up the surface is a short strip: one full-width line, with the talk row under it when talking is allowed. */
+    .has-private .surface { flex: 0 0 auto; min-height: 44px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); justify-content: flex-start; }
+    .has-private.can-talk .surface { min-height: 72px; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+    .pad-screen.no-strip .surface { display: none; }
+    .only-role .private { flex: none; padding: 8px 10px 0; }
+    .only-role .line strong { font-size: 32px; }
+    .below-card .surface { padding: 8px 16px calc(68px + env(safe-area-inset-bottom)); }
+    .below-card .line { gap: 2px; }
+    .below-card .line strong { font-size: 24px; }
+    .below-card .line small { font-size: 16px; }
+    .below-card .talk-row { bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .has-private .line { width: 100%; text-align: left; gap: 2px; }
     .has-private .line strong { font-size: 20px; line-height: 1.15; }
     .has-private .line small { font-size: 15px; }
     .pad-screen.has-private.dictating .surface { flex-basis: 170px; padding-right: 16px; padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
@@ -82,6 +92,20 @@
     .has-private .choices { gap: 6px; }
     .has-private .choices button { min-height: 44px; padding: 8px 12px; font-size: 18px; }
     .private > .choices:last-child:has(> button:only-of-type) { position: sticky; bottom: 0; }
+    .paper.info-card { padding: 14px; }
+    .paper.info-card h2 { font-size: 32px; margin-bottom: 8px; }
+    .paper.info-card p { font-size: 17px; margin-top: 8px; }
+    .has-private .paper.info-card h2 { font-size: 32px; margin-bottom: 8px; }
+    .has-private .paper.info-card p { font-size: 17px; margin-top: 8px; }
+    .card-lines { margin: 0; padding: 0; list-style: none; font-size: 24px; font-weight: 600; line-height: 1.25; }
+    .card-lines li + li { margin-top: 2px; }
+    .actions { flex: none; display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 8px; position: sticky; bottom: 0; }
+    .actions .primary { padding: 18px 16px; text-align: center; }
+    .quiet-action { min-height: 44px; font-size: 18px; color: var(--paper); text-decoration: underline; }
+    .choices button.selected { background: var(--lamp); color: #241a02; font-weight: 600; box-shadow: inset 0 0 0 2px #241a02; }
+    .choices button.toggle { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .toggle .setting-state { flex: none; min-width: 44px; padding: 3px 8px; text-align: center; font-size: 16px; font-weight: 600; text-transform: capitalize; background: var(--paper); color: var(--paper-ink); }
+    .toggle[aria-checked="true"] .setting-state { background: var(--lamp); color: #241a02; }
     .role-face, .role-strip { display: flex; flex-direction: column; width: 100%; text-align: left; flex: none; }
     .role-face { gap: 8px; padding: 18px; font-size: 21px; line-height: 1.25; }
     .role-face strong { font-size: 32px; font-weight: 600; line-height: 1.08; }

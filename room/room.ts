@@ -2990,7 +2990,7 @@ export class Room implements HostStage, AgentHost {
             return null;
         }
         if (turn?.kind === "anyone") {
-            return { yours: false, open: true, line: turn.label };
+            return { yours: false, open: true, line: turn.phoneLine ?? turn.label };
         }
         if (turn?.kind === "one") {
             return turn.playerId === player.playerId ? { yours: true, open: false, line: "Your turn" } : { yours: false, open: false, line: this.waitingLine(turn.playerId) };
@@ -2999,7 +2999,7 @@ export class Room implements HostStage, AgentHost {
             return null;
         }
         if (turn.doneIds.includes(player.playerId) === false) {
-            return { yours: true, open: false, line: "Your turn" };
+            return { yours: true, open: false, line: turn.phoneLine ?? "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
         return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: `Waiting for ${left.length} people` };
