@@ -10,7 +10,7 @@ export interface PhoneSettings {
     reactions: boolean;
     /** Buzzes on steps and turns, where the phone can. */
     vibration: boolean;
-    /** The Talk button, in rooms trying tap-to-talk; holding always works. */
+    /** True for the Talk button, false to press and hold instead; holding always works. */
     talkButton: boolean;
 }
 
