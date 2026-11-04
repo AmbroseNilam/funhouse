@@ -98,3 +98,16 @@ describe("the hat", () => {
         assert.equal(hatAfter(null, []), null);
     });
 });
+
+describe("cards that differ only by small words", () => {
+    it("stack together, and different answers stay apart", () => {
+        const stacked = (one: string, two: string): number => stackCards([{ playerId: "a", text: one }, { playerId: "b", text: two }]).length;
+        assert.equal(stacked("sleep", "sleep in"), 1);
+        assert.equal(stacked("Sleeping in", "sleep"), 1);
+        assert.equal(stacked("my keys", "the keys"), 1);
+        assert.equal(stacked("cat", "dog"), 2);
+        assert.equal(stacked("beach", "ocean"), 2);
+        assert.equal(stacked("hot dog", "dog"), 2);
+        assert.equal(stacked("in", "on"), 2);
+    });
+});
