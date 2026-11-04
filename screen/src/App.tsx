@@ -614,7 +614,7 @@ export function App(): ReactElement {
                         }
                     });
                 }}>
-                    <input name="code" aria-label="Judge code" type="password" autoComplete="off" placeholder="I have a judge code" />
+                    <input name="code" aria-label="Have a code?" type="password" autoComplete="off" placeholder="Have a code?" />
                     <button type="submit">Use code</button>
                 </form>
             </main>
