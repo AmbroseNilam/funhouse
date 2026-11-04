@@ -467,14 +467,14 @@ export function App(): ReactElement {
     const playing: boolean = shell?.screen === "play" || shell?.screen === "pause" || shell?.screen === "howTo" || shell?.screen === "confirmEnd";
     const stageMood: string = playing === true ? mood : "room";
     const look: number = shell?.screen === "home" ? (shell.focus - 1.5) / 2 : 0;
-    const backdrop: string | undefined = state.scene?.backdrop ?? game?.art;
+    const backdrop: string | undefined = state.scene?.backdrop ?? (game === undefined ? undefined : `art/posters/${game.id}.webp`);
     const joinHost: string = state.joinUrl === "" ? "" : new URL(state.joinUrl).host;
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
             <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
             {playing === true ? (
                 <section className="screen play-screen">
-                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
+                    {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" onError={(event) => { if (game !== undefined && event.currentTarget.getAttribute("src") !== game.art) { event.currentTarget.src = game.art; } }} style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}
                     <div className="play-column">
                         {state.turn !== null ? <p className="turn-label">{state.turn.label}</p> : null}
                         <div className="blocks">{state.scene?.blocks.map(renderBlock)}</div>
