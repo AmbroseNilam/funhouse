@@ -26,7 +26,7 @@ const MAX_ROOMS_PER_ADDRESS: number = 4;
 const MAX_SOCKETS_PER_ADDRESS: number = 24;
 
 /** Most open connections on the whole server. */
-const MAX_SOCKETS: number = 500;
+const MAX_SOCKETS: number = Number(process.env.SOCKET_LIMIT ?? "") || 500;
 
 /** Wrong room codes an address may try in a minute before it has to wait. */
 const MAX_CODE_MISSES_PER_MINUTE: number = 10;

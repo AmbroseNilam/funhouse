@@ -620,6 +620,14 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
+     * True when nobody has ever sat down here, so a visitor who looked and left doesn't hold a room for long.
+     * @returns whether no seat was ever taken.
+     */
+    public neverSeated(): boolean {
+        return this.nextPlayerNumber === 1;
+    }
+
+    /**
      * True when a person holds a seat, connected or not. An AI guest doesn't count.
      * @returns whether the room has players.
      */

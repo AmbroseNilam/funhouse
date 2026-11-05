@@ -41,4 +41,12 @@ describe("room directory shelves", () => {
         everyday.close();
         testing.close();
     });
+
+    it("knows a room nobody ever sat in from one someone has", () => {
+        const directory: InstanceType<typeof RoomDirectory> = new RoomDirectory("http://localhost:8740", showcaseShelf(GAMES));
+        const room = directory.create();
+        assert.ok(room !== null);
+        assert.equal(room.neverSeated(), true);
+        room.close();
+    });
 });
