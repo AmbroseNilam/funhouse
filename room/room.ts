@@ -358,6 +358,12 @@ const FINAL_WAIT_MILLISECONDS: number = 6000;
 /** How long a hint stays on the phone. */
 const HINT_MILLISECONDS: number = 3000;
 
+/** What a phone says while the host rules on what its player said or typed. */
+const CHECKING_HINT: string = "Checking…";
+
+/** How long that lasts if the host doesn't rule, because it wasn't an answer after all. */
+const CHECKING_MILLISECONDS: number = 8000;
+
 /** What a phone shows when a press produced no words. */
 const NOT_HEARD_HINT: string = "Didn't catch that. Try again?";
 
@@ -980,7 +986,7 @@ export class Room implements HostStage, AgentHost {
         }
         this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: speakerId });
         const speaker: Player | undefined = speakerId === null ? undefined : this.players.get(speakerId);
-        if (speaker?.hint === "Checking…") {
+        if (speaker?.hint === CHECKING_HINT) {
             this.setHint(speaker, "");
         }
     }
@@ -2764,8 +2770,9 @@ export class Room implements HostStage, AgentHost {
      * Shows a short message on a player's phone for a moment. An empty message clears it.
      * @param player the player.
      * @param hint the message.
+     * @param lasting how long it stays up.
      */
-    private setHint(player: Player, hint: string): void {
+    private setHint(player: Player, hint: string, lasting: number = HINT_MILLISECONDS): void {
         if (player.hintTimer !== null) {
             clearTimeout(player.hintTimer);
             player.hintTimer = null;
@@ -2778,7 +2785,7 @@ export class Room implements HostStage, AgentHost {
         if (hint === "") {
             return;
         }
-        player.hintTimer = setTimeout(() => { this.setHint(player, ""); }, HINT_MILLISECONDS);
+        player.hintTimer = setTimeout(() => { this.setHint(player, ""); }, lasting);
     }
 
     /**
@@ -3008,7 +3015,7 @@ export class Room implements HostStage, AgentHost {
         this.game?.event(event);
         const turn: Turn | null = this.game?.turn() ?? null;
         if (this.game?.allowsRuling("right") === true && turn?.kind === "everyone" && turn.doneIds.includes(player.playerId) === false) {
-            this.setHint(player, "Checking…");
+            this.setHint(player, CHECKING_HINT, CHECKING_MILLISECONDS);
         }
         this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
     }
@@ -3440,7 +3447,7 @@ export class Room implements HostStage, AgentHost {
             return null;
         }
         if (turn.doneIds.includes(player.playerId) === false) {
-            return { yours: true, open: false, line: turn.phoneLine ?? "Your turn" };
+            return { yours: true, open: false, line: player.hint === CHECKING_HINT ? CHECKING_HINT : turn.phoneLine ?? "Your turn" };
         }
         const left: string[] = turn.playerIds.filter((playerId: string) => turn.doneIds.includes(playerId) === false);
         return left.length === 1 ? { yours: false, open: false, line: this.waitingLine(left[0] ?? "") } : { yours: false, open: false, line: left.length > WAITING_NAMES ? `Waiting for ${left.length} people` : `Waiting for ${left.map((playerId: string) => this.players.get(playerId)?.name ?? "someone").join(", ")}` };

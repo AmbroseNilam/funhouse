@@ -127,6 +127,10 @@ async function playRound(screen: FakeScreen, seats: Seat[], round: number, scrip
             await writeCard(seat, card);
         }
     }
+    // With no timer, someone who stays quiet waits on the holder's Reveal now.
+    if (script.cards.includes(null) === true) {
+        seats.find((seat: Seat) => seat.phone.options().some((option) => option.label === "Reveal now"))?.phone.press("Reveal now");
+    }
     await waitFor(() => revealShowing(screen), `the reveal of prompt ${round}`);
     const lines: number = screen.hostLines.length;
     const cells: BoardCell[] = boardOf(screen);

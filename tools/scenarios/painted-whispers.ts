@@ -157,7 +157,8 @@ for (let step = 0; step < LINES.length; step += 1) {
         console.warn("Both hostile lines were refused.");
     }
     writer.phone.answer(`link:${step}`, LINES[step] as string);
-    await waitFor(() => screen.title() === "Painting" || screen.shell?.gameOver === true, "the painting to start");
+    // A room with no pictures goes straight to the next link, so there may be no painting screen at all.
+    await waitFor(() => screen.title() === "Painting" || screen.shell?.gameOver === true || EXPECT_PICTURES === false, "the painting to start");
     checkNoLeak(0, EXPECT_PICTURES === false);
     if (step < LINES.length - 1) {
         await waitFor(() => seats.some((seat: Seat) => boxOf(seat.phone.view)?.id === `link:${step + 1}`), `link ${step + 2} to open`);
