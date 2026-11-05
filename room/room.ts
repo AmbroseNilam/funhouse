@@ -1767,12 +1767,13 @@ export class Room implements HostStage, AgentHost {
      * @param player who.
      */
     private announceJoin(player: Player): void {
+        const line: string = this.isWatching(player) === true ? `(${player.name} joined the room and is only watching until the next game)` : `(${player.name} joined the room)`;
         if (Date.now() - this.lastJoinNoticeAt >= JOIN_NOTICE_GAP_MILLISECONDS) {
             this.lastJoinNoticeAt = Date.now();
-            this.host.notice(`(${player.name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+            this.host.notice(line, WAKE_DELAY_MILLISECONDS.join);
             return;
         }
-        this.host.remark(`(${player.name} joined the room)`);
+        this.host.remark(line);
     }
 
     /**

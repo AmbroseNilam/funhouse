@@ -60,6 +60,7 @@ interface RoomInside {
     game: { event(event: { type: string; playerId?: string }): void; input(playerId: string, value: string): void };
     host: { pending: string[] };
     players: Map<string, unknown>;
+    lastJoinNoticeAt: number;
     passToGame(player: unknown, said: string): void;
 }
 
@@ -119,6 +120,14 @@ describe("sitting down during a game", () => {
             assert.equal(view.pad.canSelect, false);
         });
     }
+
+    it("tells the host a late joiner is only watching, so it doesn't deal them in", () => {
+        startGame("twentyDoors");
+        inside.host.pending.length = 0;
+        inside.lastJoinNoticeAt = 0;
+        sit("Lou");
+        assert.match(inside.host.pending.at(-1) ?? "", /Lou joined the room and is only watching/);
+    });
 
     it("doesn't let a late joiner's press reach the game", () => {
         startGame("quizmaster");
