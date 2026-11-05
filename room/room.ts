@@ -376,6 +376,9 @@ const GAME_REJOIN_GRACE_MILLISECONDS: number = 180000;
 /** How long every seat must be gone before the game waits, so one person's reload isn't a pause. */
 const STEP_OUT_AFTER_MILLISECONDS: number = 10000;
 
+/** What the host says when the day's budget runs out mid-game: the reason for the quiet, and what's left to do. */
+const OUT_OF_WORDS_LINE: string = "That's all the talking I've got in me today. Pause to end the game, and come back tomorrow.";
+
 /** How long after the host's voice ends the TV may still be heard: its last word, and what the phone kept from just before a press. */
 const HOST_AUDIO_GUARD_MILLISECONDS: number = 300;
 
@@ -472,6 +475,8 @@ export class Room implements HostStage, AgentHost {
     private paused: boolean = false;
     /** Paused from the phone menu; only someone at the menu undoes this. */
     private menuPaused: boolean = false;
+    /** The day's model budget ran out and the room has been told, so it says so only once. */
+    private toldOutOfWords: boolean = false;
     /** Every seat in the running game has dropped, and the game waits for them. */
     private steppedOut: boolean = false;
     private stepOutTimer: NodeJS.Timeout | null = null;
@@ -1031,12 +1036,23 @@ export class Room implements HostStage, AgentHost {
         this.broadcastHostState();
     }
 
+    /** Tells the table once why the host has gone quiet, in words that cost nothing to write. */
+    public outOfWords(): void {
+        if (this.toldOutOfWords === true) {
+            return;
+        }
+        this.say(OUT_OF_WORDS_LINE, this.host.persona.style);
+        this.toldOutOfWords = true;
+        this.refreshPhones();
+    }
+
     /**
      * Queues one host sentence for the voice and adds it to the caption.
      * @param text the sentence.
      * @param style delivery direction.
      */
     public say(text: string, style: string): void {
+        this.toldOutOfWords = false;
         this.lastSpoken = { text, style };
         if (this.replyClockAt !== 0) {
             log(this.scope(), `reply ready ${Date.now() - this.replyClockAt} ms after release`);
@@ -1797,12 +1813,13 @@ export class Room implements HostStage, AgentHost {
      * @param player who.
      */
     private announceJoin(player: Player): void {
+        const line: string = this.isWatching(player) === true ? `(${player.name} joined the room and is only watching until the next game)` : `(${player.name} joined the room)`;
         if (Date.now() - this.lastJoinNoticeAt >= JOIN_NOTICE_GAP_MILLISECONDS) {
             this.lastJoinNoticeAt = Date.now();
-            this.host.notice(`(${player.name} joined the room)`, WAKE_DELAY_MILLISECONDS.join);
+            this.host.notice(line, WAKE_DELAY_MILLISECONDS.join);
             return;
         }
-        this.host.remark(`(${player.name} joined the room)`);
+        this.host.remark(line);
     }
 
     /**
@@ -1900,6 +1917,9 @@ export class Room implements HostStage, AgentHost {
      * @param controlIndex which control.
      */
     private onControl(player: Player, value: string, controlIndex: number): void {
+        if (this.isWatching(player) === true) {
+            return;
+        }
         this.record({ type: "controlUsed", at: Date.now(), playerId: player.playerId, value, controlIndex });
         const holdersCall: boolean = value === REVEAL_NOW || this.game?.controls(player.playerId).some((control: Control) => control.type === "buttons" && control.options.some((option) => option.id === value && option.holderOnly === true)) === true;
         if (this.paused === true || (holdersCall === true && this.shell.holdsControl(player.playerId) === false)) {
@@ -1917,6 +1937,9 @@ export class Room implements HostStage, AgentHost {
      * @param value what they entered.
      */
     private onAnswer(player: Player, controlId: string, value: string | number): void {
+        if (this.isWatching(player) === true) {
+            return;
+        }
         const key: string = `${player.playerId}|${controlId}`;
         const control: Control | undefined = this.answerControl(player, controlId);
         if (this.paused === true || control === undefined || this.answered.has(key) === true || this.checking.has(key) === true) {
@@ -3010,6 +3033,10 @@ export class Room implements HostStage, AgentHost {
      * @param said their words.
      */
     private passToGame(player: Player, said: string): void {
+        if (this.isWatching(player) === true) {
+            this.host.notice(`${player.name}, who is only watching this game: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
+            return;
+        }
         const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
         this.record(event);
         this.game?.event(event);
@@ -3420,11 +3447,23 @@ export class Room implements HostStage, AgentHost {
         if (player.hint !== "") {
             status = player.hint;
         }
+        if (this.toldOutOfWords === true && player.hint === "") {
+            status = `${hostName} is out of words for today`;
+        }
         player.listening = this.game?.listening(player.playerId) ?? "holdToTalk";
         if (this.canTalk(player) === false) {
             status = this.paused === true ? "Paused" : "Phones are quiet for now";
         }
         return { gameOn: this.game !== null, hostVoice: { choice: this.hostVoiceChoice, canChange: player.guest === null && this.shell.isDriving(player.playerId) === true }, playerName: player.name, listening: this.canTalk(player) === true ? player.listening : "muted", status, controls: this.phoneControls(player), pad: this.padFor(player), hearing: player.holdingToTalk === true ? player.partial : "", tapToTalk: this.tapToTalk, talkWaiting: this.hostAudible(), turn: this.phoneTurn(player), guests: this.guestTable(player) };
+    }
+
+    /**
+     * Whether this person sat down after the running game began, so nothing in it is theirs.
+     * @param player the player.
+     * @returns true while they're only watching.
+     */
+    private isWatching(player: Player): boolean {
+        return this.game !== null && this.gamePlayerIds.has(player.playerId) === false;
     }
 
     /**
@@ -3434,7 +3473,7 @@ export class Room implements HostStage, AgentHost {
      */
     private phoneTurn(player: Player): PhoneTurn | null {
         const turn: Turn | null = this.game?.turn() ?? null;
-        if (this.game?.outIds().includes(player.playerId) === true) {
+        if (this.game?.outIds().includes(player.playerId) === true || this.isWatching(player) === true) {
             return null;
         }
         if (turn?.kind === "anyone") {
@@ -3499,6 +3538,9 @@ export class Room implements HostStage, AgentHost {
      * @returns the controls.
      */
     private phoneControls(player: Player): Control[] {
+        if (this.isWatching(player) === true) {
+            return [];
+        }
         const holding: boolean = this.shell.holdsControl(player.playerId);
         return (this.game?.controls(player.playerId) ?? []).flatMap((control: Control): Control[] => {
             if (control.type !== "buttons" || holding === true || control.options.some((option) => option.holderOnly === true) === false) {

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { Host, type HostStage } from "./host.ts";
-import { RateWindow } from "./limits.ts";
+import { BUDGET, RateWindow } from "./limits.ts";
 
 /** How short a window the tests use, so they don't wait a minute. */
 const WINDOW_MILLISECONDS: number = 300;
@@ -38,6 +38,27 @@ function hostSaying(said: string[]): Host {
 async function pause(milliseconds: number): Promise<void> {
     await new Promise((resolve: (value: unknown) => void) => { setTimeout(resolve, milliseconds); });
 }
+
+describe("the day's budget running out", () => {
+    it("tells the room once a reply can't be paid for, rather than going quiet", async () => {
+        const told: string[] = [];
+        const stage: HostStage = new Proxy({}, {
+            get: (_target: object, name: string | symbol) => {
+                if (name === "outOfWords") {
+                    return (): void => { told.push("out of words"); };
+                }
+                return name === "playerNames" ? (): string[] => [] : (): string => "";
+            },
+        }) as HostStage;
+        const host: Host = new Host(stage, { name: "Marlowe", voice: "", style: "" } as unknown as ConstructorParameters<typeof Host>[1]);
+        const spend = BUDGET.spend.bind(BUDGET);
+        BUDGET.spend = (): boolean => false;
+        host.notice("Ana: Is it a dog?", 0);
+        await pause(50);
+        BUDGET.spend = spend;
+        assert.deepEqual(told, ["out of words"]);
+    });
+});
 
 describe("the host's reply limit", () => {
     beforeEach(() => {

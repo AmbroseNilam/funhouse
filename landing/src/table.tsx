@@ -7,7 +7,7 @@ import { Lantern } from "../../screen/src/Lantern.tsx";
 import type { HostSpeaker } from "../../screen/src/speaker.ts";
 
 /** What the visitor has just done. */
-export type Moment = "arrived" | "atStart" | "atCode" | "typing" | "codeReady" | "turnedAway";
+export type Moment = "arrived" | "atStart" | "atCode" | "typing" | "codeReady" | "turnedAway" | "roomFull";
 
 /** One line of help per moment. The host only speaks in the game demos. */
 const LINES: Record<Moment, string> = {
@@ -17,6 +17,7 @@ const LINES: Record<Moment, string> = {
     typing: "Enter all four letters.",
     codeReady: "Select Join to enter the room.",
     turnedAway: "That room can't be joined. Check the code on the TV.",
+    roomFull: "That room is full. Start a new one on another TV or laptop.",
 };
 
 /** How far below the viewport a picture may be before it starts loading. */

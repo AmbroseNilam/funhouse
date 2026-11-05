@@ -331,6 +331,7 @@ export class Shell {
             driverName: driver?.name ?? "",
             controllerFree: driver?.connected !== true || driver.phoneDown === true,
             watching: false,
+            gameOver: this.isDecided(),
             canDrive,
             backLabel: canDrive === true ? this.backLabel() : null,
             canSelect: count > 0 && canDrive === true,
