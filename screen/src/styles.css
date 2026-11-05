@@ -353,6 +353,8 @@
     .phone-gate { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 24px; font-size: 18px; background: var(--ink); }
     .phone-gate h1 { font-size: 42px; }
     .phone-gate p { color: var(--muted); }
+    .overflow-links { display: flex; flex-wrap: wrap; gap: 20px; }
+    .overflow-links a { color: var(--paper); text-decoration: underline; padding-block: 6px; }
     .phone-gate-join { margin-top: 16px; padding: 16px; background: var(--lamp); color: var(--lamp-ink); font-weight: 600; text-align: center; text-decoration: none; box-shadow: 4px 4px 0 #000; }
     .phone-gate-continue { padding: 12px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 16px; text-decoration: underline; }
 }

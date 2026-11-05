@@ -10,7 +10,7 @@ import { flushSync } from "react-dom";
 import QRCode from "qrcode";
 import type { Scene, SceneBlock } from "../../shared/scene.ts";
 import { parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type RoomToScreenMessage, type ScreenMessage } from "../../shared/protocol.ts";
-import { HOST_NAME } from "../../shared/brand.ts";
+import { DEMO_VIDEO_URL, FOLLOW_URL, FRESH_GAMES_LINE, HOST_NAME } from "../../shared/brand.ts";
 import type { NavAction, Seat, ShelfGame, ShellView } from "../../shared/shell.ts";
 import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel, type Pointing } from "./Console.tsx";
@@ -200,6 +200,22 @@ function PaintingFrame({ label }: { label: string }): ReactElement {
     }, []);
     const lines: string[] = [label, ...PAINTING_LINES.filter((line: string) => line !== label)];
     return <figure className="painting" role="status"><i /><figcaption>{lines[step % lines.length]}</figcaption></figure>;
+}
+
+/**
+ * Somewhere to go when there's no game to be had: the demo and where to follow along, once they're set.
+ * @returns the links, or nothing while there are none.
+ */
+function OverflowLinks(): ReactElement | null {
+    if (DEMO_VIDEO_URL === "" && FOLLOW_URL === "") {
+        return null;
+    }
+    return (
+        <p className="overflow-links">
+            {DEMO_VIDEO_URL === "" ? null : <a href={DEMO_VIDEO_URL} target="_blank" rel="noopener">Watch a game</a>}
+            {FOLLOW_URL === "" ? null : <a href={FOLLOW_URL} target="_blank" rel="noopener">Follow along on X</a>}
+        </p>
+    );
 }
 
 /**
@@ -666,6 +682,7 @@ export function App(): ReactElement {
             <main className="phone-gate">
                 <h1>Every table's taken.</h1>
                 <p>Try again in a few minutes.</p>
+                <OverflowLinks />
             </main>
         );
     }
@@ -674,7 +691,8 @@ export function App(): ReactElement {
         return (
             <main className="phone-gate">
                 <h1>Marlowe needs rest.</h1>
-                <p>Come back tomorrow.</p>
+                <p>Come back tomorrow. {FRESH_GAMES_LINE}</p>
+                <OverflowLinks />
                 <form className="judge-form" onSubmit={(event: FormEvent<HTMLFormElement>) => {
                     event.preventDefault();
                     const entered: FormDataEntryValue | null = new FormData(event.currentTarget).get("code");

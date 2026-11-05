@@ -8,7 +8,7 @@ import { useCallback, useEffect, useReducer, useRef, useState, type AnimationEve
 import { listeningAllowsTalk, type Control, type ControlOption, type PhoneView } from "../../shared/controls.ts";
 import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import { FOREGROUND_ANSWER_LIMIT_MILLISECONDS, parseMessage, SERVER_SILENCE_LIMIT_MILLISECONDS, type PhoneMessage, type RoomToPhoneMessage, type TapEnd } from "../../shared/protocol.ts";
-import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
+import { DEMO_VIDEO_URL, FOLLOW_URL, FRESH_GAMES_LINE, HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
@@ -362,7 +362,7 @@ function CodeScreen(): ReactElement {
             <small className="room-tag">{PRODUCT_NAME}</small>
             <form className="place-card" onSubmit={(event) => { event.preventDefault(); openRoom(code); }}>
                 <label htmlFor="code-field">What's the code on the TV?</label>
-                {search.has("resting") === true ? <p className="place-warning" role="alert">Marlowe needs rest. Come back tomorrow.</p> : null}
+                {search.has("resting") === true ? <p className="place-warning" role="alert">Marlowe needs rest. Come back tomorrow. {FRESH_GAMES_LINE}{DEMO_VIDEO_URL === "" ? null : <> <a href={DEMO_VIDEO_URL} target="_blank" rel="noopener">Watch a game</a></>}{FOLLOW_URL === "" ? null : <> <a href={FOLLOW_URL} target="_blank" rel="noopener">Follow along on X</a></>}</p> : null}
                 {missing !== null ? <p className="place-warning" role="alert">Room {missing} isn't open.</p> : null}
                 {full !== null ? <p className="place-warning" role="alert">Room {full} is full.</p> : null}
                 {closed !== null ? <p className="place-warning" role="alert">Room {closed} has closed. Enter the new code to rejoin.</p> : null}
