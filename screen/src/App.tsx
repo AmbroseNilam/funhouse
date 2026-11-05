@@ -25,6 +25,12 @@ import { HostSpeaker } from "./speaker.ts";
 /** How long a reveal waits before its scores start counting: the answer, then who got it, then the points. */
 const COUNT_UP_DELAY_MILLISECONDS: number = 900;
 
+/** What a painting says while it's coming, in turn. */
+const PAINTING_LINES: readonly string[] = ["Mixing the colours…", "Sketching…", "Adding the light…", "Nearly dry…"];
+
+/** How long each of those lines stays up. */
+const PAINTING_LINE_MILLISECONDS: number = 6000;
+
 /** How long a score takes to count up. */
 const COUNT_UP_MILLISECONDS: number = 700;
 
@@ -181,6 +187,22 @@ function DrainBar({ clock, seconds }: { clock: string; seconds: number }): React
 }
 
 /**
+ * Where a picture will appear, creeping fuller and changing its line so it never looks stuck. Real
+ * paintings take 9 to 28 seconds. The room swaps in the picture the moment it arrives.
+ * @param props the first line to show.
+ * @returns the frame.
+ */
+function PaintingFrame({ label }: { label: string }): ReactElement {
+    const [step, setStep] = useState<number>(0);
+    useEffect(() => {
+        const timer: number = window.setInterval(() => { setStep((current: number) => current + 1); }, PAINTING_LINE_MILLISECONDS);
+        return () => { window.clearInterval(timer); };
+    }, []);
+    const lines: string[] = [label, ...PAINTING_LINES.filter((line: string) => line !== label)];
+    return <figure className="painting" role="status"><i /><figcaption>{lines[step % lines.length]}</figcaption></figure>;
+}
+
+/**
  * A score counting up to where it landed, after a beat, so it lands after the answer lights.
  * @param props where it counts from and to.
  * @returns the number.
@@ -226,7 +248,7 @@ function renderBlock(block: SceneBlock, index: number): ReactElement {
         return <p key={index} className={`text ${block.emphasis ?? "normal"}`}>{block.text}</p>;
     }
     if (block.type === "painting") {
-        return <figure key={block.key} className="painting" role="status"><i /><figcaption>{block.label}</figcaption></figure>;
+        return <PaintingFrame key={block.key} label={block.label} />;
     }
     if (block.type === "image") {
         return <figure key={index} className="image"><img src={block.src} alt={block.caption ?? ""} />{block.caption !== undefined ? <figcaption>{block.caption}</figcaption> : null}</figure>;

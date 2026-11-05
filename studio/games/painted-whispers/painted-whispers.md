@@ -41,7 +41,7 @@ person, not about them.
 
 - **Nobody writes.** After 60 seconds a stock line stands in for the writer and the chain goes on.
   A stock line reads like any other line in the reveal.
-- **A painting is slow or never comes.** After 45 seconds the TV shows "The painting didn't come.
+- **A painting is slow or never comes.** At once if it fails, or after 45 seconds, the TV shows "The paint ran out on this one.
   This is what it was meant to show", and the line, and the next writer puts it in their own words.
   A painting that arrives late is kept and used in the reveal.
 - **Someone leaves.** A writer who leaves is covered with a stock line. With fewer than two people

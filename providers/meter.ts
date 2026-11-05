@@ -12,11 +12,11 @@ import { join } from "node:path";
 /** Everything that costs money. */
 export type Service = "spark" | "moderation" | "search" | "transcribe" | "voice" | "image" | "jev";
 
-/** How far along a payer is: everything on, no new paintings, captions instead of voice, stopped. */
+/** How far along a payer is: everything on, a heads-up in the log, captions instead of voice, stopped. Paintings stay on to the end: they're cheap, and a game can be built on them. */
 export type Stage = 0 | 1 | 2 | 3;
 
 /** What the stages are called in the logs. */
-const STAGE_NAMES: string[] = ["normal", "no new paintings", "captions only", "stopped"];
+const STAGE_NAMES: string[] = ["normal", "over 60%", "captions only", "stopped"];
 
 /**
  * What things cost, the one place prices live. Sources, all to recheck against the bills:
@@ -43,14 +43,14 @@ function numberFrom(name: string, fallback: number): number {
 }
 
 /** One line each to change a limit. Read when asked, so a test can set them. */
-function settings(): { on: boolean; judgeReserve: number; address: number; judge: number; site: number; paintingsOffAt: number; captionsAt: number; resetHour: number; directory: string; transcribeSecondsAddress: number; transcribeSecondsSite: number; jevCallsAddress: number; jevCallsSite: number } {
+function settings(): { on: boolean; judgeReserve: number; address: number; judge: number; site: number; noticeAt: number; captionsAt: number; resetHour: number; directory: string; transcribeSecondsAddress: number; transcribeSecondsSite: number; jevCallsAddress: number; jevCallsSite: number } {
     return {
         on: process.env.COST_LIMITS === "1",
         address: numberFrom("COST_ADDRESS_DOLLARS", 3),
         judge: numberFrom("COST_JUDGE_DOLLARS", 10),
         judgeReserve: numberFrom("COST_JUDGE_RESERVE_DOLLARS", 5),
         site: numberFrom("COST_SITE_DOLLARS", 15),
-        paintingsOffAt: numberFrom("COST_PAINTINGS_OFF_AT", 0.6),
+        noticeAt: numberFrom("COST_NOTICE_AT", 0.6),
         captionsAt: numberFrom("COST_CAPTIONS_AT", 0.9),
         resetHour: numberFrom("COST_RESET_UTC_HOUR", 8),
         directory: process.env.COST_DIR ?? "",
@@ -259,7 +259,7 @@ function stageAt(fraction: number): Stage {
     if (fraction >= limits.captionsAt) {
         return 2;
     }
-    return fraction >= limits.paintingsOffAt ? 1 : 0;
+    return fraction >= limits.noticeAt ? 1 : 0;
 }
 
 /**
@@ -301,7 +301,7 @@ export function mayCharge(service: Service): boolean {
     }
     const payer: string | undefined = PAYER.getStore();
     const stage: Stage = stageOf(payer);
-    if (stage === 3 || (service === "image" && stage >= 1) || (service === "voice" && stage >= 2)) {
+    if (stage === 3 || (service === "voice" && stage >= 2)) {
         return false;
     }
     const day: SavedDay = today();

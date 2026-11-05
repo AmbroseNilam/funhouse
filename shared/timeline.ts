@@ -29,7 +29,8 @@ export type RoomEvent =
     | { type: "contentReady"; at: number; text: string; sources?: string[] }
     | { type: "answersMerged"; at: number; id: string; groups: AnswerGroup[] }
     | { type: "followUpReady"; at: number; id: string; text: string }
-    | { type: "drawingReady"; at: number; id: string; src: string };
+    | { type: "drawingReady"; at: number; id: string; src: string }
+    | { type: "drawingFailed"; at: number; id: string };
 
 /** Maximum events a room keeps in memory; older ones roll off the front. */
 export const TIMELINE_LIMIT: number = 5000;

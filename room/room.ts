@@ -979,6 +979,10 @@ export class Room implements HostStage, AgentHost {
             return;
         }
         this.game.event({ type: "hostRuled", at: Date.now(), ruling, detail, playerId: speakerId });
+        const speaker: Player | undefined = speakerId === null ? undefined : this.players.get(speakerId);
+        if (speaker?.hint === "Checking…") {
+            this.setHint(speaker, "");
+        }
     }
 
     /**
@@ -2487,11 +2491,14 @@ export class Room implements HostStage, AgentHost {
      * @param prompt what to draw.
      */
     private draw(id: string, prompt: string): void {
+        const game: RunningGame | null = this.game;
+        // Told a tick later, because this is called from the middle of the game's own step.
+        const failed = (): void => { setTimeout(() => { if (this.game === game) { game?.event({ type: "drawingFailed", at: Date.now(), id }); } }, 0); };
         if (DRAWING_ON === false || this.paintingsStopped === true || this.drawingsAsked >= MAX_DRAWINGS || BUDGET.spend("image") === false) {
+            failed();
             return;
         }
         this.drawingsAsked += 1;
-        const game: RunningGame | null = this.game;
         const key: string = randomBytes(16).toString("hex");
         const startedAt: number = Date.now();
         drawImage(prompt).then((drawing: Drawing) => {
@@ -2500,7 +2507,10 @@ export class Room implements HostStage, AgentHost {
             if (this.game === game) {
                 game?.event({ type: "drawingReady", at: Date.now(), id, src: `/drawings/${this.code}/${key}` });
             }
-        }).catch((error: unknown) => { log(this.scope(), `couldn't draw ${id}: ${error instanceof Error ? error.message : String(error)}`); });
+        }).catch((error: unknown) => {
+            log(this.scope(), `couldn't draw ${id}: ${error instanceof Error ? error.message : String(error)}`);
+            failed();
+        });
     }
 
     /** Sends every phone its current view. */
@@ -2996,6 +3006,10 @@ export class Room implements HostStage, AgentHost {
         const event: RoomEvent = { type: "speechEnded", at: Date.now(), playerId: player.playerId, text: said };
         this.record(event);
         this.game?.event(event);
+        const turn: Turn | null = this.game?.turn() ?? null;
+        if (this.game?.allowsRuling("right") === true && turn?.kind === "everyone" && turn.doneIds.includes(player.playerId) === false) {
+            this.setHint(player, "Checking…");
+        }
         this.host.notice(`${player.name}: ${said}`, WAKE_DELAY_MILLISECONDS.speech);
     }
 

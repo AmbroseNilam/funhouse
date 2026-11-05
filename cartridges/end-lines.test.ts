@@ -156,6 +156,17 @@ describe("Twenty Doors' setup", () => {
         assert.equal(JSON.stringify(game.publicScene(playing.state)).includes("Lake Louise"), false);
     });
 
+    it("says so kindly if the reveal's painting fails, and takes a late one anyway", () => {
+        const game = createTwentyDoors(() => 0, "surprise");
+        const playing = game.init(players, {}).state;
+        const over = game.apply(playing, "a", "giveup").state;
+        assert.match(JSON.stringify(game.publicScene(over)), /"painting"/);
+        const failed = game.onEvent(over, { type: "drawingFailed", at: 0, id: "reveal" }).state;
+        const words: string = JSON.stringify(game.publicScene(failed));
+        assert.equal(words.includes('"painting"'), false);
+        assert.match(words, /paint ran dry/);
+    });
+
     it("falls back on how hard alone, and Just start always works", () => {
         const { game, thinking } = toThinking();
         for (const bad of ["", "junk", "{}"]) {

@@ -333,3 +333,20 @@ describe("no timer", () => {
         assert.notEqual(game.cartridge.phaseOf(game.cartridge.apply(begun.state, anyone, REVEAL_NOW).state), "write");
     });
 });
+
+describe("a painting that fails", () => {
+    it("moves on at once and says something kind, and ignores a failure for another step", () => {
+        const run: Run = start();
+        const painting = write(run, "A lantern on a hill");
+        assert.equal(run.game.cartridge.phaseOf(painting.state), "paint");
+        const other = run.game.cartridge.onEvent(painting.state, { type: "drawingFailed", at: 0, id: "picture:99" });
+        assert.equal(other.state, painting.state);
+        const id: string = painting.draws?.[0]?.id ?? "";
+        const moved = run.game.cartridge.onEvent(painting.state, { type: "drawingFailed", at: 0, id });
+        assert.equal(run.game.cartridge.phaseOf(moved.state), "write");
+        const words: string = JSON.stringify(run.game.cartridge.publicScene(moved.state));
+        assert.match(words, /The paint ran out on this one/);
+        assert.equal(words.includes("didn't come"), false);
+    });
+});
+
