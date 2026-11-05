@@ -3450,7 +3450,7 @@ export class Room implements HostStage, AgentHost {
             status = `${hostName} is thinking…`;
         }
         if (this.hostSpeaking === true) {
-            status = `${hostName} is talking. Hold to cut in.`;
+            status = `${hostName} is talking. Hold the screen to cut in.`;
         }
         if (player.hint !== "") {
             status = player.hint;

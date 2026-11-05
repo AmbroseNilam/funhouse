@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GamePick } from "../shared/cartridge.ts";
 import { createQuizmaster, QUESTION_COUNT, REVEAL_BUILD_SECONDS } from "./quizmaster/rules.ts";
-import { createTwentyDoors } from "./twenty-doors/rules.ts";
+import { CATEGORIES, createTwentyDoors, revealSentence } from "./twenty-doors/rules.ts";
 
 /**
  * Collects the words on a scene.
@@ -25,6 +25,28 @@ describe("end screens", () => {
         const words: string[] = wordsOn(game.publicScene(over.state));
         assert.equal(words.includes("You opened 0 doors, then called it."), true, words.join(" | "));
         assert.match(JSON.stringify(game.privateControls(over.state, "b")), /It was .*called it/);
+    });
+
+    it("Twenty Doors reveals a secret the way a person would say it", () => {
+        assert.equal(revealSentence("Steam train"), "It was a steam train.");
+        assert.equal(revealSentence("Octopus"), "It was an octopus.");
+        assert.equal(revealSentence("Ukulele"), "It was a ukulele.");
+        assert.equal(revealSentence("Honey"), "It was honey.");
+        assert.equal(revealSentence("Flip-flops"), "It was flip-flops.");
+        assert.equal(revealSentence("Eiffel Tower"), "It was the Eiffel Tower.");
+        assert.equal(revealSentence("Big Ben"), "It was Big Ben.");
+    });
+
+    it("Twenty Doors never guesses an article for a secret the model chose", () => {
+        assert.equal(revealSentence("Albert Einstein"), "The answer: Albert Einstein.");
+        assert.equal(revealSentence("Paris"), "The answer: Paris.");
+    });
+
+    it("Twenty Doors never puts a or an before a landmark", () => {
+        const landmarks: string[] = CATEGORIES.find((category) => category.name === "a famous landmark")?.secrets ?? [];
+        for (const secret of landmarks) {
+            assert.doesNotMatch(revealSentence(secret), /It was an? /, secret);
+        }
     });
 
     it("Quizmaster names the winner and explains the points", () => {

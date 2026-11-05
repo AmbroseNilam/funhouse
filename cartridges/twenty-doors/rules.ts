@@ -43,6 +43,43 @@ export const CATEGORIES: { name: string; secrets: string[] }[] = [
     { name: "something at a birthday party", secrets: ["Balloon", "Piñata", "Candle", "Party hat", "Cupcake", "Wrapping paper", "Confetti", "Goody bag", "Streamer", "Ice cream cake", "Sparkler", "Musical chairs", "Bow", "Clown", "Party blower", "Gift card", "Bouncy castle", "Birthday card", "Face paint", "Paper plate"] },
 ];
 
+/** Listed secrets that are said with "the" and keep their capitals. */
+const SECRETS_WITH_THE: Set<string> = new Set(["Eiffel Tower", "Great Wall of China", "Statue of Liberty", "Taj Mahal", "Colosseum", "Golden Gate Bridge", "Leaning Tower of Pisa", "Pyramids of Giza", "Sydney Opera House", "Grand Canyon", "Acropolis", "CN Tower", "Hollywood Sign"]);
+
+/** Listed secrets that are names, said as they are. */
+const SECRETS_AS_NAMES: Set<string> = new Set(["Big Ben", "Stonehenge", "Mount Rushmore", "Machu Picchu", "Niagara Falls", "Christ the Redeemer", "Mount Fuji"]);
+
+/** Listed secrets said in lowercase with no article, such as "It was honey." */
+const SECRETS_WITHOUT_ARTICLE: Set<string> = new Set(["Lasagna", "Popcorn", "Sushi", "Peanut butter", "Honey", "Flip-flops", "Sunscreen", "Driftwood", "Seaweed", "Sunglasses", "Bagpipes", "Bongos", "Tongs", "Wrapping paper", "Confetti", "Musical chairs", "Face paint"]);
+
+/** Listed secrets that start with a vowel sound said like "you", so they take "a". */
+const SECRETS_WITH_A_BEFORE_VOWEL: Set<string> = new Set(["Ukulele", "Unicycle"]);
+
+/**
+ * Words the sentence that reveals a secret. Only the list's secrets are known well enough to take an
+ * article. One the model chose could be a name, so it's stated plainly rather than guessed at.
+ * @param secret the secret.
+ * @returns the sentence, such as "It was a steam train."
+ */
+export function revealSentence(secret: string): string {
+    const listed: boolean = CATEGORIES.some((category) => category.secrets.includes(secret));
+    if (listed === false) {
+        return `The answer: ${secret}.`;
+    }
+    if (SECRETS_WITH_THE.has(secret) === true) {
+        return `It was the ${secret}.`;
+    }
+    if (SECRETS_AS_NAMES.has(secret) === true) {
+        return `It was ${secret}.`;
+    }
+    const lower: string = secret.toLowerCase();
+    if (SECRETS_WITHOUT_ARTICLE.has(secret) === true) {
+        return `It was ${lower}.`;
+    }
+    const takesAn: boolean = /^[aeiou]/.test(lower) === true && SECRETS_WITH_A_BEFORE_VOWEL.has(secret) === false;
+    return `It was ${takesAn === true ? "an" : "a"} ${lower}.`;
+}
+
 /** Answers that open a door, with how the screen shows each. */
 const DOOR_RULINGS: Record<string, string> = { yes: "Yes", no: "No", sortof: "Sort of", wrong: "Wrong guess" };
 
@@ -451,7 +488,7 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
                 return [{ type: "waiting", text: `${HOST_NAME} is choosing.` }];
             }
             if (state.phase === "end") {
-                return [{ type: "waiting", text: `It was ${state.secret}. ${endLine(state)}` }];
+                return [{ type: "waiting", text: `${revealSentence(state.secret)} ${endLine(state)}` }];
             }
             return [{ type: "waiting", text: "Ask a yes-or-no question" }];
         },
