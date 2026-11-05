@@ -15,7 +15,7 @@ import { answerOwn, answerSetup, isSetupBox, parseSetupQuestions, SETUP_START, s
 import { TWENTY_DOORS_MANIFEST } from "./manifest.ts";
 
 /** How long the reveal says the picture is still coming, in seconds. */
-const PAINTING_WAIT_SECONDS: number = 20;
+const PAINTING_WAIT_SECONDS: number = 45;
 
 /** Doors the group gets. */
 export const DOOR_COUNT: number = 20;
@@ -370,6 +370,9 @@ export function createTwentyDoors(random: () => number = Math.random, chosen?: s
                 return onTopicEvent(state, event);
             }
             if (event.type === "timerFired" && event.timerId === "painting") {
+                return { state: { ...state, stoppedWaitingForPicture: true }, facts: [] };
+            }
+            if (event.type === "drawingFailed" && event.id === "reveal") {
                 return { state: { ...state, stoppedWaitingForPicture: true }, facts: [] };
             }
             if (event.type === "drawingReady" && event.id === "reveal") {

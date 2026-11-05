@@ -18,18 +18,20 @@ beforeEach(() => {
     process.env.COST_OWNER_CODE = "owner-code";
 });
 
-test("goes through the stages at 60%, 90% and 100%", () => {
+test("keeps paintings on to the end, loses the voice at 90%, and stops at 100%", () => {
     const payer: string = payerOf("203.0.113.5");
     withPayer(payer, () => {
         assert.equal(mayCharge("image"), true);
         charge("spark", 1.2);
-        assert.equal(mayCharge("image"), false);
+        assert.equal(mayCharge("image"), true);
         assert.equal(mayCharge("voice"), true);
         charge("spark", 0.65);
         assert.equal(mayCharge("voice"), false);
+        assert.equal(mayCharge("image"), true);
         assert.equal(mayCharge("spark"), true);
         charge("spark", 0.15);
         assert.equal(mayCharge("spark"), false);
+        assert.equal(mayCharge("image"), false);
     });
     assert.equal(stageOf(payerOf("203.0.113.6")), 0);
 });

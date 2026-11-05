@@ -44,21 +44,11 @@
     .tv-button { padding: calc(8 * var(--u)) calc(22 * var(--u)); border: 0; background: var(--paper); color: var(--paper-ink); font: inherit; font-variation-settings: inherit; font-size: calc(28 * var(--u)); font-weight: 600; box-shadow: calc(5 * var(--u)) calc(5 * var(--u)) 0 #000; transition: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); }
     .tv-button:hover { transform: translate(calc(-2 * var(--u)), calc(-3 * var(--u))) rotate(-0.6deg); }
     .tv-button:active { transform: translate(calc(3 * var(--u)), calc(3 * var(--u))); box-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; transition-duration: 70ms; }
-    .tv-hand { position: absolute; z-index: 3; left: calc(330 * var(--u)); right: calc(80 * var(--u)); bottom: calc(66 * var(--u)); display: flex; flex-direction: column; gap: calc(10 * var(--u)); padding: calc(14 * var(--u)) calc(20 * var(--u)); background: var(--card); color: var(--paper); font-size: calc(28 * var(--u)); box-shadow: calc(8 * var(--u)) calc(8 * var(--u)) 0 #000; }
-    .tv-hand p { margin: 0; }
-    .hand-note { color: var(--muted); }
-    .hand-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: calc(10 * var(--u)); }
-    .hand-buttons p { grid-column: 1 / -1; }
-    .hand-buttons .tv-button { text-align: left; }
-    .tv-hand .tv-button:disabled { opacity: 0.5; }
-    .hand-type { display: flex; flex-wrap: wrap; align-items: flex-end; gap: calc(14 * var(--u)); }
-    .hand-type p { flex-basis: 100%; color: var(--lamp); }
-    .hand-type label { flex: 1; display: flex; flex-direction: column; gap: calc(4 * var(--u)); }
-    .hand-type input { padding: calc(8 * var(--u)) calc(14 * var(--u)); border: 0; background: var(--paper); color: var(--paper-ink); font: inherit; font-variation-settings: inherit; }
-    .hand-type input[type="range"] { padding: 0; accent-color: var(--lamp); }
+    .game-screen .join-tag { top: auto; bottom: calc(70 * var(--u)); width: calc(220 * var(--u)); }
+    .game-screen .join-tag strong { font-size: calc(38 * var(--u)); }
     .tv-strip { position: absolute; z-index: 4; right: calc(110 * var(--u)); bottom: calc(6 * var(--u)); display: none; align-items: center; gap: calc(14 * var(--u)); color: var(--paper); font-size: calc(28 * var(--u)); }
     .tv[data-pointer="live"] .tv-strip { display: flex; }
-    .start-now { position: absolute; left: calc(80 * var(--u)); bottom: calc(150 * var(--u)); font-size: calc(36 * var(--u)); }
+    .start-now { position: absolute; left: calc(1080 * var(--u)); top: calc(644 * var(--u)); font-size: calc(36 * var(--u)); }
     .shelf-arrow { position: absolute; z-index: 3; top: 50%; width: calc(64 * var(--u)); height: calc(96 * var(--u)); border: 0; background: var(--paper); color: var(--paper-ink); font: inherit; font-size: calc(60 * var(--u)); line-height: 1; box-shadow: calc(5 * var(--u)) calc(5 * var(--u)) 0 #000; display: none; }
     .shelf-arrow:disabled { display: none !important; }
     .shelf-arrow.previous { left: calc(12 * var(--u)); }
@@ -222,7 +212,7 @@
     .marks-door i::after { content: ""; position: absolute; right: calc(6 * var(--u)); top: 54%; width: calc(5 * var(--u)); height: calc(5 * var(--u)); border-radius: 50%; background: var(--brass); }
     .marks-door i.done { background: var(--lamp); transform: perspective(calc(240 * var(--u))) rotateY(-46deg); }
     .painting { position: relative; flex: none; align-self: flex-start; margin: 0; width: calc(420 * var(--u)); height: calc(280 * var(--u)); overflow: hidden; rotate: -1.2deg; background: var(--card); box-shadow: calc(10 * var(--u)) calc(10 * var(--u)) 0 #000; }
-    .painting i { position: absolute; inset: 0; transform-origin: left; background: radial-gradient(circle at 30% 35%, var(--lamp), transparent 55%), radial-gradient(circle at 75% 70%, var(--wine), transparent 60%), var(--brass-dark); animation: painting-fill 12s cubic-bezier(0.3, 0.45, 0.4, 1) forwards; }
+    .painting i { position: absolute; inset: 0; transform-origin: left; background: radial-gradient(circle at 30% 35%, var(--lamp), transparent 55%), radial-gradient(circle at 75% 70%, var(--wine), transparent 60%), var(--brass-dark); animation: painting-fill 60s linear forwards; }
     .painting figcaption { position: absolute; left: calc(20 * var(--u)); bottom: calc(14 * var(--u)); padding: calc(4 * var(--u)) calc(14 * var(--u)); background: var(--paper); color: var(--paper-ink); font-size: calc(32 * var(--u)); }
     .blocks .image { margin: 0; }
     .blocks:has(.marks-door) .image img { max-height: calc(280 * var(--u)); }
@@ -272,8 +262,6 @@
     .start-card { position: absolute; left: calc(80 * var(--u)); right: calc(80 * var(--u)); top: calc(250 * var(--u)); margin: 0; font-size: calc(56 * var(--u)); line-height: 1.3; }
     .start-note { position: absolute; left: calc(80 * var(--u)); top: calc(660 * var(--u)); margin: 0; color: var(--paper); font-size: calc(36 * var(--u)); }
     .answer-choices { display: grid; grid-template-columns: 1fr 1fr; gap: calc(14 * var(--u)); width: calc(1300 * var(--u)); margin: calc(14 * var(--u)) 0; padding: 0; list-style: none; }
-    .tv-agree { font-size: calc(24 * var(--u)); color: var(--paper); opacity: 0.8; }
-    .tv-agree a { color: inherit; text-decoration: underline; }
     .answer-choices li { padding: calc(10 * var(--u)) calc(20 * var(--u)); background: var(--paper); color: var(--paper-ink); font-size: calc(38 * var(--u)); font-weight: 600; line-height: 1.15; box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 #000; }
     .play-column .blocks:has(.answer-choices) { justify-content: flex-start; }
     .play-column > .blocks:first-child:has(.answer-choices) { margin-top: calc(70 * var(--u)); }
@@ -451,9 +439,12 @@
     to { translate: 0 -5px; }
 }
 
+/* Timed to real paintings, 9 to 28 seconds: past halfway at about 12 s, then always creeping. */
 @keyframes painting-fill {
-    from { transform: scaleX(0.03); filter: blur(calc(24 * var(--u))); }
-    to { transform: scaleX(0.9); filter: blur(calc(4 * var(--u))); }
+    0% { transform: scaleX(0.03); filter: blur(calc(24 * var(--u))); }
+    20% { transform: scaleX(0.55); filter: blur(calc(14 * var(--u))); }
+    45% { transform: scaleX(0.78); filter: blur(calc(8 * var(--u))); }
+    100% { transform: scaleX(0.94); filter: blur(calc(4 * var(--u))); }
 }
 
 @keyframes drain-down {

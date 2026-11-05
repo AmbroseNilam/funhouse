@@ -156,6 +156,17 @@ describe("Twenty Doors' setup", () => {
         assert.equal(JSON.stringify(game.publicScene(playing.state)).includes("Lake Louise"), false);
     });
 
+    it("says so kindly if the reveal's painting fails, and takes a late one anyway", () => {
+        const game = createTwentyDoors(() => 0, "surprise");
+        const playing = game.init(players, {}).state;
+        const over = game.apply(playing, "a", "giveup").state;
+        assert.match(JSON.stringify(game.publicScene(over)), /"painting"/);
+        const failed = game.onEvent(over, { type: "drawingFailed", at: 0, id: "reveal" }).state;
+        const words: string = JSON.stringify(game.publicScene(failed));
+        assert.equal(words.includes('"painting"'), false);
+        assert.match(words, /paint ran dry/);
+    });
+
     it("falls back on how hard alone, and Just start always works", () => {
         const { game, thinking } = toThinking();
         for (const bad of ["", "junk", "{}"]) {
@@ -232,6 +243,21 @@ describe("Quizmaster's four answers", () => {
         assert.equal(game.phaseOf(moved.state), "question");
         assert.equal(JSON.stringify(moved.facts).includes("Right0"), false, "the answer isn't told twice");
         assert.deepEqual(moved.state.answered, []);
+    });
+
+    it("counts an answer said or typed the same as a tap, once the host rules on it", () => {
+        const { game, state } = inQuestion();
+        const started = game.onEvent(state, { type: "speechStarted", at: 0, playerId: "a" }).state;
+        const heard = game.onEvent(started, { type: "speechEnded", at: 0, playerId: "a", text: "It's Right0" }).state;
+        const ruled = game.onEvent(heard, { type: "hostRuled", at: 0, ruling: "right", detail: "", playerId: "a" }).state;
+        assert.deepEqual(ruled.answered, ["a"]);
+        const turn = game.turn?.(ruled);
+        assert.equal(turn?.kind === "everyone" ? turn.doneIds.includes("a") : false, true, "the TV's tick comes from this");
+        assert.equal(turn?.label, "Still answering: Alex");
+        const wrong: number = state.questions[0]?.choices?.indexOf("Bad0a") ?? -1;
+        const locked = game.apply(ruled, "b", `answer:0:${wrong}`).state;
+        const lit = game.onEvent(locked, { type: "timerFired", at: 0, timerId: "reveal-build" }).state;
+        assert.equal(lit.scores.a, 2, "the points land at the reveal");
     });
 
     it("ignores a tap off the list, and shuffles the right answer's place", () => {

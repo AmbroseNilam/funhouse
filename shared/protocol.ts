@@ -45,7 +45,9 @@ export type SeatActivity = "joined" | "reading" | "thinking" | "sent" | "idle" |
 /** Screen to room. */
 export type ScreenMessage =
     | { type: "hello" }
-    | { type: "ready"; resumed?: boolean };
+    | { type: "ready"; resumed?: boolean }
+    | { type: "claim"; key: string }
+    | { type: "nav"; action: NavAction };
 
 /**
  * Room to screen. Host audio follows as binary 24 kHz 16-bit mono PCM frames after an
@@ -53,6 +55,7 @@ export type ScreenMessage =
  */
 export type RoomToScreenMessage =
     | { type: "scene"; scene: Scene; joinUrl: string; roomCode: string; turn: Turn | null }
+    | { type: "screenKey"; roomCode: string; key: string }
     | { type: "seatTouched"; playerId: string }
     | { type: "seatActivity"; playerId: string; activity: SeatActivity; line: string }
     | { type: "seatMovesCleared" }

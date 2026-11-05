@@ -414,10 +414,11 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                 }
                 return { state: next, facts: [] };
             }
-            if (event.type === "timerFired" && event.timerId === `paint:${state.step}` && state.phase === "paint") {
+            const noPainting: boolean = (event.type === "timerFired" && event.timerId === `paint:${state.step}`) || (event.type === "drawingFailed" && event.id === `${PICTURE_PREFIX}${state.step}`);
+            if (noPainting === true && state.phase === "paint") {
                 const links: ChainLink[] = state.links.map((candidate: ChainLink, at: number) => (at === state.step ? { ...candidate, gaveUp: true } : candidate));
                 const given: Step<ChainState> = nextWriter({ ...state, links });
-                const note: ScopedFact[] = because(publicFact("paint-failed", "A painting didn't come in time, so the next player gets the words instead. Say so in one short line, with no blame."), CHAIN_DECISIONS.paint);
+                const note: ScopedFact[] = because(publicFact("paint-failed", "The paint ran out on this one, so the next player gets the words instead. Say so warmly in one short line, with no blame."), CHAIN_DECISIONS.paint);
                 return { ...given, facts: [...note, ...given.facts] };
             }
             if (event.type === "timerFired" && event.timerId === `beat:${state.beat}` && state.phase === "reveal") {
@@ -443,7 +444,7 @@ export function createChainGame(givenBox: Box, givenDecisions: ChainDecisions, r
                     ? []
                     : previous.src !== null
                         ? [{ type: "image", src: previous.src, caption: `${writer.name} describes this` }]
-                        : [{ type: "text", text: `The painting didn't come. This is what it was meant to show: ${quoted(previous.text)}`, emphasis: "large" }, { type: "text", text: `${writer.name} puts it in their own words.` }];
+                        : [{ type: "text", text: `The paint ran out on this one. Here's what it was meant to show: ${quoted(previous.text)}`, emphasis: "large" }, { type: "text", text: `${writer.name} puts it in their own words.` }];
                 return { mood: "neutral", transition: "fade", blocks: [{ type: "title", text: `${writer.name} is describing this`, kicker: box.name }, ...seen, progress, ...timer] };
             }
             if (state.phase === "paint") {

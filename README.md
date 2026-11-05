@@ -181,7 +181,7 @@ Set these in `.env`. Each switch is off unless set to `1`.
 | `COST_LIMITS` | Turns on dollar limits; needs `COST_DIR`, a writable folder |
 | `COST_ADDRESS_DOLLARS` / `COST_SITE_DOLLARS` | Daily allowance per address (default 3) and ceiling for the site (default 15) |
 | `COST_JUDGE_RESERVE_DOLLARS` | Part of the site ceiling only judge-code holders can spend (default 5) |
-| `COST_PAINTINGS_OFF_AT` / `COST_CAPTIONS_AT` | Fractions where paintings stop and captions start (defaults 0.6, 0.9) |
+| `COST_NOTICE_AT` / `COST_CAPTIONS_AT` | Fractions where the log gets a heads-up and captions replace the voice (defaults 0.6, 0.9). Paintings stay on until the stop. |
 | `COST_RESET_UTC_HOUR` | Hour the day resets (default 8) |
 | `COST_IDLE_MINUTES` | Closes a room after this long with no person active (default 5) |
 | `COST_TRANSCRIBE_SECONDS_ADDRESS` / `_SITE`, `COST_JEV_CALLS_ADDRESS` / `_SITE` | Daily audio and Jev caps |
