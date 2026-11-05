@@ -16,7 +16,7 @@ import { Caption } from "./Caption.tsx";
 import { ConsolePage, GameOverMenu, PausePanel, SteppedOutPanel, type Pointing } from "./Console.tsx";
 import type { HostMood } from "../../shared/hostMood.ts";
 import { Lantern } from "./Lantern.tsx";
-import { AgentCursors, nextSeatMove, type SeatMove } from "./AgentCursors.tsx";
+import { LINE_MILLISECONDS, nextSeatMove, withoutOldLine, type SeatMove } from "./seatMoves.ts";
 import { PlaceCards } from "./PlaceCards.tsx";
 import { startFrameMeter } from "./frameMeter.ts";
 import { ConsoleSounds } from "./sounds.ts";
@@ -496,7 +496,11 @@ export function App(): ReactElement {
                     return;
                 }
                 if (message.type === "seatActivity") {
-                    setSeatMoves((moves: Record<string, SeatMove>) => ({ ...moves, [message.playerId]: nextSeatMove(moves[message.playerId], message.activity, message.line, Date.now()) }));
+                    const at: number = Date.now();
+                    setSeatMoves((moves: Record<string, SeatMove>) => ({ ...moves, [message.playerId]: nextSeatMove(moves[message.playerId], message.activity, message.line, at) }));
+                    if (message.activity === "saying") {
+                        window.setTimeout(() => { setSeatMoves((moves: Record<string, SeatMove>) => withoutOldLine(moves, message.playerId, at)); }, LINE_MILLISECONDS);
+                    }
                     return;
                 }
                 if (message.type === "seatMovesCleared") {
@@ -738,8 +742,7 @@ export function App(): ReactElement {
             ) : null}
             {shell !== null && playing === false ? <ConsolePage shell={shell} qr={state.qrDataUrl} code={state.roomCode} joinHost={joinHost} pointing={pointing} /> : null}
             <div className="table-edge" />
-            {state.started === true ? <PlaceCards seats={seats} turn={playing === true ? state.turn : null} touchedId={touchedId} /> : null}
-            {state.started === true ? <AgentCursors seats={seats} moves={seatMoves} /> : null}
+            {state.started === true ? <PlaceCards seats={seats} turn={playing === true ? state.turn : null} touchedId={touchedId} moves={seatMoves} /> : null}
             <div className="host-spot">
                 <Lantern
                     micRef={micRef}

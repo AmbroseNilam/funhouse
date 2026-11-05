@@ -39,7 +39,7 @@ export type RoomToPhoneMessage =
     | { type: "rejected"; reason: RejectedReason }
     | { type: "heartbeat" };
 
-/** What a machine at the table is doing, for its cursor on the TV. Never what it answered. */
+/** What a machine at the table is doing, for its card on the TV. Never what it answered. */
 export type SeatActivity = "joined" | "reading" | "thinking" | "sent" | "idle" | "saying";
 
 /** Screen to room. */

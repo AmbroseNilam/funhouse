@@ -313,7 +313,7 @@ const AGENT_SAY_LIMIT: number = 120;
 /** Least time between one agent's lines, as each wakes the host and costs a reply and a voice line. */
 const AGENT_SAY_GAP_MILLISECONDS: number = 5000;
 
-/** How long an agent may be quiet before its cursor rests. */
+/** How long an agent may be quiet before its card stops showing dots. */
 const AGENT_QUIET_MILLISECONDS: number = 15000;
 
 /** Most an agent may say when only the TV shows it. */
@@ -1445,7 +1445,7 @@ export class Room implements HostStage, AgentHost {
     }
 
     /**
-     * Wipes every machine's cursor and bubble off the TV, so nothing carries into the next game.
+     * Wipes every machine's state and line off its card, so nothing carries into the next game.
      */
     private clearSeatMoves(): void {
         this.seatActivities.clear();
