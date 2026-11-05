@@ -288,7 +288,7 @@ function roleBlurb(role: Role): string {
         return "Each night, choose a victim on this phone. By day, blend in and lie.";
     }
     if (role === "seer") {
-        return "Each night, learn whether one player is a werewolf. Be careful who you tell.";
+        return "Each night, check one player. The answer appears on this card at dawn. Be careful who you tell.";
     }
     if (role === "doctor") {
         return "Each night, protect one player, yourself included, but never the same one twice running.";

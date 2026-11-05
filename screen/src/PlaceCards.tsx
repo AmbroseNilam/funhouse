@@ -21,6 +21,10 @@ const ROOMY_CARDS: number = 7;
 function cardState(seat: Seat, turn: Turn | null, touched: boolean): string {
     const up: boolean = turn?.kind === "one" && turn.playerId === seat.playerId;
     const done: boolean = turn?.kind === "everyone" && turn.doneIds.includes(seat.playerId) === true;
+    // During a secret turn, whose phone is still up or being touched could say who has something to do.
+    if (turn?.kind === "secret") {
+        return [seat.out === true ? "out" : "", seat.driving === true ? "driving" : ""].filter((part: string) => part !== "").join(" ");
+    }
     return [
         seat.connected === false && seat.phoneDown === true ? "away" : "",
         seat.out === true ? "out" : "",

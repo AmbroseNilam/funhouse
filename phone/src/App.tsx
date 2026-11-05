@@ -462,7 +462,7 @@ function RoleCard(props: { title: string; lines: string[]; startHidden: boolean 
     const [hidden, setHidden] = useState<boolean>(props.startHidden);
     useEffect(() => { setHidden(props.startHidden); }, [props.startHidden]);
     if (hidden === true) {
-        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>{props.lines.length > 1 ? "Your role and notes. Tap to see" : "Your role. Tap to see"}</button>;
+        return <button className="paper role-strip" onClick={() => { setHidden(false); }}>Your secret card. Tap to see</button>;
     }
     return (
         <button className="paper role-face" onClick={() => { setHidden(true); }}>
