@@ -184,7 +184,8 @@ function servePass(request: IncomingMessage, response: ServerResponse): void {
             }
         })();
         const room: Room | undefined = typeof parsed?.room === "string" ? directory.find(parsed.room) : undefined;
-        const payers: string[] = [payerOf(address), ...(room === undefined ? [] : [room.payer])];
+        const rested: string | undefined = typeof parsed?.room === "string" ? directory.restedPayer(parsed.room) : undefined;
+        const payers: string[] = [payerOf(address), ...(room === undefined ? [] : [room.payer]), ...(rested === undefined ? [] : [rested])];
         const pass: string | null = typeof parsed?.code === "string" ? redeemPass(parsed.code, payers) : null;
         response.writeHead(pass === null ? 403 : 200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: pass !== null }));
     });
@@ -330,6 +331,10 @@ const server = createServer((request: IncomingMessage, response: ServerResponse)
     const path: string = (request.url ?? "/").split("?")[0] ?? "/";
     if (path === "/pass" && request.method === "POST") {
         servePass(request, response);
+        return;
+    }
+    if (path === "/resting") {
+        response.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ resting: stageOf(payerOf(addressOf(request))) === 3 }));
         return;
     }
     if (path === "/owner/spend") {

@@ -6,6 +6,9 @@ import type { InstalledGame } from "../cartridges/index.ts";
 import { log } from "./log.ts";
 import { makeRoomCode, Room } from "./room.ts";
 
+/** How long a room that ran out is remembered, so someone can still enter a code for it. */
+const RESTED_MEMORY_MILLISECONDS: number = 600000;
+
 /** Most rooms open at once on this server. A room spends nothing until it's used, so open tabs mustn't lock anyone out. */
 const MAX_ROOMS: number = Number(process.env.ROOM_LIMIT ?? "") || 32;
 
@@ -39,6 +42,7 @@ export class RoomDirectory {
     private readonly emptySince: Map<string, number> = new Map();
     private readonly noPlayersSince: Map<string, number> = new Map();
     private readonly outSince: Map<string, number> = new Map();
+    private readonly restedPayers: Map<string, string> = new Map();
 
     /**
      * Creates an empty directory and starts closing abandoned rooms.
@@ -87,6 +91,16 @@ export class RoomDirectory {
     }
 
     /** Sends rooms that ran out to the stop screen after a moment, and closes rooms nobody is doing anything in. */
+    /**
+     * Who was paying for a room that recently closed for running out, so a code entered after can still lift them.
+     * @param code the room's code.
+     * @returns the payer, if it's still remembered.
+     */
+    public restedPayer(code: string): string | undefined {
+        return this.restedPayers.get(code.toUpperCase());
+    }
+
+    /** Closes rooms out of allowance after their grace, and rooms nobody has acted in. */
     private checkAllowances(): void {
         const now: number = Date.now();
         for (const [code, room] of this.rooms) {
@@ -101,6 +115,10 @@ export class RoomDirectory {
             const idle: boolean = process.env.COST_LIMITS === "1" && room.hasPlayers() === true && room.idleMilliseconds() >= IDLE_MILLISECONDS;
             if (rested === false && idle === false) {
                 continue;
+            }
+            if (rested === true) {
+                this.restedPayers.set(code, room.payer);
+                setTimeout(() => { this.restedPayers.delete(code); }, RESTED_MEMORY_MILLISECONDS).unref();
             }
             room.turnEveryoneAway(rested);
             room.close();

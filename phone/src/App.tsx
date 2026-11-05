@@ -28,6 +28,7 @@ import { keepScreenOn } from "./wakeLock.ts";
  * @returns the entry.
  */
 function JudgeCode(): ReactElement {
+    const room: string = ROOM_CODE !== "" ? ROOM_CODE : new URLSearchParams(location.search).get("stopped") ?? "";
     const [open, setOpen] = useState<boolean>(false);
     const [code, setCode] = useState<string>("");
     const [result, setResult] = useState<string>("");
@@ -37,7 +38,7 @@ function JudgeCode(): ReactElement {
     return (
         <form className="judge-form" onSubmit={(event: FormEvent) => {
             event.preventDefault();
-            void fetch("/pass", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, room: ROOM_CODE }) }).then((response: Response) => {
+            void fetch("/pass", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, room }) }).then((response: Response) => {
                 setResult(response.ok === true ? "You're in. Marlowe's awake for you today." : "That code didn't work.");
             }, () => { setResult("That didn't go through. Try again."); });
         }}>
@@ -666,6 +667,7 @@ const SHEETS: Record<string, { title: string; parent: string | null }> = {
     agentLink: { title: "Bring your agent", parent: "add" },
     rename: { title: "Your name", parent: "open" },
     settings: { title: "Settings", parent: "open" },
+    code: { title: "Have a code?", parent: "open" },
     credits: { title: "Credits", parent: "open" },
     leave: { title: "Leave the table?", parent: "open" },
     mic: { title: "Your mic", parent: "open" },
@@ -751,7 +753,7 @@ export function App(): ReactElement {
     const [noMic, setNoMic] = useState<boolean>(new URLSearchParams(location.search).has("nomic"));
     const noMicRef = useRef<boolean>(noMic);
     noMicRef.current = noMic;
-    const [menu, setMenu] = useState<"closed" | "open" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "install" | "add" | "guestLine" | "agentLink">("closed");
+    const [menu, setMenu] = useState<"closed" | "open" | "code" | "rename" | "leave" | "credits" | "mic" | "settings" | "type" | "guests" | "install" | "add" | "guestLine" | "agentLink">("closed");
     const [settings, setSettings] = useState<PhoneSettings>(readSettings);
     const settingsRef = useRef<PhoneSettings>(settings);
     settingsRef.current = settings;
@@ -819,7 +821,7 @@ export function App(): ReactElement {
                     const wasSeated: boolean = seatInThisRoom() !== null;
                     clearSeat();
                     if (message.reason === "resting") {
-                        location.assign("/phone/?resting=1");
+                        location.assign(`/phone/?resting=1&stopped=${encodeURIComponent(ROOM_CODE)}`);
                         return;
                     }
                     if (message.reason === "unknownRoom" && wasSeated === true) {
@@ -1557,6 +1559,7 @@ export function App(): ReactElement {
                                     {noMic === true ? <button className="sheet-row" onClick={() => { noMicRef.current = false; setNoMic(false); setMenu("closed"); void ensureMicrophone(); }}>Turn on your mic</button> : null}
                                     {state.mic !== "ok" && noMic === false ? <button className="sheet-row" onClick={() => { setMenu("mic"); }}>Turn on your mic</button> : null}
                                     <button className="sheet-row" onClick={() => { setMenu("settings"); }}>Settings</button>
+                                    <button className="sheet-row" onClick={() => { setMenu("code"); }}>Have a code?</button>
                                 </nav>
                                 <button className="sheet-text danger-text" onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <footer className="sheet-foot">
@@ -1638,6 +1641,7 @@ export function App(): ReactElement {
                                 {view?.hostVoice.canChange === true ? <SettingRow label="Host voice, for the whole room" on={view.hostVoice.choice === "warm"} onWord="Warm" offWord="Usual" onChange={(on: boolean) => { send({ type: "hostVoice", choice: on === true ? "warm" : "current" }); }} /> : null}
                             </>
                         ) : null}
+                        {menu === "code" ? <JudgeCode /> : null}
                         {menu === "credits" ? (
                             <>
                                 <p className="sheet-line">{CREDITS}</p>

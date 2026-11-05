@@ -78,6 +78,19 @@ test("the day survives a restart", () => {
     assert.equal(spendSummary().siteDollars, 2);
 });
 
+test("a pass survives a restart, and covers every payer it's given", () => {
+    process.env.COST_OWNER_CODE = "owner-code-for-test";
+    const phone: string = payerOf("203.0.113.20");
+    const room: string = payerOf("203.0.113.21");
+    assert.equal(redeemPass("owner-code-for-test", [phone, room]), "owner");
+    withPayer(room, () => { charge("spark", 5); });
+    flushSpend();
+    resetMeterForTest();
+    assert.equal(stageOf(phone), 0);
+    assert.equal(stageOf(room), 0);
+    assert.equal(stageOf(payerOf("203.0.113.22")) < 3, true);
+});
+
 test("a damaged store stops spending without throwing", () => {
     writeFileSync(join(process.env.COST_DIR ?? "", "spend.json"), "{nope");
     assert.equal(mayCharge("spark"), false);

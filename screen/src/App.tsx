@@ -31,6 +31,9 @@ const PAINTING_LINES: readonly string[] = ["Mixing the coloursâ€¦", "Sketchingâ€
 /** How long each of those lines stays up. */
 const PAINTING_LINE_MILLISECONDS: number = 6000;
 
+/** How often a resting screen asks whether it may open a room again. */
+const RESTING_CHECK_MILLISECONDS: number = 8000;
+
 /** How long a score takes to count up. */
 const COUNT_UP_MILLISECONDS: number = 700;
 
@@ -602,6 +605,22 @@ export function App(): ReactElement {
         }
         // Only the moment it connects matters; start reads everything else when it runs.
     }, [connected, started]);
+
+    // A code entered on a phone can lift this screen's address, so it keeps checking and opens a new room when it can.
+    const resting: boolean = state.resting;
+    useEffect(() => {
+        if (resting === false) {
+            return undefined;
+        }
+        const timer: number = window.setInterval(() => {
+            void fetch("/resting").then(async (response: Response) => (await response.json()) as { resting?: boolean }).then((answer: { resting?: boolean }) => {
+                if (answer.resting === false) {
+                    location.assign("/screen/");
+                }
+            }).catch(() => { /* it'll ask again */ });
+        }, RESTING_CHECK_MILLISECONDS);
+        return () => { window.clearInterval(timer); };
+    }, [resting]);
 
     useEffect(() => {
         const hurry = (): void => { soundsRef.current?.hurry(); };
