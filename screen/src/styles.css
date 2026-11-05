@@ -253,7 +253,6 @@
     .place-cards .driving::before { content: ""; position: absolute; left: 50%; top: calc(-9 * var(--u)); width: calc(16 * var(--u)); height: calc(16 * var(--u)); translate: -50% 0; rotate: 45deg; background: var(--lamp); box-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
     .place-cards .watching-count { flex: none; align-self: center; padding: 0; background: none; box-shadow: none; rotate: 0deg; font-size: calc(28 * var(--u)); font-weight: 500; color: var(--paper); text-shadow: calc(2 * var(--u)) calc(2 * var(--u)) 0 #000; }
     .play-column .blocks { position: relative; left: auto; right: auto; top: auto; bottom: auto; flex: 1; min-height: 0; }
-    .build-tag { position: absolute; right: calc(24 * var(--u)); bottom: calc(10 * var(--u)); color: var(--paper); opacity: 0.45; font-size: calc(20 * var(--u)); z-index: 5; }
     .pick-boxes { position: absolute; left: calc(80 * var(--u)); right: calc(80 * var(--u)); top: calc(280 * var(--u)); display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(20 * var(--u)); margin: 0; padding: 0; list-style: none; }
     .setup-screen .shelf-heading { width: calc(1760 * var(--u)); }
     .setup-screen .shelf-heading h1 { font-size: calc(84 * var(--u)); line-height: 1.08; }

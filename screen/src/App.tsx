@@ -2,7 +2,6 @@
 // said. It draws what it is told and plays what it is sent. Phones play. A mouse on the TV that opened
 // the room can steer the menus for whoever holds the controller, and never plays.
 
-import { versionLine } from "../../shared/build-info.ts";
 import { DRAIN_WARM_SECONDS, drainHidden, drainShown } from "../../shared/drain.ts";
 import type { Turn } from "../../shared/turn.ts";
 import { useCallback, useEffect, useReducer, useRef, useState, type AnimationEvent, type CSSProperties, type FormEvent, type ReactElement } from "react";
@@ -765,7 +764,6 @@ export function App(): ReactElement {
     const backLabel: string | null = shell?.screen === "pick" || shell?.screen === "startCard" ? "Back" : (shell?.screen === "play" && shell.gameOver === false) || shell?.screen === "setup" ? "Pause" : null;
     return (
         <main ref={rootRef} className={`tv mood-${stageMood} on-${shell?.screen ?? "home"} ${isOver === true ? "over" : ""} ${state.started === true ? "lit" : ""}`} data-connected={state.connected}>
-            <small className="build-tag">{versionLine(__BUILD_INFO__)}</small>
             {playing === true ? (
                 <section className="screen play-screen">
                     {backdrop !== undefined ? <img key={backdrop} className="backdrop" src={backdrop} alt="" onError={(event) => { if (game !== undefined && event.currentTarget.getAttribute("src") !== game.art) { event.currentTarget.src = game.art; } }} style={{ viewTransitionName: `box-${game?.id ?? "game"}` }} /> : null}

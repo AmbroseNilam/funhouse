@@ -146,7 +146,6 @@
     .foot-links { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-right: auto; }
     .foot-links a { padding: 8px 0; text-underline-offset: 3px; }
     .fine { color: var(--muted); font-size: 15px; }
-    .build-line { font-size: 13px; }
 
     @media (max-width: 1000px) {
         .table-inner { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "host" "cards" "product"; }

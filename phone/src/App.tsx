@@ -12,7 +12,7 @@ import { DEMO_VIDEO_URL, FOLLOW_URL, FRESH_GAMES_LINE, HOST_NAME, PRODUCT_NAME }
 import type { PadView } from "../../shared/shell.ts";
 import { blockBrowserGestures, listenForGestures } from "./gestures.ts";
 import { startScanning, type ScanEnd } from "./scanner.ts";
-import { isOutOfDate, versionLine } from "../../shared/build-info.ts";
+import { isOutOfDate } from "../../shared/build-info.ts";
 import { InstallCard, mayOfferInstall, useInstallWay, type InstallWay } from "../../landing/src/InstallCard.tsx";
 import { readServerBuild } from "./freshness.ts";
 import { readSettings, writeSettings, type PhoneSettings } from "./settings.ts";
@@ -1564,7 +1564,6 @@ export function App(): ReactElement {
                                 <button className="sheet-text danger-text" onClick={() => { setMenu("leave"); }}>Leave the table</button>
                                 <footer className="sheet-foot">
                                     <button className="sheet-text" onClick={() => { setMenu("credits"); }}>Credits</button>
-                                    <small className="version-line">{versionLine(__BUILD_INFO__)}</small>
                                 </footer>
                             </>
                         ) : null}

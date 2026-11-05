@@ -22,15 +22,6 @@ export function buildInfoFrom(env: Record<string, string | undefined>): BuildInf
 }
 
 /**
- * Words a build for a person, such as "v 9920b0c". The build time stays in /version and the boot log.
- * @param build the build.
- * @returns the line.
- */
-export function versionLine(build: BuildInfo): string {
-    return `v ${build.commit}`;
-}
-
-/**
  * Whether a page is behind the server. An unstamped build on either side proves nothing.
  * @param page the page's own build.
  * @param server the server's build.

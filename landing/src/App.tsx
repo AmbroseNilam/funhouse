@@ -3,7 +3,6 @@
 // games, bringing your own agent, and what a night needs. The QR code skips this page and goes
 // straight to the phone. Copy is plain description that says only what the code does. Follows DESIGN.md.
 
-import { versionLine } from "../../shared/build-info.ts";
 import { useState, type FormEvent, type ReactElement } from "react";
 import { HOST_NAME, PRODUCT_NAME } from "../../shared/brand.ts";
 import { GAMES, type GameBox } from "./games.ts";
@@ -183,7 +182,6 @@ export function App(): ReactElement {
                     <a href="/landing/terms/">Terms</a>
                 </nav>
                 <p className="fine">{COPYRIGHT}</p>
-                <p className="fine build-line">{versionLine(__BUILD_INFO__)}</p>
             </footer>
         </main>
     );
